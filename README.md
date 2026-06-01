@@ -1,5 +1,8 @@
 # Murmur
 
+[![CI](https://github.com/collectifweb/murmur/actions/workflows/ci.yml/badge.svg)](https://github.com/collectifweb/murmur/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Murmur is a local-first dictation app for Linux. It can run as a CLI, as a command bound to a global keyboard shortcut, or as a lightweight local desktop web app.
 
 The first version focuses on the core Flow-like loop:

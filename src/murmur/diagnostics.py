@@ -21,7 +21,12 @@ class Check:
 
 
 def _has_module(name: str) -> bool:
-    return importlib.util.find_spec(name) is not None
+    # find_spec on a dotted name imports the parent package; when the parent is
+    # absent (e.g. no "nvidia" namespace) it raises rather than returning None.
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
 
 
 def _ollama_ok(settings: Settings) -> bool:
