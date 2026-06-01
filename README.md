@@ -46,6 +46,15 @@ Optional local Whisper backend:
 python -m pip install -e ".[whisper]"
 ```
 
+GPU acceleration (NVIDIA, optional). Installs the CUDA runtime libraries as pip
+wheels — no system CUDA toolkit required. The app preloads them automatically,
+so GPU transcription works without setting `LD_LIBRARY_PATH`, and falls back to
+CPU when CUDA is unusable:
+
+```bash
+python -m pip install -e ".[whisper,cuda]"
+```
+
 Optional microphone recording:
 
 ```bash
@@ -195,8 +204,21 @@ With that config, dictating `slash signature` expands the snippet, and dictated 
 - a polish button
 - audio upload transcription
 - browser microphone recording as WAV PCM, avoiding a hard dependency on `ffmpeg` for desktop recording
+- a model selector to toggle between `small` (more accurate) and `base` (faster)
 - automatic polish after transcription
 - copy and paste actions
+
+Each model loads once and is cached, so toggling back and forth is instant after
+the first use.
+
+## Desktop notifications
+
+The hotkey dictation flow (`toggle` and `dictate`) shows native Linux
+notifications via `notify-send` so you can tell when recording starts, when
+transcription is running, and when text was inserted or copied — useful when the
+command is bound to a global shortcut and no terminal is visible. Install it with
+`sudo apt install libnotify-bin` if `notify-send` is missing; it is optional and
+dictation works without it.
 
 This approach avoids GTK/Qt packaging friction while staying Linux-compatible.
 

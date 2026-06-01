@@ -36,7 +36,16 @@ fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e ".[whisper,recording]"
+
+# Install GPU runtime libs when an NVIDIA GPU is present so faster-whisper can
+# use CUDA. The app preloads these pip-provided libs automatically and falls
+# back to CPU if CUDA is unusable, so this is safe to install opportunistically.
+EXTRAS="whisper,recording"
+if command -v nvidia-smi >/dev/null 2>&1; then
+  echo "NVIDIA GPU detected; including CUDA runtime libraries."
+  EXTRAS="$EXTRAS,cuda"
+fi
+python -m pip install -e ".[$EXTRAS]"
 python -m whispr_flow_linux config init || true
 python -m whispr_flow_linux install-desktop --force
 

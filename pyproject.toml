@@ -21,6 +21,10 @@ recording = [
   "sounddevice>=0.4",
   "soundfile>=0.12",
 ]
+cuda = [
+  "nvidia-cublas-cu12",
+  "nvidia-cudnn-cu12>=9,<10",
+]
 dev = [
   "pytest>=8.0",
 ]

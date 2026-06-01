@@ -8,11 +8,16 @@ import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 from .clipboard import copy_text, paste_text
 from .config import Settings
 from .polish import PolishOptions, build_polisher
 from .transcription import build_transcriber
+
+# Models the desktop UI is allowed to switch to. Restricting this prevents the
+# browser from triggering an arbitrary (possibly huge) model download.
+ALLOWED_MODELS = ("small", "base", "tiny", "medium", "small.en", "base.en")
 
 
 def run_desktop(host: str, port: int, settings: Settings) -> None:
@@ -41,6 +46,29 @@ def _available_port(host: str, preferred_port: int) -> int:
 
 
 def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
+    # The Whisper model is expensive to load, so build each transcriber once and
+    # reuse it across requests instead of reloading the model every time. The
+    # cache is keyed by model name so the UI can toggle between models (e.g.
+    # small and base) without paying the load cost on every switch.
+    transcriber_cache: dict[str, object] = {}
+    transcriber_lock = threading.Lock()
+
+    def get_transcriber(model: str | None = None):
+        model = model or settings.model
+        with transcriber_lock:
+            transcriber = transcriber_cache.get(model)
+            if transcriber is None:
+                transcriber = build_transcriber(
+                    backend=settings.transcriber,
+                    model=model,
+                    language=settings.language,
+                    whisper_cpp=settings.whisper_cpp,
+                    device=settings.device,
+                    compute_type=settings.compute_type,
+                )
+                transcriber_cache[model] = transcriber
+            return transcriber
+
     class DesktopHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             if self.path == "/" or self.path.startswith("/?"):
@@ -68,7 +96,7 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                     )
                     self._send_json({"text": output})
                     return
-                if self.path == "/api/transcribe":
+                if self.path.split("?", 1)[0] == "/api/transcribe":
                     self._handle_transcribe()
                     return
                 if self.path == "/api/copy":
@@ -107,18 +135,15 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
             handle.write(body)
             handle.close()
             try:
-                transcriber = build_transcriber(
-                    backend=settings.transcriber,
-                    model=settings.model,
-                    language=settings.language,
-                    whisper_cpp=settings.whisper_cpp,
-                    device=settings.device,
-                    compute_type=settings.compute_type,
-                )
-                transcript = transcriber.transcribe(path).text
+                transcript = get_transcriber(self._requested_model()).transcribe(path).text
                 self._send_json({"text": transcript})
             finally:
                 path.unlink(missing_ok=True)
+
+        def _requested_model(self) -> str:
+            query = parse_qs(urlsplit(self.path).query)
+            requested = (query.get("model") or [""])[0]
+            return requested if requested in ALLOWED_MODELS else settings.model
 
         def _send_json(self, payload: dict[str, object], status: HTTPStatus = HTTPStatus.OK) -> None:
             data = json.dumps(payload).encode("utf-8")
@@ -269,6 +294,12 @@ DESKTOP_HTML = r"""<!doctype html>
       <button id="paste">Paste</button>
     </div>
     <div class="options">
+      <label>Model
+        <select id="model">
+          <option value="small" selected>small (précis)</option>
+          <option value="base">base (rapide)</option>
+        </select>
+      </label>
       <label>Style
         <select id="style">
           <option value="neutral">Neutral</option>
@@ -310,8 +341,9 @@ DESKTOP_HTML = r"""<!doctype html>
     }
 
     async function transcribeBlob(blob) {
-      status("Transcribing...");
-      const res = await fetch("/api/transcribe", {
+      const model = document.querySelector("#model").value;
+      status(`Transcribing (${model})...`);
+      const res = await fetch("/api/transcribe?model=" + encodeURIComponent(model), {
         method: "POST",
         headers: {"Content-Type": blob.type || "application/octet-stream"},
         body: blob

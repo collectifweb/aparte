@@ -1,13 +1,51 @@
 from __future__ import annotations
 
+import ctypes
+import glob
+import os
 import shutil
 import subprocess
+import sysconfig
 from dataclasses import dataclass
 from pathlib import Path
 
 
 class TranscriptionError(RuntimeError):
     pass
+
+
+_cuda_preloaded = False
+
+
+def _preload_cuda_libraries() -> None:
+    """Load pip-provided CUDA runtime libs (``nvidia-*-cu12``) into the process.
+
+    ctranslate2 dlopens ``libcublas``/``libcudnn`` by soname but does not look in
+    pip's ``site-packages/nvidia/*/lib`` directories. Preloading them globally
+    with their absolute path lets the later soname lookup resolve to the already
+    loaded library, so GPU transcription works without the user exporting
+    ``LD_LIBRARY_PATH``. Best-effort and idempotent; missing libs are ignored so
+    the caller can fall back to CPU.
+    """
+    global _cuda_preloaded
+    if _cuda_preloaded:
+        return
+    _cuda_preloaded = True
+    nvidia_root = os.path.join(sysconfig.get_paths()["purelib"], "nvidia")
+    if not os.path.isdir(nvidia_root):
+        return
+    # Order matters: dependencies (cublas, nvrtc) before cudnn aggregates.
+    patterns = (
+        "cublas/lib/libcublas*.so*",
+        "cuda_nvrtc/lib/libnvrtc*.so*",
+        "cudnn/lib/libcudnn*.so*",
+    )
+    for pattern in patterns:
+        for path in sorted(glob.glob(os.path.join(nvidia_root, pattern))):
+            try:
+                ctypes.CDLL(path, mode=ctypes.RTLD_GLOBAL)
+            except OSError:
+                pass
 
 
 @dataclass(frozen=True)
@@ -48,6 +86,8 @@ class FasterWhisperTranscriber(Transcriber):
     def _load_model(self, device: str, compute_type: str):
         from faster_whisper import WhisperModel
 
+        if device != "cpu":
+            _preload_cuda_libraries()
         try:
             return WhisperModel(self.model_name, device=device, compute_type=compute_type)
         except Exception as exc:

@@ -9,6 +9,7 @@ from .clipboard import copy_text, paste_text
 from .config import Settings, load_config, write_default_config
 from .desktop import run_desktop
 from .linux_desktop import build_desktop_entry, install_desktop_entry
+from .notify import _preview, notify
 from .polish import PolishOptions, build_polisher
 from .session import get_active_session, start_toggle_recording, stop_toggle_recording
 from .transcription import build_transcriber
@@ -179,7 +180,9 @@ def transcribe_path(path: Path, args: argparse.Namespace, settings: Settings) ->
 
 
 def dictate_once(args: argparse.Namespace, settings: Settings) -> str:
+    notify("🎙️ Dictée", f"Enregistrement pendant {args.seconds:g}s…")
     path = record_wav(args.seconds, args.sample_rate, settings.recorder)
+    notify("⏳ Transcription…", "Whispr Flow traite ta dictée.", urgency="low")
     try:
         transcribe_args = argparse.Namespace(
             polish=not args.no_polish,
@@ -187,6 +190,7 @@ def dictate_once(args: argparse.Namespace, settings: Settings) -> str:
             cleanup_level=args.cleanup_level or settings.cleanup_level,
         )
         output = transcribe_path(path, transcribe_args, settings)
+        _notify_inserted(output, args.target)
         if args.target == "paste":
             paste_text(output)
         elif args.target == "copy":
@@ -197,6 +201,19 @@ def dictate_once(args: argparse.Namespace, settings: Settings) -> str:
             path.unlink(missing_ok=True)
 
 
+def _notify_inserted(output: str, target: str) -> None:
+    if not output.strip():
+        notify("🤫 Rien à transcrire", "Aucune parole détectée.", urgency="low")
+        return
+    if target == "copy":
+        title = "📋 Copié dans le presse-papier"
+    elif target == "stdout":
+        title = "✅ Dictée prête"
+    else:
+        title = "✍️ Inséré"
+    notify(title, _preview(output))
+
+
 def toggle_dictation(args: argparse.Namespace, settings: Settings) -> str:
     active = get_active_session()
     if args.status:
@@ -205,9 +222,11 @@ def toggle_dictation(args: argparse.Namespace, settings: Settings) -> str:
         return "idle"
     if not active:
         session = start_toggle_recording(args.sample_rate)
+        notify("🎙️ Dictée en cours", "Réappuie sur le raccourci pour arrêter et insérer.")
         return f"Recording started: {session.audio_path}"
 
     session = stop_toggle_recording()
+    notify("⏳ Transcription…", "Whispr Flow traite ta dictée.", urgency="low")
     try:
         transcribe_args = argparse.Namespace(
             polish=not args.no_polish,
@@ -215,6 +234,7 @@ def toggle_dictation(args: argparse.Namespace, settings: Settings) -> str:
             cleanup_level=args.cleanup_level or settings.cleanup_level,
         )
         output = transcribe_path(session.audio_path, transcribe_args, settings)
+        _notify_inserted(output, args.target)
         if args.target == "paste":
             paste_text(output)
         elif args.target == "copy":
