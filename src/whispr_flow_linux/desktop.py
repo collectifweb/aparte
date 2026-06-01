@@ -11,7 +11,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from .clipboard import copy_text, paste_text
-from .config import Settings
+from .config import Settings, load_config, update_config
 from .polish import PolishOptions, build_polisher
 from .transcription import build_transcriber
 
@@ -19,12 +19,24 @@ from .transcription import build_transcriber
 # browser from triggering an arbitrary (possibly huge) model download.
 ALLOWED_MODELS = ("small", "base", "tiny", "medium", "small.en", "base.en")
 
+# Settings fields editable from the browser Settings tab.
+EDITABLE_FIELDS = (
+    "model",
+    "default_style",
+    "cleanup_level",
+    "language",
+    "polish_backend",
+    "replacements",
+    "snippets",
+)
 
-def run_desktop(host: str, port: int, settings: Settings) -> None:
+
+def run_desktop(host: str, port: int, settings: Settings, open_browser: bool = True) -> None:
     port = _available_port(host, port)
     server = ThreadingHTTPServer((host, port), handler_factory(settings))
     url = f"http://{host}:{server.server_port}"
-    threading.Timer(0.5, lambda: webbrowser.open(url)).start()
+    if open_browser:
+        threading.Timer(0.5, lambda: webbrowser.open(url)).start()
     print(f"Whispr Flow Linux desktop running at {url}")
     try:
         server.serve_forever()
@@ -53,18 +65,23 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
     transcriber_cache: dict[str, object] = {}
     transcriber_lock = threading.Lock()
 
-    def get_transcriber(model: str | None = None):
-        model = model or settings.model
+    def current_settings() -> Settings:
+        # Reload from disk/env each request so changes saved from the Settings
+        # tab take effect immediately, without restarting the server.
+        return Settings.from_env()
+
+    def get_transcriber(active: Settings, model: str | None = None):
+        model = model or active.model
         with transcriber_lock:
             transcriber = transcriber_cache.get(model)
             if transcriber is None:
                 transcriber = build_transcriber(
-                    backend=settings.transcriber,
+                    backend=active.transcriber,
                     model=model,
-                    language=settings.language,
-                    whisper_cpp=settings.whisper_cpp,
-                    device=settings.device,
-                    compute_type=settings.compute_type,
+                    language=active.language,
+                    whisper_cpp=active.whisper_cpp,
+                    device=active.device,
+                    compute_type=active.compute_type,
                 )
                 transcriber_cache[model] = transcriber
             return transcriber
@@ -74,24 +91,31 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
             if self.path == "/" or self.path.startswith("/?"):
                 self._send_html()
                 return
+            if self.path.split("?", 1)[0] == "/api/config":
+                self._send_json(self._read_config())
+                return
             self.send_error(HTTPStatus.NOT_FOUND)
 
         def do_POST(self) -> None:
             try:
+                if self.path == "/api/config":
+                    self._handle_save_config()
+                    return
                 if self.path == "/api/polish":
+                    active = current_settings()
                     payload = self._read_json()
                     text = str(payload.get("text", ""))
-                    style = str(payload.get("style", "neutral"))
-                    cleanup_level = str(payload.get("cleanupLevel", "medium"))
-                    polisher = build_polisher(settings.polish_backend, settings.ollama_url, settings.ollama_model)
+                    style = str(payload.get("style", "")) or active.default_style
+                    cleanup_level = str(payload.get("cleanupLevel", "")) or active.cleanup_level
+                    polisher = build_polisher(active.polish_backend, active.ollama_url, active.ollama_model)
                     output = polisher.polish(
                         text,
                         PolishOptions(
-                            style=style or settings.default_style,
-                            language=settings.language,
-                            cleanup_level=cleanup_level or settings.cleanup_level,
-                            replacements=settings.replacements or {},
-                            snippets=settings.snippets or {},
+                            style=style,
+                            language=active.language,
+                            cleanup_level=cleanup_level,
+                            replacements=active.replacements or {},
+                            snippets=active.snippets or {},
                         ),
                     )
                     self._send_json({"text": output})
@@ -135,15 +159,39 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
             handle.write(body)
             handle.close()
             try:
-                transcript = get_transcriber(self._requested_model()).transcribe(path).text
+                active = current_settings()
+                transcript = get_transcriber(active, self._requested_model(active)).transcribe(path).text
                 self._send_json({"text": transcript})
             finally:
                 path.unlink(missing_ok=True)
 
-        def _requested_model(self) -> str:
+        def _requested_model(self, active: Settings) -> str:
             query = parse_qs(urlsplit(self.path).query)
             requested = (query.get("model") or [""])[0]
-            return requested if requested in ALLOWED_MODELS else settings.model
+            return requested if requested in ALLOWED_MODELS else active.model
+
+        def _read_config(self) -> dict[str, object]:
+            config = load_config()
+            data = {key: config.get(key) for key in EDITABLE_FIELDS}
+            data["allowed_models"] = list(ALLOWED_MODELS)
+            return data
+
+        def _handle_save_config(self) -> None:
+            payload = self._read_json()
+            updates: dict[str, object] = {}
+            for key in EDITABLE_FIELDS:
+                if key in payload:
+                    value = payload[key]
+                    if key in {"replacements", "snippets"}:
+                        value = {str(k): str(v) for k, v in dict(value).items()} if value else {}
+                    elif key == "language":
+                        value = (str(value).strip() or None) if value is not None else None
+                    else:
+                        value = str(value)
+                    updates[key] = value
+            merged = update_config(updates)
+            transcriber_cache.clear()
+            self._send_json({"ok": True, "config": {key: merged.get(key) for key in EDITABLE_FIELDS}})
 
         def _send_json(self, payload: dict[str, object], status: HTTPStatus = HTTPStatus.OK) -> None:
             data = json.dumps(payload).encode("utf-8")
@@ -272,6 +320,41 @@ DESKTOP_HTML = r"""<!doctype html>
       max-width: 260px;
       color: var(--muted);
     }
+    nav.tabs {
+      display: flex;
+      gap: 4px;
+      border-bottom: 1px solid var(--border);
+    }
+    button.tab {
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      border-radius: 0;
+      color: var(--muted);
+      min-height: 40px;
+    }
+    button.tab.active {
+      color: var(--text);
+      border-bottom-color: var(--accent);
+      font-weight: 600;
+    }
+    .settings-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .settings-grid label, label.block {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
+    }
+    label.block { display: flex; margin-top: 12px; }
+    textarea.kv {
+      min-height: 120px;
+      font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .hint { color: var(--muted); font-size: 14px; margin: 0; }
+    code { background: var(--bg); padding: 1px 5px; border-radius: 4px; }
     @media (max-width: 720px) {
       header { align-items: flex-start; flex-direction: column; }
       button, select { flex: 1 1 auto; }
@@ -285,39 +368,93 @@ DESKTOP_HTML = r"""<!doctype html>
       <h1>Whispr Flow Linux</h1>
       <div class="status" id="status"></div>
     </header>
-    <div class="toolbar">
-      <button class="primary" id="record">Record</button>
-      <input id="file" type="file" accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg">
-      <button class="secondary" id="transcribe">Transcribe file</button>
-      <button id="polish">Polish</button>
-      <button id="copy">Copy</button>
-      <button id="paste">Paste</button>
-    </div>
-    <div class="options">
-      <label>Model
-        <select id="model">
-          <option value="small" selected>small (précis)</option>
-          <option value="base">base (rapide)</option>
-        </select>
+    <nav class="tabs">
+      <button class="tab active" data-tab="dictation">Dictée</button>
+      <button class="tab" data-tab="settings">Réglages</button>
+    </nav>
+
+    <section id="tab-dictation">
+      <div class="toolbar">
+        <button class="primary" id="record">Record</button>
+        <input id="file" type="file" accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg">
+        <button class="secondary" id="transcribe">Transcribe file</button>
+        <button id="polish">Polish</button>
+        <button id="copy">Copy</button>
+        <button id="paste">Paste</button>
+      </div>
+      <div class="options">
+        <label>Model
+          <select id="model">
+            <option value="small" selected>small (précis)</option>
+            <option value="base">base (rapide)</option>
+          </select>
+        </label>
+        <label>Style
+          <select id="style">
+            <option value="neutral">Neutral</option>
+            <option value="formal">Formal</option>
+            <option value="casual">Casual</option>
+            <option value="very-casual">Very casual</option>
+          </select>
+        </label>
+        <label>Cleanup
+          <select id="cleanup">
+            <option value="light">Light</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+          </select>
+        </label>
+        <label><input id="autoPolish" type="checkbox" checked> Polish after transcription</label>
+      </div>
+      <textarea id="editor" spellcheck="true" autofocus placeholder="Dictate, upload audio, or paste raw transcript here."></textarea>
+    </section>
+
+    <section id="tab-settings" hidden>
+      <p class="hint">Ces réglages sont enregistrés dans le fichier de config et s'appliquent immédiatement, y compris à la dictée par raccourci global.</p>
+      <div class="settings-grid">
+        <label>Modèle par défaut
+          <select id="set-model"></select>
+        </label>
+        <label>Style
+          <select id="set-style">
+            <option value="neutral">Neutral</option>
+            <option value="formal">Formal</option>
+            <option value="casual">Casual</option>
+            <option value="very-casual">Very casual</option>
+          </select>
+        </label>
+        <label>Nettoyage
+          <select id="set-cleanup">
+            <option value="light">Light</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </label>
+        <label>Langue
+          <select id="set-language">
+            <option value="">Auto (détection)</option>
+            <option value="fr">Français</option>
+            <option value="en">English</option>
+          </select>
+        </label>
+        <label>Moteur de polish
+          <select id="set-polish">
+            <option value="heuristic">heuristic (local, sans modèle)</option>
+            <option value="ollama">ollama (LLM local)</option>
+          </select>
+        </label>
+      </div>
+      <label class="block">Remplacements (un par ligne, <code>dit = écrit</code>)
+        <textarea id="set-replacements" class="kv" spellcheck="false" placeholder="pipe wire = PipeWire"></textarea>
       </label>
-      <label>Style
-        <select id="style">
-          <option value="neutral">Neutral</option>
-          <option value="formal">Formal</option>
-          <option value="casual">Casual</option>
-          <option value="very-casual">Very casual</option>
-        </select>
+      <label class="block">Snippets (<code>nom = texte</code>, déclenché en disant « slash nom »)
+        <textarea id="set-snippets" class="kv" spellcheck="false" placeholder="signature = Best,\nAlexandre"></textarea>
       </label>
-      <label>Cleanup
-        <select id="cleanup">
-          <option value="light">Light</option>
-          <option value="medium" selected>Medium</option>
-          <option value="high">High</option>
-        </select>
-      </label>
-      <label><input id="autoPolish" type="checkbox" checked> Polish after transcription</label>
-    </div>
-    <textarea id="editor" spellcheck="true" autofocus placeholder="Dictate, upload audio, or paste raw transcript here."></textarea>
+      <div class="toolbar">
+        <button class="primary" id="save-settings">Enregistrer</button>
+        <button id="reload-settings">Recharger</button>
+      </div>
+    </section>
   </main>
   <script>
     const editor = document.querySelector("#editor");
@@ -402,6 +539,79 @@ DESKTOP_HTML = r"""<!doctype html>
       try {
         await postJson("/api/paste", {text: editor.value});
         status("Pasted.");
+      } catch (err) {
+        status(String(err));
+      }
+    });
+
+    // --- Tabs + Settings ---
+    let settingsLoaded = false;
+    document.querySelectorAll(".tab").forEach(tab => {
+      tab.addEventListener("click", async () => {
+        const name = tab.dataset.tab;
+        document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t === tab));
+        document.querySelector("#tab-dictation").hidden = name !== "dictation";
+        document.querySelector("#tab-settings").hidden = name !== "settings";
+        if (name === "settings" && !settingsLoaded) { await loadSettings(); }
+      });
+    });
+
+    function kvToText(obj) {
+      return Object.entries(obj || {}).map(([k, v]) => `${k} = ${v}`).join("\n");
+    }
+    function textToKv(text) {
+      const out = {};
+      for (const line of (text || "").split("\n")) {
+        const i = line.indexOf("=");
+        if (i === -1) continue;
+        const key = line.slice(0, i).trim();
+        const val = line.slice(i + 1).trim();
+        if (key) out[key] = val;
+      }
+      return out;
+    }
+
+    async function loadSettings() {
+      status("Chargement des réglages...");
+      const cfg = await (await fetch("/api/config")).json();
+      const modelSel = document.querySelector("#set-model");
+      modelSel.innerHTML = "";
+      for (const m of cfg.allowed_models) {
+        const opt = document.createElement("option");
+        opt.value = m; opt.textContent = m;
+        modelSel.appendChild(opt);
+      }
+      modelSel.value = cfg.model || "small";
+      document.querySelector("#set-style").value = cfg.default_style || "neutral";
+      document.querySelector("#set-cleanup").value = cfg.cleanup_level || "medium";
+      document.querySelector("#set-language").value = cfg.language || "";
+      document.querySelector("#set-polish").value = cfg.polish_backend || "heuristic";
+      document.querySelector("#set-replacements").value = kvToText(cfg.replacements);
+      document.querySelector("#set-snippets").value = kvToText(cfg.snippets);
+      // Keep the dictation model dropdown in sync with the saved default.
+      document.querySelector("#model").value = cfg.model || "small";
+      settingsLoaded = true;
+      status("Réglages chargés.");
+    }
+
+    document.querySelector("#reload-settings").addEventListener("click", async () => {
+      try { await loadSettings(); } catch (err) { status(String(err)); }
+    });
+
+    document.querySelector("#save-settings").addEventListener("click", async () => {
+      status("Enregistrement...");
+      try {
+        await postJson("/api/config", {
+          model: document.querySelector("#set-model").value,
+          default_style: document.querySelector("#set-style").value,
+          cleanup_level: document.querySelector("#set-cleanup").value,
+          language: document.querySelector("#set-language").value,
+          polish_backend: document.querySelector("#set-polish").value,
+          replacements: textToKv(document.querySelector("#set-replacements").value),
+          snippets: textToKv(document.querySelector("#set-snippets").value)
+        });
+        document.querySelector("#model").value = document.querySelector("#set-model").value;
+        status("Réglages enregistrés.");
       } catch (err) {
         status(String(err));
       }

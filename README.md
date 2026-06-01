@@ -131,6 +131,33 @@ Install a desktop launcher in `~/.local/share/applications`:
 whispr-flow install-desktop
 ```
 
+Run the desktop server automatically at login (writes `~/.config/autostart`).
+It starts in the background without opening a browser, so the editor and the
+Settings tab are always available at `http://127.0.0.1:8765`:
+
+```bash
+whispr-flow install-autostart
+whispr-flow install-autostart --remove   # undo
+```
+
+## Global hotkey (recommended for dictating into other apps)
+
+The Flow-like flow is one global shortcut bound to `toggle`: press once to start,
+press again to transcribe and insert into whatever app is focused (Slack, email,
+…). The binding is stored by your desktop and survives reboots, so no background
+process is required for it.
+
+On Cinnamon: System Settings → Keyboard → Shortcuts → Custom Shortcuts → Add,
+with this command (use the full path to the binary inside your venv):
+
+```bash
+/path/to/whispr-flow/.venv/bin/whispr-flow toggle --target paste
+```
+
+Then assign a key (e.g. a spare key or `Super+Space`). Direct paste needs
+`xdotool` on X11 or `wtype` on Wayland; otherwise use `--target copy` and paste
+with `Ctrl+V`. Desktop notifications show when recording starts and stops.
+
 Create and edit your config:
 
 ```bash
@@ -205,6 +232,9 @@ With that config, dictating `slash signature` expands the snippet, and dictated 
 - audio upload transcription
 - browser microphone recording as WAV PCM, avoiding a hard dependency on `ffmpeg` for desktop recording
 - a model selector to toggle between `small` (more accurate) and `base` (faster)
+- a **Settings** tab to edit the default model, style, cleanup level, language,
+  polish backend, replacements, and snippets — saved to the config file and
+  applied immediately, including to the global-hotkey dictation flow
 - automatic polish after transcription
 - copy and paste actions
 

@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from whispr_flow_linux.config import Settings, load_config, write_default_config
+from whispr_flow_linux.config import Settings, load_config, update_config, write_default_config
 
 
 class ConfigTest(unittest.TestCase):
@@ -14,6 +14,27 @@ class ConfigTest(unittest.TestCase):
             data = load_config(path)
             self.assertEqual(data["transcriber"], "auto")
             self.assertIn("whisper flow", data["replacements"])
+
+    def test_update_config_merges_and_ignores_unknown_keys(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            write_default_config(path)
+            merged = update_config(
+                {"model": "base", "language": "fr", "bogus": "nope"}, path
+            )
+            self.assertEqual(merged["model"], "base")
+            self.assertEqual(merged["language"], "fr")
+            self.assertNotIn("bogus", merged)
+            # Untouched defaults are preserved across the write.
+            self.assertEqual(merged["cleanup_level"], "medium")
+            self.assertEqual(load_config(path)["model"], "base")
+
+    def test_update_config_creates_file_when_absent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "nested" / "config.json"
+            merged = update_config({"default_style": "casual"}, path)
+            self.assertTrue(path.exists())
+            self.assertEqual(merged["default_style"], "casual")
 
     def test_settings_uses_whispr_config_override(self):
         old_config = os.environ.get("WHISPR_CONFIG")

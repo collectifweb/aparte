@@ -115,6 +115,29 @@ def write_default_config(path: Path | None = None, force: bool = False) -> Path:
     return path
 
 
+def update_config(updates: dict[str, Any], path: Path | None = None) -> dict[str, Any]:
+    """Merge ``updates`` into the existing config file and write it back.
+
+    Returns the merged config that was written. Unknown keys are ignored so the
+    settings form can only touch fields that the app understands.
+    """
+    path = path or get_config_path()
+    data = DEFAULT_CONFIG.copy()
+    if path.exists():
+        with path.open("r", encoding="utf-8") as handle:
+            existing = json.load(handle)
+        if isinstance(existing, dict):
+            data.update(existing)
+    for key, value in updates.items():
+        if key in DEFAULT_CONFIG:
+            data[key] = value
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=2, ensure_ascii=False)
+        handle.write("\n")
+    return data
+
+
 def _optional_str(value: object) -> str | None:
     if value in {None, ""}:
         return None

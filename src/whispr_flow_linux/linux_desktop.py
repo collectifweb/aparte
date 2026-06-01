@@ -8,6 +8,7 @@ from pathlib import Path
 
 
 DESKTOP_FILE_NAME = "whispr-flow-linux.desktop"
+AUTOSTART_FILE_NAME = "whispr-flow-linux.desktop"
 
 
 def user_applications_dir() -> Path:
@@ -15,6 +16,13 @@ def user_applications_dir() -> Path:
     if xdg_data_home:
         return Path(xdg_data_home).expanduser() / "applications"
     return Path.home() / ".local" / "share" / "applications"
+
+
+def autostart_dir() -> Path:
+    xdg_config_home = os.getenv("XDG_CONFIG_HOME")
+    if xdg_config_home:
+        return Path(xdg_config_home).expanduser() / "autostart"
+    return Path.home() / ".config" / "autostart"
 
 
 def default_exec_command() -> list[str]:
@@ -53,4 +61,44 @@ def install_desktop_entry(command: list[str] | None = None, force: bool = False)
     destination.write_text(build_desktop_entry(command), encoding="utf-8")
     destination.chmod(0o644)
     return destination
+
+
+def default_autostart_command() -> list[str]:
+    return default_exec_command() + ["--no-browser"]
+
+
+def build_autostart_entry(command: list[str] | None = None) -> str:
+    command = command or default_autostart_command()
+    return "\n".join(
+        [
+            "[Desktop Entry]",
+            "Type=Application",
+            "Name=Whispr Flow Linux",
+            "Comment=Start the Whispr Flow desktop server at login",
+            f"Exec={desktop_exec(command)}",
+            "Terminal=false",
+            "Categories=Utility;Audio;Accessibility;",
+            "X-GNOME-Autostart-enabled=true",
+            "StartupNotify=false",
+            "",
+        ]
+    )
+
+
+def install_autostart_entry(command: list[str] | None = None, force: bool = False) -> Path:
+    destination = autostart_dir() / AUTOSTART_FILE_NAME
+    if destination.exists() and not force:
+        raise FileExistsError(f"Autostart entry already exists: {destination}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(build_autostart_entry(command), encoding="utf-8")
+    destination.chmod(0o644)
+    return destination
+
+
+def uninstall_autostart_entry() -> Path | None:
+    destination = autostart_dir() / AUTOSTART_FILE_NAME
+    if destination.exists():
+        destination.unlink()
+        return destination
+    return None
 

@@ -8,7 +8,13 @@ from .audio import record_wav
 from .clipboard import copy_text, paste_text
 from .config import Settings, load_config, write_default_config
 from .desktop import run_desktop
-from .linux_desktop import build_desktop_entry, install_desktop_entry
+from .linux_desktop import (
+    build_autostart_entry,
+    build_desktop_entry,
+    install_autostart_entry,
+    install_desktop_entry,
+    uninstall_autostart_entry,
+)
 from .notify import _preview, notify
 from .polish import PolishOptions, build_polisher
 from .session import get_active_session, start_toggle_recording, stop_toggle_recording
@@ -44,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
             print(output)
             return 0
         if args.command == "desktop":
-            run_desktop(args.host, args.port, settings)
+            run_desktop(args.host, args.port, settings, open_browser=not args.no_browser)
             return 0
         if args.command == "doctor":
             print_doctor(settings)
@@ -54,6 +60,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "install-desktop":
             handle_install_desktop(args)
+            return 0
+        if args.command == "install-autostart":
+            handle_install_autostart(args)
             return 0
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -119,6 +128,11 @@ def build_parser() -> argparse.ArgumentParser:
     desktop = subparsers.add_parser("desktop", help="Launch the local Linux desktop app.")
     desktop.add_argument("--host", default="127.0.0.1")
     desktop.add_argument("--port", type=int, default=8765)
+    desktop.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="Run the server without opening a browser (useful for autostart).",
+    )
 
     subparsers.add_parser("doctor", help="Check optional Linux integrations and local backends.")
 
@@ -135,6 +149,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     install_desktop.add_argument("--force", action="store_true", help="Overwrite an existing desktop entry.")
     install_desktop.add_argument("--print", action="store_true", help="Print the generated desktop entry instead.")
+
+    install_autostart = subparsers.add_parser(
+        "install-autostart",
+        help="Run the desktop server at login (writes a ~/.config/autostart entry).",
+    )
+    install_autostart.add_argument("--force", action="store_true", help="Overwrite an existing autostart entry.")
+    install_autostart.add_argument("--print", action="store_true", help="Print the generated autostart entry instead.")
+    install_autostart.add_argument("--remove", action="store_true", help="Remove the autostart entry.")
 
     return parser
 
@@ -346,4 +368,16 @@ def handle_install_desktop(args: argparse.Namespace) -> None:
         print(build_desktop_entry(), end="")
         return
     path = install_desktop_entry(force=args.force)
+    print(path)
+
+
+def handle_install_autostart(args: argparse.Namespace) -> None:
+    if args.remove:
+        removed = uninstall_autostart_entry()
+        print(f"removed {removed}" if removed else "no autostart entry to remove")
+        return
+    if args.print:
+        print(build_autostart_entry(), end="")
+        return
+    path = install_autostart_entry(force=args.force)
     print(path)
