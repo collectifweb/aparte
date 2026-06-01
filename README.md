@@ -1,6 +1,6 @@
-# Whispr Flow Linux
+# Murmur
 
-Whispr Flow Linux is a local-first dictation app for Linux. It can run as a CLI, as a command bound to a global keyboard shortcut, or as a lightweight local desktop web app.
+Murmur is a local-first dictation app for Linux. It can run as a CLI, as a command bound to a global keyboard shortcut, or as a lightweight local desktop web app.
 
 The first version focuses on the core Flow-like loop:
 
@@ -15,9 +15,9 @@ This repo is a working MVP scaffold. It runs immediately for text polishing and 
 
 - `faster-whisper` Python package
 - `openai-whisper` Python package
-- `whisper.cpp` CLI via `WHISPR_WHISPER_CPP`
+- `whisper.cpp` CLI via `MURMUR_WHISPER_CPP`
 
-For best formatting quality, run Ollama locally and set `WHISPR_POLISH_BACKEND=ollama`.
+For best formatting quality, run Ollama locally and set `MURMUR_POLISH_BACKEND=ollama`.
 For consistent spelling of names, products, acronyms, and repeated phrases, use the built-in config file.
 
 ## Install
@@ -74,61 +74,61 @@ Use Wayland tools (`wl-copy`, `wtype`) on Wayland, or X11 tools (`xclip`, `xdoto
 Polish raw text:
 
 ```bash
-echo "hey sarah thanks for sending this euh i will review it tomorrow" | whispr-flow polish
+echo "hey sarah thanks for sending this euh i will review it tomorrow" | murmur polish
 ```
 
 Transcribe an audio file and polish it:
 
 ```bash
-whispr-flow transcribe meeting.wav --polish
+murmur transcribe meeting.wav --polish
 ```
 
 Record from the microphone, transcribe, polish, and copy:
 
 ```bash
-whispr-flow record --seconds 15 --polish --copy
+murmur record --seconds 15 --polish --copy
 ```
 
 Dictate directly into the active app:
 
 ```bash
-whispr-flow dictate --seconds 8
+murmur dictate --seconds 8
 ```
 
 Use fixed-duration dictation as a global keyboard shortcut command in GNOME/KDE/XFCE:
 
 ```bash
-whispr-flow dictate --seconds 8 --target paste
+murmur dictate --seconds 8 --target paste
 ```
 
 For a more Flow-like shortcut, bind the same toggle command to one global hotkey. The first press starts recording; the second press stops, transcribes, polishes, and inserts:
 
 ```bash
-whispr-flow toggle --target paste
+murmur toggle --target paste
 ```
 
 Check whether a toggle recording is already active:
 
 ```bash
-whispr-flow toggle --status
+murmur toggle --status
 ```
 
 If direct paste is unavailable on your desktop, copy instead:
 
 ```bash
-whispr-flow toggle --target copy
+murmur toggle --target copy
 ```
 
 Launch the Linux desktop app:
 
 ```bash
-whispr-flow desktop
+murmur desktop
 ```
 
 Install a desktop launcher in `~/.local/share/applications`:
 
 ```bash
-whispr-flow install-desktop
+murmur install-desktop
 ```
 
 Run the desktop server automatically at login (writes `~/.config/autostart`).
@@ -136,8 +136,8 @@ It starts in the background without opening a browser, so the editor and the
 Settings tab are always available at `http://127.0.0.1:8765`:
 
 ```bash
-whispr-flow install-autostart
-whispr-flow install-autostart --remove   # undo
+murmur install-autostart
+murmur install-autostart --remove   # undo
 ```
 
 ## Global hotkey (recommended for dictating into other apps)
@@ -151,7 +151,7 @@ On Cinnamon: System Settings → Keyboard → Shortcuts → Custom Shortcuts →
 with this command (use the full path to the binary inside your venv):
 
 ```bash
-/path/to/whispr-flow/.venv/bin/whispr-flow toggle --target paste
+/path/to/murmur/.venv/bin/murmur toggle --target paste
 ```
 
 Then assign a key (e.g. a spare key or `Super+Space`). Direct paste needs
@@ -161,9 +161,9 @@ with `Ctrl+V`. Desktop notifications show when recording starts and stops.
 Create and edit your config:
 
 ```bash
-whispr-flow config init
-whispr-flow config path
-whispr-flow config show
+murmur config init
+murmur config path
+murmur config show
 ```
 
 ## Configuration
@@ -171,24 +171,24 @@ whispr-flow config show
 Environment variables:
 
 ```bash
-WHISPR_TRANSCRIBER=auto
-WHISPR_RECORDER=auto
-WHISPR_MODEL=small
-WHISPR_DEVICE=auto
-WHISPR_COMPUTE_TYPE=auto
-WHISPR_LANGUAGE=
-WHISPR_POLISH_BACKEND=heuristic
-WHISPR_OLLAMA_URL=http://127.0.0.1:11434
-WHISPR_OLLAMA_MODEL=llama3.1:8b
-WHISPR_WHISPER_CPP=
-WHISPR_CONFIG=
+MURMUR_TRANSCRIBER=auto
+MURMUR_RECORDER=auto
+MURMUR_MODEL=small
+MURMUR_DEVICE=auto
+MURMUR_COMPUTE_TYPE=auto
+MURMUR_LANGUAGE=
+MURMUR_POLISH_BACKEND=heuristic
+MURMUR_OLLAMA_URL=http://127.0.0.1:11434
+MURMUR_OLLAMA_MODEL=llama3.1:8b
+MURMUR_WHISPER_CPP=
+MURMUR_CONFIG=
 ```
 
-`WHISPR_DEVICE` controls the `faster-whisper` compute device (`auto`, `cpu`, or `cuda`).
+`MURMUR_DEVICE` controls the `faster-whisper` compute device (`auto`, `cpu`, or `cuda`).
 When a GPU is detected but its CUDA runtime is missing or unusable
 (`libcublas`/`libcudnn` not found), transcription automatically falls back to CPU
 with `int8`, so it works out of the box on machines without a CUDA install.
-Force CPU with `WHISPR_DEVICE=cpu` to skip the GPU probe entirely.
+Force CPU with `MURMUR_DEVICE=cpu` to skip the GPU probe entirely.
 
 Polish backends:
 
@@ -201,7 +201,7 @@ Recorder backends:
 - `sounddevice`: Python recording backend.
 - `arecord`: ALSA command-line recorder from `alsa-utils`.
 
-Persistent config lives at `${XDG_CONFIG_HOME}/whispr-flow/config.json`, or `~/.config/whispr-flow/config.json` when `XDG_CONFIG_HOME` is not set. Override it with `WHISPR_CONFIG=/path/to/config.json`.
+Persistent config lives at `${XDG_CONFIG_HOME}/murmur/config.json`, or `~/.config/murmur/config.json` when `XDG_CONFIG_HOME` is not set. Override it with `MURMUR_CONFIG=/path/to/config.json`.
 
 Example:
 
@@ -225,21 +225,25 @@ With that config, dictating `slash signature` expands the snippet, and dictated 
 
 ## Desktop app
 
-`whispr-flow desktop` starts a local server on `127.0.0.1` and opens the browser. It provides:
+`murmur desktop` starts a local server on `127.0.0.1` and opens the browser. The
+interface is a focused, single-screen app:
 
-- a transcript editor
-- a polish button
-- audio upload transcription
-- browser microphone recording as WAV PCM, avoiding a hard dependency on `ffmpeg` for desktop recording
-- a model selector to toggle between `small` (more accurate) and `base` (faster)
-- a **Settings** tab to edit the default model, style, cleanup level, language,
-  polish backend, replacements, and snippets — saved to the config file and
-  applied immediately, including to the global-hotkey dictation flow
-- automatic polish after transcription
-- copy and paste actions
+- a large **Talk** button (browser microphone recording as WAV PCM, so no hard
+  dependency on `ffmpeg`) that records, transcribes, and auto-polishes
+- a transcript editor with **Polish**, **Copy**, **Paste**, and audio import
+- a model toggle (`small` = accurate, `base` = fast); each model loads once and
+  is cached, so switching is instant after first use
+- a **Settings** panel (gear icon) grouped into Transcription (model, language,
+  compute device), Formatting (style, cleanup, polish backend), and Vocabulary
+  (replacements, snippets) — saved to the config file and applied immediately,
+  including to the global-hotkey dictation flow
+- a **Configuration & diagnostics** panel that shows, with green/red status, what
+  is installed vs missing (Whisper backend, GPU, microphone, paste/clipboard,
+  notifications) and the exact command to fix each gap — copy-paste onboarding
+  for any Linux user
 
-Each model loads once and is cached, so toggling back and forth is instant after
-the first use.
+The frontend lives in `src/murmur/assets/` (`index.html`, `app.css`, `app.js`,
+`logo.svg`) and is served as static files, so it is easy to contribute to.
 
 ## Desktop notifications
 
@@ -252,4 +256,4 @@ dictation works without it.
 
 This approach avoids GTK/Qt packaging friction while staying Linux-compatible.
 
-`whispr-flow install-desktop` writes a user-level `.desktop` file so the app appears in Linux launchers. Use `whispr-flow install-desktop --print` to inspect the generated entry before installing it.
+`murmur install-desktop` writes a user-level `.desktop` file so the app appears in Linux launchers. Use `murmur install-desktop --print` to inspect the generated entry before installing it.

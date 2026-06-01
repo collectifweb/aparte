@@ -1,8 +1,9 @@
 [Desktop Entry]
 Type=Application
-Name=Whispr Flow Linux
+Name=Murmur
 Comment=Local-first Linux dictation with Whisper and smart formatting
-Exec=whispr-flow desktop
+Exec=murmur desktop
+Icon=murmur
 Terminal=false
 Categories=Utility;Audio;Accessibility;
 StartupNotify=true

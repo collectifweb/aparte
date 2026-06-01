@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Murmur</title>
+  <link rel="icon" href="/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="/logo.svg" class="logo" alt="">
+      <span class="wordmark">Murmur</span>
+    </div>
+    <nav class="topbar-actions">
+      <button id="open-health" class="ghost-btn" title="Configuration & diagnostic">
+        <span class="dot" id="health-dot" aria-hidden="true"></span> Configuration
+      </button>
+      <button id="open-settings" class="ghost-btn" title="Réglages">
+        <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path fill="currentColor" d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm8.4 4a6.5 6.5 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a6.6 6.6 0 0 0-2-1.2l-.4-2.6H9l-.4 2.6a6.6 6.6 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A6.5 6.5 0 0 0 4 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1c.6.5 1.3.9 2 1.2l.4 2.6h6l.4-2.6c.7-.3 1.4-.7 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2Z"/></svg>
+        Réglages
+      </button>
+    </nav>
+  </header>
+
+  <main class="hero">
+    <button id="record" class="record-btn" aria-label="Démarrer la dictée">
+      <span class="record-ring" aria-hidden="true"></span>
+      <svg viewBox="0 0 24 24" class="mic" aria-hidden="true"><path fill="currentColor" d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-5a3.5 3.5 0 1 0-7 0v5A3.5 3.5 0 0 0 12 15Zm6-3.5a6 6 0 0 1-5 5.91V21h-2v-3.59a6 6 0 0 1-5-5.91h2a4 4 0 0 0 8 0Z"/></svg>
+      <span class="stop-glyph" aria-hidden="true"></span>
+      <span class="record-label">Parler</span>
+    </button>
+    <p class="hero-sub" id="hero-sub">Appuie pour parler, ou utilise ton raccourci clavier global.</p>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+
+    <section class="result">
+      <textarea id="editor" spellcheck="true" placeholder="Ta dictée apparaîtra ici. Tu peux aussi coller ou taper du texte à polir."></textarea>
+      <div class="result-bar">
+        <div class="result-actions">
+          <button id="polish" class="chip">Polir</button>
+          <button id="copy" class="chip">Copier</button>
+          <button id="paste" class="chip">Coller</button>
+          <button id="pick-file" class="chip ghost">Importer audio</button>
+          <input id="file" type="file" accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg" hidden>
+        </div>
+        <div class="result-opts">
+          <label class="inline">Modèle
+            <select id="model"></select>
+          </label>
+          <label class="inline"><input id="autoPolish" type="checkbox" checked> Polir auto</label>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Settings drawer -->
+  <div class="overlay" id="settings-overlay" hidden>
+    <aside class="drawer" role="dialog" aria-label="Réglages">
+      <header class="drawer-head">
+        <h2>Réglages</h2>
+        <button class="icon-close" data-close aria-label="Fermer">✕</button>
+      </header>
+      <div class="drawer-body">
+        <div class="group">
+          <h3>Transcription</h3>
+          <label class="field">Modèle par défaut
+            <select id="set-model"></select>
+            <small>small = précis · base = rapide · medium = qualité max</small>
+          </label>
+          <label class="field">Langue
+            <select id="set-language">
+              <option value="">Auto (détection)</option>
+              <option value="fr">Français</option>
+              <option value="en">English</option>
+            </select>
+          </label>
+          <label class="field">Calcul
+            <select id="set-device">
+              <option value="auto">Auto (GPU si dispo, sinon CPU)</option>
+              <option value="cuda">GPU (CUDA)</option>
+              <option value="cpu">CPU</option>
+            </select>
+          </label>
+        </div>
+        <div class="group">
+          <h3>Mise en forme</h3>
+          <label class="field">Style
+            <select id="set-style">
+              <option value="neutral">Neutre</option>
+              <option value="formal">Formel</option>
+              <option value="casual">Décontracté</option>
+              <option value="very-casual">Très décontracté</option>
+            </select>
+          </label>
+          <label class="field">Nettoyage
+            <select id="set-cleanup">
+              <option value="light">Léger</option>
+              <option value="medium">Moyen</option>
+              <option value="high">Élevé</option>
+            </select>
+          </label>
+          <label class="field">Moteur de polish
+            <select id="set-polish">
+              <option value="heuristic">Heuristique (local, sans modèle)</option>
+              <option value="ollama">Ollama (LLM local)</option>
+            </select>
+          </label>
+        </div>
+        <div class="group">
+          <h3>Vocabulaire</h3>
+          <label class="field">Remplacements <small>un par ligne — <code>dit = écrit</code></small>
+            <textarea id="set-replacements" class="kv" spellcheck="false" placeholder="pipe wire = PipeWire"></textarea>
+          </label>
+          <label class="field">Snippets <small><code>nom = texte</code>, dit « slash nom »</small>
+            <textarea id="set-snippets" class="kv" spellcheck="false" placeholder="signature = Cordialement,&#10;Alexandre"></textarea>
+          </label>
+        </div>
+      </div>
+      <footer class="drawer-foot">
+        <button class="btn ghost" data-close>Annuler</button>
+        <button class="btn primary" id="save-settings">Enregistrer</button>
+      </footer>
+    </aside>
+  </div>
+
+  <!-- Diagnostics drawer -->
+  <div class="overlay" id="health-overlay" hidden>
+    <aside class="drawer" role="dialog" aria-label="Configuration et diagnostic">
+      <header class="drawer-head">
+        <h2>Configuration &amp; diagnostic</h2>
+        <button class="icon-close" data-close aria-label="Fermer">✕</button>
+      </header>
+      <div class="drawer-body" id="health-body">
+        <p class="muted">Chargement…</p>
+      </div>
+      <footer class="drawer-foot">
+        <span class="muted" id="health-summary"></span>
+        <button class="btn ghost" id="refresh-health">Rafraîchir</button>
+      </footer>
+    </aside>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

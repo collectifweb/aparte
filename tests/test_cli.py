@@ -1,6 +1,6 @@
 import unittest
 
-from whispr_flow_linux.cli import build_parser
+from murmur.cli import build_parser
 
 
 class CliParserTest(unittest.TestCase):

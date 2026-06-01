@@ -46,11 +46,11 @@ if command -v nvidia-smi >/dev/null 2>&1; then
   EXTRAS="$EXTRAS,cuda"
 fi
 python -m pip install -e ".[$EXTRAS]"
-python -m whispr_flow_linux config init || true
-python -m whispr_flow_linux install-desktop --force
+python -m murmur config init || true
+python -m murmur install-desktop --force
 
 echo
-echo "Installed Whispr Flow Linux."
-echo "Run: source .venv/bin/activate && whispr-flow doctor"
+echo "Installed Murmur."
+echo "Run: source .venv/bin/activate && murmur doctor"
 echo "For CLI copy/paste on X11, install: sudo apt install xclip xdotool"
 echo "On Wayland, install: sudo apt install wl-clipboard wtype"

@@ -3,12 +3,12 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "whispr-flow-linux"
+name = "murmur"
 version = "0.1.0"
 description = "Local-first Linux dictation app with Whisper transcription and smart formatting."
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [{ name = "Whispr Flow Linux contributors" }]
+authors = [{ name = "Murmur contributors" }]
 dependencies = [
   "requests>=2.31",
 ]
@@ -30,8 +30,11 @@ dev = [
 ]
 
 [project.scripts]
-whispr-flow = "whispr_flow_linux.cli:main"
+murmur = "murmur.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+murmur = ["assets/*"]
 

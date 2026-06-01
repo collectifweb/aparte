@@ -73,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="whispr-flow")
+    parser = argparse.ArgumentParser(prog="murmur")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     polish = subparsers.add_parser("polish", help="Polish dictated text from an argument or stdin.")
@@ -136,7 +136,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("doctor", help="Check optional Linux integrations and local backends.")
 
-    config = subparsers.add_parser("config", help="Manage persistent Whispr Flow Linux configuration.")
+    config = subparsers.add_parser("config", help="Manage persistent Murmur configuration.")
     config_subparsers = config.add_subparsers(dest="config_command", required=True)
     config_init = config_subparsers.add_parser("init", help="Write a default config file.")
     config_init.add_argument("--force", action="store_true", help="Overwrite an existing config file.")
@@ -204,7 +204,7 @@ def transcribe_path(path: Path, args: argparse.Namespace, settings: Settings) ->
 def dictate_once(args: argparse.Namespace, settings: Settings) -> str:
     notify("🎙️ Dictée", f"Enregistrement pendant {args.seconds:g}s…")
     path = record_wav(args.seconds, args.sample_rate, settings.recorder)
-    notify("⏳ Transcription…", "Whispr Flow traite ta dictée.", urgency="low")
+    notify("⏳ Transcription…", "Murmur traite ta dictée.", urgency="low")
     try:
         transcribe_args = argparse.Namespace(
             polish=not args.no_polish,
@@ -248,7 +248,7 @@ def toggle_dictation(args: argparse.Namespace, settings: Settings) -> str:
         return f"Recording started: {session.audio_path}"
 
     session = stop_toggle_recording()
-    notify("⏳ Transcription…", "Whispr Flow traite ta dictée.", urgency="low")
+    notify("⏳ Transcription…", "Murmur traite ta dictée.", urgency="low")
     try:
         transcribe_args = argparse.Namespace(
             polish=not args.no_polish,
@@ -276,74 +276,27 @@ def handle_output(output: str, args: argparse.Namespace) -> None:
 
 
 def print_doctor(settings: Settings) -> None:
-    import importlib.util
-    import os
-    import shutil
+    from .diagnostics import collect_diagnostics
 
-    has_faster_whisper = importlib.util.find_spec("faster_whisper") is not None
-    has_openai_whisper = importlib.util.find_spec("whisper") is not None
-    has_whisper_cpp = bool(settings.whisper_cpp or shutil.which("whisper-cli") or shutil.which("main"))
-    has_arecord = shutil.which("arecord") is not None
-    has_sounddevice = importlib.util.find_spec("sounddevice") is not None
-    has_wayland_paste = shutil.which("wtype") is not None and bool(os.getenv("WAYLAND_DISPLAY"))
-    has_x11_paste = shutil.which("xdotool") is not None and bool(os.getenv("DISPLAY"))
-    has_wayland_copy = shutil.which("wl-copy") is not None and bool(os.getenv("WAYLAND_DISPLAY"))
-    has_x11_copy = shutil.which("xclip") is not None or shutil.which("xsel") is not None
-    active_toggle = get_active_session()
+    diagnostics = collect_diagnostics(settings)
+    category = None
+    for check in diagnostics["checks"]:
+        if check["category"] != category:
+            category = check["category"]
+            print(f"\n{category}")
+        marker = "ok" if check["ok"] else "missing"
+        print(f"  {marker:7} {check['label']}")
 
-    checks = [
-        ("config file", bool(settings.config_path and settings.config_path.exists())),
-        ("toggle runtime writable", True),
-        ("Python package faster_whisper", has_faster_whisper),
-        ("Python package whisper", has_openai_whisper),
-        ("Python package sounddevice", has_sounddevice),
-        ("Python package soundfile", importlib.util.find_spec("soundfile") is not None),
-        ("arecord", has_arecord),
-        ("pw-record", shutil.which("pw-record") is not None),
-        ("parec", shutil.which("parec") is not None),
-        ("ffmpeg", shutil.which("ffmpeg") is not None),
-        ("whisper.cpp executable", has_whisper_cpp),
-        ("Wayland session", bool(os.getenv("WAYLAND_DISPLAY"))),
-        ("X11 session", bool(os.getenv("DISPLAY"))),
-        ("wl-copy", shutil.which("wl-copy") is not None),
-        ("wtype", shutil.which("wtype") is not None),
-        ("xclip", shutil.which("xclip") is not None),
-        ("xdotool", shutil.which("xdotool") is not None),
-    ]
-    for label, ok in checks:
-        marker = "ok" if ok else "missing"
-        print(f"{marker:7} {label}")
-    if active_toggle:
-        print(f"status  toggle recording active: {active_toggle.audio_path}")
-    else:
-        print("status  toggle recording idle")
+    summary = diagnostics["summary"]
+    print(f"\nstatus  {'recording active' if diagnostics['recording_active'] else 'idle'}")
+    print(f"ready   {'yes' if summary['ready'] else 'no — see fixes below'}")
 
-    recommendations: list[str] = []
-    if not (has_faster_whisper or has_openai_whisper or has_whisper_cpp):
-        recommendations.append('Install a local transcription backend: python -m pip install -e ".[whisper]"')
-    if not (has_sounddevice or has_arecord):
-        recommendations.append("Install a recorder: python sounddevice package or sudo apt install alsa-utils")
-    if not (has_wayland_paste or has_x11_paste):
-        recommendations.append("Install a paste tool: wtype on Wayland or xdotool on X11")
-    if not (has_wayland_copy or has_x11_copy):
-        recommendations.append("Install a clipboard tool: wl-clipboard on Wayland or xclip/xsel on X11")
-    if settings.polish_backend == "ollama" and not _ollama_available(settings):
-        recommendations.append("Start Ollama or switch to WHISPR_POLISH_BACKEND=heuristic")
-
-    if recommendations:
+    fixes = [c for c in diagnostics["checks"] if not c["ok"] and c["fix"]]
+    if fixes:
         print("\nNext steps:")
-        for item in recommendations:
-            print(f"- {item}")
-
-
-def _ollama_available(settings: Settings) -> bool:
-    try:
-        import requests
-
-        response = requests.get(f"{settings.ollama_url.rstrip('/')}/api/tags", timeout=0.5)
-        return response.ok
-    except Exception:
-        return False
+        for check in fixes:
+            flag = " (required)" if check["essential"] else ""
+            print(f"- {check['label']}{flag}: {check['fix']}")
 
 
 def handle_config_command(args: argparse.Namespace) -> None:

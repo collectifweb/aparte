@@ -4,9 +4,9 @@ import types
 import unittest
 from pathlib import Path
 
-from whispr_flow_linux.cli import transcribe_path
-from whispr_flow_linux.config import Settings
-from whispr_flow_linux.transcription import FasterWhisperTranscriber, TranscriptionError
+from murmur.cli import transcribe_path
+from murmur.config import Settings
+from murmur.transcription import FasterWhisperTranscriber, TranscriptionError
 
 
 class TextTranscriptionTest(unittest.TestCase):

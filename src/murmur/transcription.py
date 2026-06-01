@@ -194,6 +194,6 @@ def build_transcriber(
 
     raise TranscriptionError(
         "No local Whisper backend found. Install faster-whisper, openai-whisper, "
-        "or set WHISPR_WHISPER_CPP to a whisper.cpp executable."
+        "or set MURMUR_WHISPER_CPP to a whisper.cpp executable."
     )
 

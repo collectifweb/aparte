@@ -26,14 +26,14 @@ class RecordingSession:
 
 
 def get_runtime_dir() -> Path:
-    override = os.getenv("WHISPR_RUNTIME_DIR")
+    override = os.getenv("MURMUR_RUNTIME_DIR")
     if override:
         candidates = [Path(override).expanduser()]
     else:
         candidates = []
         if os.getenv("XDG_RUNTIME_DIR"):
-            candidates.append(Path(os.environ["XDG_RUNTIME_DIR"]) / "whispr-flow")
-        candidates.append(Path(tempfile.gettempdir()) / f"whispr-flow-{os.getuid()}")
+            candidates.append(Path(os.environ["XDG_RUNTIME_DIR"]) / "murmur")
+        candidates.append(Path(tempfile.gettempdir()) / f"murmur-{os.getuid()}")
     last_error: OSError | None = None
     for path in candidates:
         try:

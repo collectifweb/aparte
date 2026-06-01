@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 
-APP_NAME = "Whispr Flow"
+APP_NAME = "Murmur"
 
 
 def notify(title: str, message: str = "", *, urgency: str = "normal") -> bool:

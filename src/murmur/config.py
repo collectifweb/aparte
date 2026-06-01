@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
-APP_DIR_NAME = "whispr-flow"
+APP_DIR_NAME = "murmur"
 CONFIG_FILE_NAME = "config.json"
 
 
@@ -58,22 +58,22 @@ class Settings:
     def from_env(cls) -> "Settings":
         config_path = get_config_path()
         config = load_config(config_path)
-        language = os.getenv("WHISPR_LANGUAGE") or None
-        whisper_cpp = os.getenv("WHISPR_WHISPER_CPP") or None
+        language = os.getenv("MURMUR_LANGUAGE") or None
+        whisper_cpp = os.getenv("MURMUR_WHISPER_CPP") or None
         replacements = _string_dict(config.get("replacements", DEFAULT_CONFIG["replacements"]))
         snippets = _string_dict(config.get("snippets", DEFAULT_CONFIG["snippets"]))
         return cls(
-            transcriber=os.getenv("WHISPR_TRANSCRIBER", str(config.get("transcriber", "auto"))),
-            recorder=os.getenv("WHISPR_RECORDER", str(config.get("recorder", "auto"))),
-            model=os.getenv("WHISPR_MODEL", str(config.get("model", "small"))),
-            device=os.getenv("WHISPR_DEVICE", str(config.get("device", "auto"))),
-            compute_type=os.getenv("WHISPR_COMPUTE_TYPE", str(config.get("compute_type", "auto"))),
+            transcriber=os.getenv("MURMUR_TRANSCRIBER", str(config.get("transcriber", "auto"))),
+            recorder=os.getenv("MURMUR_RECORDER", str(config.get("recorder", "auto"))),
+            model=os.getenv("MURMUR_MODEL", str(config.get("model", "small"))),
+            device=os.getenv("MURMUR_DEVICE", str(config.get("device", "auto"))),
+            compute_type=os.getenv("MURMUR_COMPUTE_TYPE", str(config.get("compute_type", "auto"))),
             language=language if language is not None else _optional_str(config.get("language")),
-            polish_backend=os.getenv("WHISPR_POLISH_BACKEND", str(config.get("polish_backend", "heuristic"))),
+            polish_backend=os.getenv("MURMUR_POLISH_BACKEND", str(config.get("polish_backend", "heuristic"))),
             default_style=str(config.get("default_style", "neutral")),
             cleanup_level=str(config.get("cleanup_level", "medium")),
-            ollama_url=os.getenv("WHISPR_OLLAMA_URL", str(config.get("ollama_url", DEFAULT_CONFIG["ollama_url"]))),
-            ollama_model=os.getenv("WHISPR_OLLAMA_MODEL", str(config.get("ollama_model", DEFAULT_CONFIG["ollama_model"]))),
+            ollama_url=os.getenv("MURMUR_OLLAMA_URL", str(config.get("ollama_url", DEFAULT_CONFIG["ollama_url"]))),
+            ollama_model=os.getenv("MURMUR_OLLAMA_MODEL", str(config.get("ollama_model", DEFAULT_CONFIG["ollama_model"]))),
             whisper_cpp=whisper_cpp if whisper_cpp is not None else _optional_str(config.get("whisper_cpp")),
             replacements=replacements,
             snippets=snippets,
@@ -82,7 +82,7 @@ class Settings:
 
 
 def get_config_path() -> Path:
-    override = os.getenv("WHISPR_CONFIG")
+    override = os.getenv("MURMUR_CONFIG")
     if override:
         return Path(override).expanduser()
     xdg_config_home = os.getenv("XDG_CONFIG_HOME")

@@ -1,6 +1,6 @@
 import unittest
 
-from whispr_flow_linux.polish import HeuristicPolisher, PolishOptions
+from murmur.polish import HeuristicPolisher, PolishOptions
 
 
 class HeuristicPolisherTest(unittest.TestCase):

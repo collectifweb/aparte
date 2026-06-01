@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from whispr_flow_linux.config import Settings, load_config, update_config, write_default_config
+from murmur.config import Settings, load_config, update_config, write_default_config
 
 
 class ConfigTest(unittest.TestCase):
@@ -37,18 +37,18 @@ class ConfigTest(unittest.TestCase):
             self.assertEqual(merged["default_style"], "casual")
 
     def test_settings_uses_whispr_config_override(self):
-        old_config = os.environ.get("WHISPR_CONFIG")
+        old_config = os.environ.get("MURMUR_CONFIG")
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"
             path.write_text('{"default_style": "casual", "replacements": {"foo": "FOO"}}', encoding="utf-8")
-            os.environ["WHISPR_CONFIG"] = str(path)
+            os.environ["MURMUR_CONFIG"] = str(path)
             try:
                 settings = Settings.from_env()
             finally:
                 if old_config is None:
-                    os.environ.pop("WHISPR_CONFIG", None)
+                    os.environ.pop("MURMUR_CONFIG", None)
                 else:
-                    os.environ["WHISPR_CONFIG"] = old_config
+                    os.environ["MURMUR_CONFIG"] = old_config
             self.assertEqual(settings.default_style, "casual")
             self.assertEqual(settings.replacements, {"foo": "FOO"})
 

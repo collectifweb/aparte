@@ -1,8 +1,8 @@
 import unittest
 from unittest import mock
 
-from whispr_flow_linux import notify as notify_module
-from whispr_flow_linux.notify import _preview, notify
+from murmur import notify as notify_module
+from murmur.notify import _preview, notify
 
 
 class NotifyTest(unittest.TestCase):

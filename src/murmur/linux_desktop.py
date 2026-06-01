@@ -7,8 +7,10 @@ import sys
 from pathlib import Path
 
 
-DESKTOP_FILE_NAME = "whispr-flow-linux.desktop"
-AUTOSTART_FILE_NAME = "whispr-flow-linux.desktop"
+DESKTOP_FILE_NAME = "murmur.desktop"
+AUTOSTART_FILE_NAME = "murmur.desktop"
+ICON_NAME = "murmur"
+ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 
 
 def user_applications_dir() -> Path:
@@ -16,6 +18,24 @@ def user_applications_dir() -> Path:
     if xdg_data_home:
         return Path(xdg_data_home).expanduser() / "applications"
     return Path.home() / ".local" / "share" / "applications"
+
+
+def user_icon_path() -> Path:
+    xdg_data_home = os.getenv("XDG_DATA_HOME")
+    base = Path(xdg_data_home).expanduser() if xdg_data_home else Path.home() / ".local" / "share"
+    return base / "icons" / "hicolor" / "scalable" / "apps" / f"{ICON_NAME}.svg"
+
+
+def install_icon() -> Path | None:
+    """Copy the app icon into the user hicolor theme so launchers can show it."""
+    source = ASSETS_DIR / "logo.svg"
+    if not source.exists():
+        return None
+    destination = user_icon_path()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(source.read_bytes())
+    destination.chmod(0o644)
+    return destination
 
 
 def autostart_dir() -> Path:
@@ -26,10 +46,10 @@ def autostart_dir() -> Path:
 
 
 def default_exec_command() -> list[str]:
-    executable = shutil.which("whispr-flow")
+    executable = shutil.which("murmur")
     if executable:
         return [executable, "desktop"]
-    return [sys.executable, "-m", "whispr_flow_linux", "desktop"]
+    return [sys.executable, "-m", "murmur", "desktop"]
 
 
 def desktop_exec(command: list[str]) -> str:
@@ -42,9 +62,10 @@ def build_desktop_entry(command: list[str] | None = None) -> str:
         [
             "[Desktop Entry]",
             "Type=Application",
-            "Name=Whispr Flow Linux",
+            "Name=Murmur",
             "Comment=Local-first Linux dictation with Whisper and smart formatting",
             f"Exec={desktop_exec(command)}",
+            f"Icon={ICON_NAME}",
             "Terminal=false",
             "Categories=Utility;Audio;Accessibility;",
             "StartupNotify=true",
@@ -54,6 +75,7 @@ def build_desktop_entry(command: list[str] | None = None) -> str:
 
 
 def install_desktop_entry(command: list[str] | None = None, force: bool = False) -> Path:
+    install_icon()
     destination = user_applications_dir() / DESKTOP_FILE_NAME
     if destination.exists() and not force:
         raise FileExistsError(f"Desktop entry already exists: {destination}")
@@ -73,8 +95,8 @@ def build_autostart_entry(command: list[str] | None = None) -> str:
         [
             "[Desktop Entry]",
             "Type=Application",
-            "Name=Whispr Flow Linux",
-            "Comment=Start the Whispr Flow desktop server at login",
+            "Name=Murmur",
+            "Comment=Start the Murmur desktop server at login",
             f"Exec={desktop_exec(command)}",
             "Terminal=false",
             "Categories=Utility;Audio;Accessibility;",
