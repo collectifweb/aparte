@@ -16,11 +16,14 @@ The first version focuses on the core Flow-like loop:
 
 ![Murmur dictation screen](docs/screenshots/main.png)
 
-The built-in setup diagnostics show, in the app, what is installed and the exact
-command to fix anything that is missing — so any Linux user can get set up
-without the terminal. The interface is available in English and French.
+Grouped settings and built-in setup diagnostics — the diagnostics show what is
+installed and the exact command to fix anything missing, so any Linux user can
+get set up without the terminal. The interface is available in English and French.
 
-<img src="docs/screenshots/diagnostics.png" alt="Setup and diagnostics panel" width="360">
+<p>
+  <img src="docs/screenshots/settings.png" alt="Settings panel" width="330">
+  <img src="docs/screenshots/diagnostics.png" alt="Setup and diagnostics panel" width="330">
+</p>
 
 ## Current status
 
