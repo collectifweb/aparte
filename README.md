@@ -257,3 +257,14 @@ dictation works without it.
 This approach avoids GTK/Qt packaging friction while staying Linux-compatible.
 
 `murmur install-desktop` writes a user-level `.desktop` file so the app appears in Linux launchers. Use `murmur install-desktop --print` to inspect the generated entry before installing it.
+
+## Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for the
+development setup, how to run the tests, and the code layout. The desktop UI is
+plain HTML/CSS/JS in `src/murmur/assets/` with no build step.
+
+## License
+
+Murmur is released under the [MIT License](LICENSE). It is an independent,
+open-source project and is not affiliated with the commercial Wispr Flow product.
