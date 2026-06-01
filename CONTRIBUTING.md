@@ -68,7 +68,11 @@ src/murmur/
 
 The desktop UI is plain HTML/CSS/JS served as static files from
 `src/murmur/assets/` — no build step, no framework. Edit those files directly
-and reload the page.
+and reload the page. UI strings are bilingual: add a key to both `fr` and `en`
+in `assets/i18n.js` and reference it with `data-i18n="key"` in HTML or `t("key")`
+in `app.js`. Diagnostic check labels are translated by their `key`, so adding a
+new check in `diagnostics.py` means adding `check.<key>.label`/`.detail` to
+`i18n.js`.
 
 ## Conventions
 

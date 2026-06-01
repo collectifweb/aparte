@@ -55,7 +55,13 @@ body {
 .brand { display: flex; align-items: center; gap: 10px; }
 .logo { width: 30px; height: 30px; border-radius: 8px; display: block; }
 .wordmark { font-weight: 700; font-size: 18px; letter-spacing: -0.01em; }
-.topbar-actions { display: flex; gap: 8px; }
+.topbar-actions { display: flex; gap: 8px; align-items: center; }
+.lang-select {
+  background: transparent; color: var(--muted);
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 7px 8px; font: inherit; font-size: 13px; cursor: pointer;
+}
+.lang-select:hover { color: var(--text); }
 .ghost-btn {
   display: inline-flex; align-items: center; gap: 8px;
   background: transparent; color: var(--muted);

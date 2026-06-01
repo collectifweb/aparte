@@ -14,41 +14,46 @@
       <span class="wordmark">Murmur</span>
     </div>
     <nav class="topbar-actions">
-      <button id="open-health" class="ghost-btn" title="Configuration & diagnostic">
-        <span class="dot" id="health-dot" aria-hidden="true"></span> Configuration
+      <select id="ui-lang" class="lang-select" title="Language / Langue" aria-label="Language">
+        <option value="fr">FR</option>
+        <option value="en">EN</option>
+      </select>
+      <button id="open-health" class="ghost-btn" data-i18n-title="diag.title">
+        <span class="dot" id="health-dot" aria-hidden="true"></span>
+        <span data-i18n="nav.config">Configuration</span>
       </button>
-      <button id="open-settings" class="ghost-btn" title="Réglages">
+      <button id="open-settings" class="ghost-btn" data-i18n-title="set.title">
         <svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path fill="currentColor" d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm8.4 4a6.5 6.5 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a6.6 6.6 0 0 0-2-1.2l-.4-2.6H9l-.4 2.6a6.6 6.6 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A6.5 6.5 0 0 0 4 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1c.6.5 1.3.9 2 1.2l.4 2.6h6l.4-2.6c.7-.3 1.4-.7 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2Z"/></svg>
-        Réglages
+        <span data-i18n="nav.settings">Réglages</span>
       </button>
     </nav>
   </header>
 
   <main class="hero">
-    <button id="record" class="record-btn" aria-label="Démarrer la dictée">
+    <button id="record" class="record-btn" aria-label="Talk">
       <span class="record-ring" aria-hidden="true"></span>
       <svg viewBox="0 0 24 24" class="mic" aria-hidden="true"><path fill="currentColor" d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-5a3.5 3.5 0 1 0-7 0v5A3.5 3.5 0 0 0 12 15Zm6-3.5a6 6 0 0 1-5 5.91V21h-2v-3.59a6 6 0 0 1-5-5.91h2a4 4 0 0 0 8 0Z"/></svg>
       <span class="stop-glyph" aria-hidden="true"></span>
-      <span class="record-label">Parler</span>
+      <span class="record-label" data-i18n="hero.talk">Parler</span>
     </button>
-    <p class="hero-sub" id="hero-sub">Appuie pour parler, ou utilise ton raccourci clavier global.</p>
+    <p class="hero-sub" id="hero-sub" data-i18n="hero.sub">Appuie pour parler, ou utilise ton raccourci clavier global.</p>
     <div class="status" id="status" role="status" aria-live="polite"></div>
 
     <section class="result">
-      <textarea id="editor" spellcheck="true" placeholder="Ta dictée apparaîtra ici. Tu peux aussi coller ou taper du texte à polir."></textarea>
+      <textarea id="editor" spellcheck="true" data-i18n-placeholder="editor.placeholder" placeholder="Ta dictée apparaîtra ici. Tu peux aussi coller ou taper du texte à polir."></textarea>
       <div class="result-bar">
         <div class="result-actions">
-          <button id="polish" class="chip">Polir</button>
-          <button id="copy" class="chip">Copier</button>
-          <button id="paste" class="chip">Coller</button>
-          <button id="pick-file" class="chip ghost">Importer audio</button>
+          <button id="polish" class="chip" data-i18n="act.polish">Polir</button>
+          <button id="copy" class="chip" data-i18n="act.copy">Copier</button>
+          <button id="paste" class="chip" data-i18n="act.paste">Coller</button>
+          <button id="pick-file" class="chip ghost" data-i18n="act.import">Importer audio</button>
           <input id="file" type="file" accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg" hidden>
         </div>
         <div class="result-opts">
-          <label class="inline">Modèle
+          <label class="inline"><span data-i18n="act.model">Modèle</span>
             <select id="model"></select>
           </label>
-          <label class="inline"><input id="autoPolish" type="checkbox" checked> Polir auto</label>
+          <label class="inline"><input id="autoPolish" type="checkbox" checked> <span data-i18n="act.autopolish">Polir auto</span></label>
         </div>
       </div>
     </section>
@@ -56,91 +61,92 @@
 
   <!-- Settings drawer -->
   <div class="overlay" id="settings-overlay" hidden>
-    <aside class="drawer" role="dialog" aria-label="Réglages">
+    <aside class="drawer" role="dialog" aria-label="Settings">
       <header class="drawer-head">
-        <h2>Réglages</h2>
-        <button class="icon-close" data-close aria-label="Fermer">✕</button>
+        <h2 data-i18n="set.title">Réglages</h2>
+        <button class="icon-close" data-close aria-label="Close">✕</button>
       </header>
       <div class="drawer-body">
         <div class="group">
-          <h3>Transcription</h3>
-          <label class="field">Modèle par défaut
+          <h3 data-i18n="set.transcription">Transcription</h3>
+          <label class="field"><span data-i18n="set.model">Modèle par défaut</span>
             <select id="set-model"></select>
-            <small>small = précis · base = rapide · medium = qualité max</small>
+            <small data-i18n="set.model_help">small = précis · base = rapide · medium = qualité max</small>
           </label>
-          <label class="field">Langue
+          <label class="field"><span data-i18n="set.language">Langue de dictée</span>
             <select id="set-language">
-              <option value="">Auto (détection)</option>
-              <option value="fr">Français</option>
-              <option value="en">English</option>
+              <option value="" data-i18n="set.lang_auto">Auto (détection)</option>
+              <option value="fr" data-i18n="set.lang_fr">Français</option>
+              <option value="en" data-i18n="set.lang_en">English</option>
             </select>
           </label>
-          <label class="field">Calcul
+          <label class="field"><span data-i18n="set.compute">Calcul</span>
             <select id="set-device">
-              <option value="auto">Auto (GPU si dispo, sinon CPU)</option>
-              <option value="cuda">GPU (CUDA)</option>
-              <option value="cpu">CPU</option>
+              <option value="auto" data-i18n="set.compute_auto">Auto (GPU si dispo, sinon CPU)</option>
+              <option value="cuda" data-i18n="set.compute_gpu">GPU (CUDA)</option>
+              <option value="cpu" data-i18n="set.compute_cpu">CPU</option>
             </select>
           </label>
         </div>
         <div class="group">
-          <h3>Mise en forme</h3>
-          <label class="field">Style
+          <h3 data-i18n="set.formatting">Mise en forme</h3>
+          <label class="field"><span data-i18n="set.style">Style</span>
             <select id="set-style">
-              <option value="neutral">Neutre</option>
-              <option value="formal">Formel</option>
-              <option value="casual">Décontracté</option>
-              <option value="very-casual">Très décontracté</option>
+              <option value="neutral" data-i18n="style.neutral">Neutre</option>
+              <option value="formal" data-i18n="style.formal">Formel</option>
+              <option value="casual" data-i18n="style.casual">Décontracté</option>
+              <option value="very-casual" data-i18n="style.very_casual">Très décontracté</option>
             </select>
           </label>
-          <label class="field">Nettoyage
+          <label class="field"><span data-i18n="set.cleanup">Nettoyage</span>
             <select id="set-cleanup">
-              <option value="light">Léger</option>
-              <option value="medium">Moyen</option>
-              <option value="high">Élevé</option>
+              <option value="light" data-i18n="clean.light">Léger</option>
+              <option value="medium" data-i18n="clean.medium">Moyen</option>
+              <option value="high" data-i18n="clean.high">Élevé</option>
             </select>
           </label>
-          <label class="field">Moteur de polish
+          <label class="field"><span data-i18n="set.polish_engine">Moteur de polish</span>
             <select id="set-polish">
-              <option value="heuristic">Heuristique (local, sans modèle)</option>
-              <option value="ollama">Ollama (LLM local)</option>
+              <option value="heuristic" data-i18n="polish.heuristic">Heuristique (local, sans modèle)</option>
+              <option value="ollama" data-i18n="polish.ollama">Ollama (LLM local)</option>
             </select>
           </label>
         </div>
         <div class="group">
-          <h3>Vocabulaire</h3>
-          <label class="field">Remplacements <small>un par ligne — <code>dit = écrit</code></small>
+          <h3 data-i18n="set.vocab">Vocabulaire</h3>
+          <label class="field"><span data-i18n="set.replacements">Remplacements</span> <small data-i18n="set.replacements_help">un par ligne — dit = écrit</small>
             <textarea id="set-replacements" class="kv" spellcheck="false" placeholder="pipe wire = PipeWire"></textarea>
           </label>
-          <label class="field">Snippets <small><code>nom = texte</code>, dit « slash nom »</small>
+          <label class="field"><span data-i18n="set.snippets">Snippets</span> <small data-i18n="set.snippets_help">nom = texte, dit « slash nom »</small>
             <textarea id="set-snippets" class="kv" spellcheck="false" placeholder="signature = Cordialement,&#10;Alexandre"></textarea>
           </label>
         </div>
       </div>
       <footer class="drawer-foot">
-        <button class="btn ghost" data-close>Annuler</button>
-        <button class="btn primary" id="save-settings">Enregistrer</button>
+        <button class="btn ghost" data-close data-i18n="btn.cancel">Annuler</button>
+        <button class="btn primary" id="save-settings" data-i18n="btn.save">Enregistrer</button>
       </footer>
     </aside>
   </div>
 
   <!-- Diagnostics drawer -->
   <div class="overlay" id="health-overlay" hidden>
-    <aside class="drawer" role="dialog" aria-label="Configuration et diagnostic">
+    <aside class="drawer" role="dialog" aria-label="Setup and diagnostics">
       <header class="drawer-head">
-        <h2>Configuration &amp; diagnostic</h2>
-        <button class="icon-close" data-close aria-label="Fermer">✕</button>
+        <h2 data-i18n="diag.title">Configuration &amp; diagnostic</h2>
+        <button class="icon-close" data-close aria-label="Close">✕</button>
       </header>
       <div class="drawer-body" id="health-body">
-        <p class="muted">Chargement…</p>
+        <p class="muted" data-i18n="diag.loading">Chargement…</p>
       </div>
       <footer class="drawer-foot">
         <span class="muted" id="health-summary"></span>
-        <button class="btn ghost" id="refresh-health">Rafraîchir</button>
+        <button class="btn ghost" id="refresh-health" data-i18n="btn.refresh">Rafraîchir</button>
       </footer>
     </aside>
   </div>
 
+  <script src="/i18n.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

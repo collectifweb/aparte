@@ -23,6 +23,7 @@ STATIC_FILES = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/app.css": ("app.css", "text/css; charset=utf-8"),
     "/app.js": ("app.js", "application/javascript; charset=utf-8"),
+    "/i18n.js": ("i18n.js", "application/javascript; charset=utf-8"),
     "/logo.svg": ("logo.svg", "image/svg+xml"),
 }
 

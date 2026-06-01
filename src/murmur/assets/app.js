@@ -7,6 +7,34 @@ const recordBtn = $("#record");
 const heroSub = $("#hero-sub");
 let recordingSession = null;
 
+/* ---------- i18n ---------- */
+const I18N = window.MURMUR_I18N || { en: {}, fr: {} };
+let lang = localStorage.getItem("murmur_lang");
+if (!I18N[lang]) lang = (navigator.language || "en").slice(0, 2);
+if (!I18N[lang]) lang = "en";
+let recordState = "idle";
+let setupIncomplete = false;
+
+function t(key, vars) {
+  let s = (I18N[lang] && I18N[lang][key]) || (I18N.en && I18N.en[key]) || key;
+  if (vars) for (const k in vars) s = s.replace("{" + k + "}", vars[k]);
+  return s;
+}
+function tKey(key, fallback) {
+  const v = (I18N[lang] && I18N[lang][key]) ?? (I18N.en && I18N.en[key]);
+  return v !== undefined ? v : fallback;
+}
+
+function applyI18n() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  document.querySelectorAll("[data-i18n-title]").forEach((el) => { el.title = t(el.dataset.i18nTitle); });
+  setRecordState(recordState);
+  heroSub.textContent = setupIncomplete ? t("hero.sub_incomplete") : t("hero.sub");
+  if (!$("#health-overlay").hidden) loadHealth();
+}
+
 function status(message) { statusEl.textContent = message || ""; }
 
 async function postJson(path, payload) {
@@ -20,19 +48,17 @@ async function postJson(path, payload) {
 }
 
 function setRecordState(state) {
+  recordState = state;
   recordBtn.classList.remove("recording", "processing");
   const label = recordBtn.querySelector(".record-label");
   if (state === "recording") {
     recordBtn.classList.add("recording");
-    label.textContent = "Arrêter";
-    recordBtn.setAttribute("aria-label", "Arrêter la dictée");
+    label.textContent = t("hero.stop");
   } else if (state === "processing") {
     recordBtn.classList.add("processing");
-    label.textContent = "…";
-    recordBtn.setAttribute("aria-label", "Transcription en cours");
+    label.textContent = t("hero.processing");
   } else {
-    label.textContent = "Parler";
-    recordBtn.setAttribute("aria-label", "Démarrer la dictée");
+    label.textContent = t("hero.talk");
   }
 }
 
@@ -40,7 +66,7 @@ function setRecordState(state) {
 async function transcribeBlob(blob) {
   const model = $("#model").value;
   setRecordState("processing");
-  status(`Transcription (${model})…`);
+  status(t("st.transcribing", { model }));
   try {
     const res = await fetch("/api/transcribe?model=" + encodeURIComponent(model), {
       method: "POST",
@@ -53,7 +79,7 @@ async function transcribeBlob(blob) {
     if ($("#autoPolish").checked && data.text.trim()) {
       await polishEditor();
     } else {
-      status(data.text.trim() ? "Transcription prête." : "Aucune parole détectée.");
+      status(data.text.trim() ? t("st.transcript_ready") : t("st.no_speech"));
     }
   } finally {
     setRecordState("idle");
@@ -61,10 +87,10 @@ async function transcribeBlob(blob) {
 }
 
 async function polishEditor() {
-  status("Mise en forme…");
+  status(t("st.polishing"));
   const data = await postJson("/api/polish", { text: editor.value });
   editor.value = data.text;
-  status("Mis en forme.");
+  status(t("st.polished"));
 }
 
 /* ---------- Browser WAV recording ---------- */
@@ -84,7 +110,7 @@ async function startWavRecording() {
     async stop() {
       processor.disconnect();
       source.disconnect();
-      stream.getTracks().forEach((t) => t.stop());
+      stream.getTracks().forEach((tr) => tr.stop());
       await audioContext.close();
       return encodeWav(chunks, sampleRate);
     },
@@ -123,7 +149,7 @@ function encodeWav(chunks, sampleRate) {
 
 /* ---------- Record button ---------- */
 recordBtn.addEventListener("click", async () => {
-  if (recordBtn.classList.contains("processing")) return;
+  if (recordState === "processing") return;
   if (recordingSession) {
     const session = recordingSession;
     recordingSession = null;
@@ -134,10 +160,10 @@ recordBtn.addEventListener("click", async () => {
   try {
     recordingSession = await startWavRecording();
     setRecordState("recording");
-    status("Enregistrement… appuie de nouveau pour arrêter.");
+    status(t("st.recording"));
   } catch (err) {
     recordingSession = null;
-    status("Micro indisponible : " + err);
+    status(t("st.mic_error") + err);
   }
 });
 
@@ -152,18 +178,18 @@ $("#file").addEventListener("change", async () => {
   try { await transcribeBlob(file); } catch (err) { status(String(err)); setRecordState("idle"); }
 });
 $("#copy").addEventListener("click", async () => {
-  status("Copie…");
+  status(t("st.copying"));
   try {
     await postJson("/api/copy", { text: editor.value });
-    status("Copié.");
+    status(t("st.copied"));
   } catch (err) {
-    try { await navigator.clipboard.writeText(editor.value); status("Copié (navigateur)."); }
+    try { await navigator.clipboard.writeText(editor.value); status(t("st.copied_browser")); }
     catch (_) { status(String(err)); }
   }
 });
 $("#paste").addEventListener("click", async () => {
-  status("Collage…");
-  try { await postJson("/api/paste", { text: editor.value }); status("Collé."); }
+  status(t("st.pasting"));
+  try { await postJson("/api/paste", { text: editor.value }); status(t("st.pasted")); }
   catch (err) { status(String(err)); }
 });
 
@@ -176,6 +202,14 @@ document.querySelectorAll("[data-close]").forEach((b) =>
 document.querySelectorAll(".overlay").forEach((ov) =>
   ov.addEventListener("click", (e) => { if (e.target === ov) closeOverlay(ov); })
 );
+
+/* ---------- Language selector ---------- */
+$("#ui-lang").value = lang;
+$("#ui-lang").addEventListener("change", () => {
+  lang = $("#ui-lang").value;
+  localStorage.setItem("murmur_lang", lang);
+  applyI18n();
+});
 
 /* ---------- Settings ---------- */
 let allowedModels = ["small", "base"];
@@ -237,7 +271,7 @@ $("#save-settings").addEventListener("click", async () => {
     });
     $("#model").value = $("#set-model").value;
     closeOverlay($("#settings-overlay"));
-    status("Réglages enregistrés.");
+    status(t("st.settings_saved"));
   } catch (err) { status(String(err)); }
 });
 
@@ -246,37 +280,39 @@ const CATEGORY_ORDER = ["Transcription", "Microphone", "Insertion", "System"];
 
 async function loadHealth() {
   const body = $("#health-body");
-  body.innerHTML = '<p class="muted">Chargement…</p>';
+  body.innerHTML = '<p class="muted">' + t("diag.loading") + "</p>";
   let data;
   try { data = await (await fetch("/api/doctor")).json(); }
-  catch (err) { body.innerHTML = '<p class="muted">Erreur : ' + err + "</p>"; return; }
+  catch (err) { body.innerHTML = '<p class="muted">' + escapeHtml(String(err)) + "</p>"; return; }
 
   const s = data.summary;
   updateHealthDot(s);
-  $("#health-summary").textContent = s.ready ? "Prêt à dicter ✓" : "Configuration incomplète";
+  $("#health-summary").textContent = s.ready ? t("diag.ready") : t("diag.incomplete");
 
   const groups = {};
   for (const c of data.checks) (groups[c.category] = groups[c.category] || []).push(c);
 
   let html = `<div class="diag-summary">
-      <span class="pill ${s.can_transcribe ? "ok" : "bad"}">Transcription ${s.can_transcribe ? "✓" : "✕"}</span>
-      <span class="pill ${s.can_record ? "ok" : "bad"}">Micro ${s.can_record ? "✓" : "✕"}</span>
-      <span class="pill ${s.can_insert ? "ok" : "bad"}">Insertion ${s.can_insert ? "✓" : "✕"}</span>
+      <span class="pill ${s.can_transcribe ? "ok" : "bad"}">${t("diag.pill.transcription")} ${s.can_transcribe ? "✓" : "✕"}</span>
+      <span class="pill ${s.can_record ? "ok" : "bad"}">${t("diag.pill.micro")} ${s.can_record ? "✓" : "✕"}</span>
+      <span class="pill ${s.can_insert ? "ok" : "bad"}">${t("diag.pill.insertion")} ${s.can_insert ? "✓" : "✕"}</span>
     </div>`;
 
   const cats = CATEGORY_ORDER.filter((c) => groups[c]).concat(Object.keys(groups).filter((c) => !CATEGORY_ORDER.includes(c)));
   for (const cat of cats) {
-    html += `<div class="diag-group"><h3>${cat}</h3>`;
+    html += `<div class="diag-group"><h3>${escapeHtml(tKey("diag.cat." + cat, cat))}</h3>`;
     for (const c of groups[cat]) {
       const icon = c.ok ? '<span class="diag-icon ok">✓</span>' : `<span class="diag-icon ${c.essential ? "bad" : "warn"}">!</span>`;
-      const req = !c.ok && c.essential ? '<span class="req-badge">requis</span>' : "";
+      const req = !c.ok && c.essential ? `<span class="req-badge">${t("diag.required")}</span>` : "";
+      const label = escapeHtml(tKey("check." + c.key + ".label", c.label));
+      const detail = tKey("check." + c.key + ".detail", c.detail);
       let fix = "";
       if (!c.ok && c.fix) {
-        fix = `<div class="diag-fix"><code>${escapeHtml(c.fix)}</code><button data-copy="${escapeHtml(c.fix)}">Copier</button></div>`;
+        fix = `<div class="diag-fix"><code>${escapeHtml(c.fix)}</code><button data-copy="${escapeHtml(c.fix)}">${t("diag.copy")}</button></div>`;
       }
       html += `<div class="diag-item">${icon}<div class="diag-main">
-          <div class="diag-label">${escapeHtml(c.label)}${req}</div>
-          ${c.detail ? `<div class="diag-detail">${escapeHtml(c.detail)}</div>` : ""}
+          <div class="diag-label">${label}${req}</div>
+          ${detail ? `<div class="diag-detail">${escapeHtml(detail)}</div>` : ""}
           ${fix}
         </div></div>`;
     }
@@ -285,7 +321,7 @@ async function loadHealth() {
   body.innerHTML = html;
   body.querySelectorAll("[data-copy]").forEach((b) =>
     b.addEventListener("click", async () => {
-      try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = "Copié ✓"; setTimeout(() => (b.textContent = "Copier"), 1500); }
+      try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = t("diag.copied"); setTimeout(() => (b.textContent = t("diag.copy")), 1500); }
       catch (_) {}
     })
   );
@@ -305,11 +341,13 @@ $("#open-health").addEventListener("click", () => { openOverlay("#health-overlay
 $("#refresh-health").addEventListener("click", loadHealth);
 
 /* ---------- Init ---------- */
+applyI18n();
 (async function init() {
   try { await loadConfig(); } catch (_) {}
   try {
     const data = await (await fetch("/api/doctor")).json();
     updateHealthDot(data.summary);
-    if (!data.summary.ready) heroSub.textContent = "Configuration incomplète — ouvre « Configuration » en haut à droite.";
+    setupIncomplete = !data.summary.ready;
+    heroSub.textContent = setupIncomplete ? t("hero.sub_incomplete") : t("hero.sub");
   } catch (_) {}
 })();

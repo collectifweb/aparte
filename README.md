@@ -12,6 +12,16 @@ The first version focuses on the core Flow-like loop:
 3. Polish the raw transcript with punctuation, capitalization, filler cleanup, lists, and optional local LLM formatting.
 4. Copy or paste the result into the active Linux desktop session.
 
+## Screenshots
+
+![Murmur dictation screen](docs/screenshots/main.png)
+
+The built-in setup diagnostics show, in the app, what is installed and the exact
+command to fix anything that is missing — so any Linux user can get set up
+without the terminal. The interface is available in English and French.
+
+<img src="docs/screenshots/diagnostics.png" alt="Setup and diagnostics panel" width="360">
+
 ## Current status
 
 This repo is a working MVP scaffold. It runs immediately for text polishing and desktop UI. Audio transcription activates when one of these local backends is available:
@@ -245,8 +255,10 @@ interface is a focused, single-screen app:
   notifications) and the exact command to fix each gap — copy-paste onboarding
   for any Linux user
 
-The frontend lives in `src/murmur/assets/` (`index.html`, `app.css`, `app.js`,
-`logo.svg`) and is served as static files, so it is easy to contribute to.
+The interface is bilingual (English / French) with a language switch in the top
+bar; it defaults to the browser language. The frontend lives in
+`src/murmur/assets/` (`index.html`, `app.css`, `app.js`, `i18n.js`, `logo.svg`)
+and is served as static files, so it is easy to contribute to.
 
 ## Desktop notifications
 
