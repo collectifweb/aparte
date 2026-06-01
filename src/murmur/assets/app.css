@@ -57,11 +57,12 @@ body {
 .wordmark { font-weight: 700; font-size: 18px; letter-spacing: -0.01em; }
 .topbar-actions { display: flex; gap: 8px; align-items: center; }
 .lang-select {
-  background: transparent; color: var(--muted);
+  background: var(--panel); color: var(--text);
   border: 1px solid var(--border); border-radius: 10px;
   padding: 7px 8px; font: inherit; font-size: 13px; cursor: pointer;
 }
-.lang-select:hover { color: var(--text); }
+.lang-select:hover { border-color: var(--accent); }
+.lang-select option { background: var(--panel); color: var(--text); }
 .ghost-btn {
   display: inline-flex; align-items: center; gap: 8px;
   background: transparent; color: var(--muted);

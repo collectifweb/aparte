@@ -231,6 +231,9 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(data)))
+            # Assets are read from disk on every request and the server is local,
+            # so never let the browser serve a stale UI after an update.
+            self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(data)
 
