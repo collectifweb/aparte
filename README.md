@@ -38,52 +38,83 @@ For consistent spelling of names, products, acronyms, and repeated phrases, use 
 
 ## Install
 
+Two ways to install. The script is the easy path; the manual venv install gives you more control.
+
+### Option A — guided script (recommended)
+
 ```bash
+git clone https://github.com/collectifweb/murmur.git
+cd murmur
+./scripts/install-linux.sh                       # Whisper + recording + default config + desktop launcher (icon/menu)
+./scripts/install-linux.sh --with-system-deps    # also apt-installs the recording/clipboard/paste tools
+```
+
+The script auto-adds GPU support (the `cuda` extra) when it detects an NVIDIA GPU,
+and registers the desktop icon/menu entry for you.
+
+### Option B — manual venv install
+
+```bash
+git clone https://github.com/collectifweb/murmur.git
+cd murmur
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -e .
+python -m pip install -e ".[whisper,recording]"  # add ,cuda for NVIDIA GPUs — see "GPU acceleration" below
 ```
 
-Full local install with Whisper, recording extras, default config, and desktop launcher:
+This `[whisper,recording]` baseline is what makes Murmur an actual dictation app:
+`whisper` enables transcription and `recording` enables microphone capture. A bare
+`pip install -e .` only gives you text polishing and the desktop UI — it cannot
+transcribe or record.
+
+Then verify the setup and install the desktop launcher (the manual path does **not**
+add the icon/menu entry by itself — only `install-linux.sh` does):
 
 ```bash
-./scripts/install-linux.sh
+murmur doctor            # green/red status for every dependency, with the fix command for each gap
+murmur install-desktop   # add the app icon + menu entry (use --print to preview the entry first)
 ```
 
-To also install the system packages (recording, clipboard, paste) via apt:
+### Extras, à la carte
 
-```bash
-./scripts/install-linux.sh --with-system-deps
-```
+| Extra        | Adds                                                                  |
+|--------------|-----------------------------------------------------------------------|
+| `whisper`    | `faster-whisper` transcription backend (required for dictation)       |
+| `recording`  | microphone capture via `sounddevice` (required for live dictation)    |
+| `cuda`       | NVIDIA GPU acceleration — see *GPU acceleration* below                |
 
-Optional local Whisper backend:
-
-```bash
-python -m pip install -e ".[whisper]"
-```
-
-GPU acceleration (NVIDIA, optional). Installs the CUDA runtime libraries as pip
-wheels — no system CUDA toolkit required. The app preloads them automatically,
-so GPU transcription works without setting `LD_LIBRARY_PATH`, and falls back to
-CPU when CUDA is unusable:
-
-```bash
-python -m pip install -e ".[whisper,cuda]"
-```
-
-Optional microphone recording:
-
-```bash
-python -m pip install -e ".[recording]"
-```
-
-System packages commonly needed on Linux:
+### System packages
 
 ```bash
 sudo apt install alsa-utils ffmpeg wl-clipboard wtype xclip xdotool
 ```
 
 Use Wayland tools (`wl-copy`, `wtype`) on Wayland, or X11 tools (`xclip`, `xdotool`) on X11.
+
+### GPU acceleration (NVIDIA, optional)
+
+```bash
+python -m pip install -e ".[whisper,recording,cuda]"
+```
+
+This installs the CUDA runtime libraries as pip wheels **inside the venv** — no
+system CUDA toolkit and no driver changes, so it will not touch the GPU drivers your
+games or other apps rely on. The app preloads the libraries automatically, so GPU
+transcription works without setting `LD_LIBRARY_PATH`, and **falls back to CPU
+automatically** when CUDA is unusable.
+
+Confirm the GPU is actually used (not merely installed):
+
+```bash
+.venv/bin/python -c "import ctranslate2; print(ctranslate2.get_cuda_device_count())"
+```
+
+`> 0` means the GPU will be used; `0` means CPU fallback. Note that `murmur doctor`'s
+"GPU acceleration (CUDA): ok" only confirms the CUDA libraries are importable — not
+that a device is reachable at runtime. Use the command above, or watch `nvidia-smi`
+during a dictation, to be sure. On older cards (Pascal / GTX 10-series), set
+`MURMUR_COMPUTE_TYPE=int8`: the `auto` default picks `float16`, which is slow on those
+GPUs.
 
 ## CLI examples
 
@@ -174,13 +205,18 @@ Then assign a key (e.g. a spare key or `Super+Space`). Direct paste needs
 `xdotool` on X11 or `wtype` on Wayland; otherwise use `--target copy` and paste
 with `Ctrl+V`. Desktop notifications show when recording starts and stops.
 
-Create and edit your config:
+Create and inspect your config:
 
 ```bash
-murmur config init
-murmur config path
-murmur config show
+murmur config init     # write a default config.json
+murmur config path     # print its location
+murmur config show     # print the active (merged) config
 ```
+
+There is no `config set` command. To change settings persistently, edit the JSON
+file printed by `murmur config path`, or use the **Settings** panel in `murmur
+desktop` — it writes to the same file and applies immediately, including to the
+global-hotkey flow.
 
 ## Configuration
 
@@ -273,8 +309,6 @@ command is bound to a global shortcut and no terminal is visible. Install it wit
 dictation works without it.
 
 This approach avoids GTK/Qt packaging friction while staying Linux-compatible.
-
-`murmur install-desktop` writes a user-level `.desktop` file so the app appears in Linux launchers. Use `murmur install-desktop --print` to inspect the generated entry before installing it.
 
 ## Contributing
 
