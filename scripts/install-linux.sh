@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# install-linux.sh — set up Murmur in a local virtualenv.
+#
+# Steps: (optionally) apt-install system deps, create .venv (with an ensurepip
+# fallback for minimal Python builds), install Murmur with the whisper +
+# recording extras (plus cuda when an NVIDIA GPU is detected), write a default
+# config, and register the desktop launcher (icon + menu entry).
+#
+# Usage:
+#   ./scripts/install-linux.sh                    # venv install + desktop launcher
+#   ./scripts/install-linux.sh --with-system-deps # also apt-install audio/clipboard/paste tools (needs sudo)
+#
+# Re-running is safe: an existing .venv is reused and config init is a no-op.
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
@@ -52,5 +65,6 @@ python -m murmur install-desktop --force
 echo
 echo "Installed Murmur."
 echo "Run: source .venv/bin/activate && murmur doctor"
-echo "For CLI copy/paste on X11, install: sudo apt install xclip xdotool"
-echo "On Wayland, install: sudo apt install wl-clipboard wtype"
+echo "If you skipped --with-system-deps, install the copy/paste tools for your session:"
+echo "  X11:     sudo apt install xclip xdotool"
+echo "  Wayland: sudo apt install wl-clipboard wtype"

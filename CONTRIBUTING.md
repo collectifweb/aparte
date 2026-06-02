@@ -80,7 +80,8 @@ new check in `diagnostics.py` means adding `check.<key>.label`/`.detail` to
 - New optional integrations must be **best-effort**: guard imports and external
   tools, and surface a fix through `diagnostics.py` rather than raising.
 - Add or update tests for behaviour changes.
-- Keep commits focused with a descriptive message.
+- Keep commits focused, each with a descriptive message in the imperative mood,
+  capitalized and without a type prefix (match the existing `git log` style).
 
 ## Submitting changes
 
