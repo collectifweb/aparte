@@ -205,6 +205,11 @@ Then assign a key (e.g. a spare key or `Super+Space`). Direct paste needs
 `xdotool` on X11 or `wtype` on Wayland; otherwise use `--target copy` and paste
 with `Ctrl+V`. Desktop notifications show when recording starts and stops.
 
+You don't have to assemble this command by hand: open **Setup** in `murmur
+desktop` and the **Global keyboard shortcut** card shows the exact command for
+your install (full venv path, with `paste`/`copy` chosen from what's available)
+and a copy button, plus the click-path for your detected desktop environment.
+
 Create and inspect your config:
 
 ```bash

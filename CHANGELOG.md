@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Global keyboard shortcut card** in the desktop Setup panel: shows the exact
+  `toggle` command for your install (resolved venv path, `paste`/`copy` chosen
+  from the available tools) with a copy button, and the click-path for your
+  detected desktop environment (Cinnamon, GNOME, KDE, XFCE, MATE, or a generic
+  fallback). Backed by a new `/api/hotkey` endpoint.
+
 ## [0.1.0] - 2026-06-01
 
 First public release — a local-first dictation app for Linux.
