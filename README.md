@@ -75,6 +75,31 @@ murmur doctor            # green/red status for every dependency, with the fix c
 murmur install-desktop   # add the app icon + menu entry (use --print to preview the entry first)
 ```
 
+### Updating an existing install
+
+To upgrade, pull the latest code **in the folder you already cloned** and re-run
+the script — don't clone a second copy:
+
+```bash
+cd murmur          # the directory you installed into
+git pull
+./scripts/install-linux.sh
+```
+
+Re-running is safe: the existing `.venv` is reused, dependencies are upgraded in
+place, and config init is a no-op. Cloning Murmur again into a new folder instead
+leaves you with two separate installs (each with its own multi-GB `.venv`) and a
+desktop launcher and autostart entry that can point at different copies.
+
+On a manual venv install (Option B), update with:
+
+```bash
+cd murmur
+git pull
+source .venv/bin/activate
+python -m pip install -e ".[whisper,recording]"   # add ,cuda for NVIDIA GPUs
+```
+
 ### Extras, à la carte
 
 | Extra        | Adds                                                                  |
