@@ -284,6 +284,8 @@ async function loadHealth() {
   let data;
   try { data = await (await fetch("/api/doctor")).json(); }
   catch (err) { body.innerHTML = '<p class="muted">' + escapeHtml(String(err)) + "</p>"; return; }
+  let hotkey = null;
+  try { hotkey = await (await fetch("/api/hotkey")).json(); } catch (_) {}
 
   const s = data.summary;
   updateHealthDot(s);
@@ -318,6 +320,18 @@ async function loadHealth() {
     }
     html += "</div>";
   }
+
+  if (hotkey && hotkey.command) {
+    const steps = tKey("hotkey.steps." + hotkey.desktop_env, tKey("hotkey.steps.generic", ""));
+    const note = hotkey.target === "copy" ? t("hotkey.copy_note") : t("hotkey.paste_note");
+    html += `<div class="diag-group hotkey-card"><h3>${escapeHtml(t("hotkey.title"))}</h3>
+        <div class="diag-detail">${escapeHtml(t("hotkey.intro"))}</div>
+        ${steps ? `<div class="diag-detail hotkey-steps">${escapeHtml(steps)}</div>` : ""}
+        <div class="diag-fix"><code>${escapeHtml(hotkey.command)}</code><button data-copy="${escapeHtml(hotkey.command)}">${t("diag.copy")}</button></div>
+        <div class="diag-detail">${escapeHtml(note)}</div>
+      </div>`;
+  }
+
   body.innerHTML = html;
   body.querySelectorAll("[data-copy]").forEach((b) =>
     b.addEventListener("click", async () => {

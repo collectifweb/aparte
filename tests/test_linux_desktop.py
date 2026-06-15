@@ -8,8 +8,11 @@ from murmur.linux_desktop import (
     autostart_dir,
     build_autostart_entry,
     build_desktop_entry,
+    detect_desktop_environment,
+    hotkey_guidance,
     install_autostart_entry,
     install_desktop_entry,
+    toggle_command,
     uninstall_autostart_entry,
     user_applications_dir,
 )
@@ -48,6 +51,48 @@ class LinuxDesktopTest(unittest.TestCase):
                 self.assertEqual(uninstall_autostart_entry(), path)
                 self.assertFalse(path.exists())
                 self.assertIsNone(uninstall_autostart_entry())
+
+
+class HotkeyGuidanceTest(unittest.TestCase):
+    def test_toggle_command_binds_toggle_with_target(self):
+        with mock.patch("murmur.linux_desktop.shutil.which", return_value="/venv/bin/murmur"):
+            self.assertEqual(toggle_command("paste"), ["/venv/bin/murmur", "toggle", "--target", "paste"])
+
+    def test_toggle_command_falls_back_to_module_invocation(self):
+        with mock.patch("murmur.linux_desktop.shutil.which", return_value=None):
+            command = toggle_command("copy")
+        self.assertEqual(command[1:], ["-m", "murmur", "toggle", "--target", "copy"])
+
+    def test_detect_desktop_environment_normalizes_tokens(self):
+        with mock.patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "X-Cinnamon"}, clear=False):
+            self.assertEqual(detect_desktop_environment(), "cinnamon")
+        with mock.patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "ubuntu:GNOME"}, clear=False):
+            self.assertEqual(detect_desktop_environment(), "gnome")
+
+    def test_detect_desktop_environment_unknown_is_generic(self):
+        env = {"XDG_CURRENT_DESKTOP": "Weird-WM", "DESKTOP_SESSION": ""}
+        with mock.patch.dict(os.environ, env, clear=False):
+            self.assertEqual(detect_desktop_environment(), "generic")
+
+    def test_hotkey_guidance_uses_paste_when_tool_present(self):
+        env = {"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": "", "XDG_CURRENT_DESKTOP": "GNOME"}
+        with mock.patch.dict(os.environ, env, clear=False):
+            with mock.patch("murmur.linux_desktop.shutil.which", return_value="/usr/bin/wtype"):
+                guidance = hotkey_guidance()
+        self.assertTrue(guidance["paste_ok"])
+        self.assertEqual(guidance["target"], "paste")
+        self.assertIn("toggle --target paste", guidance["command"])
+        self.assertEqual(guidance["session_type"], "wayland")
+
+    def test_hotkey_guidance_falls_back_to_copy_without_paste_tool(self):
+        env = {"WAYLAND_DISPLAY": "", "DISPLAY": ":0", "XDG_CURRENT_DESKTOP": "XFCE"}
+        with mock.patch.dict(os.environ, env, clear=False):
+            with mock.patch("murmur.linux_desktop.shutil.which", return_value=None):
+                guidance = hotkey_guidance()
+        self.assertFalse(guidance["paste_ok"])
+        self.assertEqual(guidance["target"], "copy")
+        self.assertIn("toggle --target copy", guidance["command"])
+        self.assertEqual(guidance["session_type"], "x11")
 
 
 if __name__ == "__main__":
