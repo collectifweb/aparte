@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-15
+
 ### Added
 
 - **Global keyboard shortcut card** in the desktop Setup panel: shows the exact
@@ -14,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from the available tools) with a copy button, and the click-path for your
   detected desktop environment (Cinnamon, GNOME, KDE, XFCE, MATE, or a generic
   fallback). Backed by a new `/api/hotkey` endpoint.
+
+### Documentation
+
+- Document how to update an existing install (`git pull` + re-run the script in
+  place), warning that re-cloning leaves two separate multi-GB installs.
 
 ## [0.1.0] - 2026-06-01
 
@@ -49,5 +56,6 @@ First public release — a local-first dictation app for Linux.
 - MIT license, contributing guide, and CI running the test suite on Python
   3.10–3.13.
 
-[Unreleased]: https://github.com/collectifweb/murmur/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/collectifweb/murmur/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/collectifweb/murmur/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/collectifweb/murmur/releases/tag/v0.1.0
