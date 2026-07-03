@@ -100,6 +100,10 @@ source .venv/bin/activate
 python -m pip install -e ".[whisper,recording]"   # add ,cuda for NVIDIA GPUs
 ```
 
+> If `git pull` reports *"no tracking information for the current branch"*, you're
+> on a local branch that was never pushed. Switch to `main` first
+> (`git checkout main`), then pull.
+
 ### Extras, à la carte
 
 | Extra        | Adds                                                                  |
@@ -219,8 +223,22 @@ press again to transcribe and insert into whatever app is focused (Slack, email,
 …). The binding is stored by your desktop and survives reboots, so no background
 process is required for it.
 
-On Cinnamon: System Settings → Keyboard → Shortcuts → Custom Shortcuts → Add,
-with this command (use the full path to the binary inside your venv):
+On Cinnamon and GNOME, Murmur can register the shortcut for you:
+
+```bash
+murmur install-hotkey                            # bind Super+Space to toggle dictation
+murmur install-hotkey --key '<Control><Alt>d'    # pick another accelerator
+murmur install-hotkey --print                    # show what it would bind, without applying
+murmur install-hotkey --remove                   # remove it
+```
+
+It allocates a custom keybinding through `gsettings`, reusing the same slot on
+re-runs so it never piles up duplicates. A bare `install-hotkey` keeps an
+already-chosen key; only `--key` moves it.
+
+On other desktops, add the shortcut yourself (System Settings → Keyboard →
+Shortcuts → Custom Shortcuts → Add) with this command — use the full path to the
+binary inside your venv:
 
 ```bash
 /path/to/murmur/.venv/bin/murmur toggle --target paste
@@ -230,10 +248,10 @@ Then assign a key (e.g. a spare key or `Super+Space`). Direct paste needs
 `xdotool` on X11 or `wtype` on Wayland; otherwise use `--target copy` and paste
 with `Ctrl+V`. Desktop notifications show when recording starts and stops.
 
-You don't have to assemble this command by hand: open **Setup** in `murmur
-desktop` and the **Global keyboard shortcut** card shows the exact command for
-your install (full venv path, with `paste`/`copy` chosen from what's available)
-and a copy button, plus the click-path for your detected desktop environment.
+Open **Setup** in `murmur desktop` to check the binding: the **Keyboard
+shortcut** card shows whether the shortcut is bound and to which key, the
+one-command auto-bind, and the exact `toggle` command to bind by hand — each with
+a copy button.
 
 Create and inspect your config:
 

@@ -65,6 +65,7 @@ python -m murmur install-desktop --force
 echo
 echo "Installed Murmur."
 echo "Run: source .venv/bin/activate && murmur doctor"
+echo "Bind the dictation hotkey (Cinnamon/GNOME): murmur install-hotkey"
 echo "If you skipped --with-system-deps, install the copy/paste tools for your session:"
 echo "  X11:     sudo apt install xclip xdotool"
 echo "  Wayland: sudo apt install wl-clipboard wtype"

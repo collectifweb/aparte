@@ -17,11 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Global keyboard shortcut card** in the desktop Setup panel: shows the exact
-  `toggle` command for your install (resolved venv path, `paste`/`copy` chosen
-  from the available tools) with a copy button, and the click-path for your
-  detected desktop environment (Cinnamon, GNOME, KDE, XFCE, MATE, or a generic
-  fallback). Backed by a new `/api/hotkey` endpoint.
+- **One-command global hotkey setup**: `murmur install-hotkey` registers the
+  dictation shortcut automatically through `gsettings` on Cinnamon and GNOME
+  (default `Super+Space`, override with `--key`). It reuses the existing Murmur
+  binding instead of creating duplicates, preserves an already-chosen accelerator
+  unless `--key` is given, and supports `--print` and `--remove`. Other desktops
+  get printable manual instructions.
+- **In-app keyboard-shortcut guide**: the desktop **Setup & diagnostics** panel
+  now shows the current shortcut status (bound key or "not set"), the exact
+  command to bind, and the auto-bind command, each with a copy button. `murmur
+  doctor` gained a matching `hotkey` line.
 
 ## [0.1.0] - 2026-06-01
 

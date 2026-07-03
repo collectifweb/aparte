@@ -8,6 +8,13 @@ from .audio import record_wav
 from .clipboard import copy_text, paste_text
 from .config import Settings, load_config, write_default_config
 from .desktop import run_desktop
+from .hotkey import (
+    DEFAULT_KEY,
+    DEFAULT_NAME,
+    HotkeyUnsupported,
+    install_hotkey,
+    remove_hotkey,
+)
 from .linux_desktop import (
     build_autostart_entry,
     build_desktop_entry,
@@ -63,6 +70,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "install-autostart":
             handle_install_autostart(args)
+            return 0
+        if args.command == "install-hotkey":
+            handle_install_hotkey(args)
             return 0
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -157,6 +167,28 @@ def build_parser() -> argparse.ArgumentParser:
     install_autostart.add_argument("--force", action="store_true", help="Overwrite an existing autostart entry.")
     install_autostart.add_argument("--print", action="store_true", help="Print the generated autostart entry instead.")
     install_autostart.add_argument("--remove", action="store_true", help="Remove the autostart entry.")
+
+    install_hotkey = subparsers.add_parser(
+        "install-hotkey",
+        help="Bind a global keyboard shortcut to toggle dictation (Cinnamon/GNOME).",
+    )
+    install_hotkey.add_argument(
+        "--key",
+        default=None,
+        help=(
+            f"Shortcut accelerator (default: {DEFAULT_KEY}, or the existing binding if already set). "
+            "Examples: '<Super>space', '<Control><Alt>d'."
+        ),
+    )
+    install_hotkey.add_argument(
+        "--target",
+        choices=["paste", "copy", "stdout"],
+        default="paste",
+        help="Where dictation goes when the shortcut stops recording.",
+    )
+    install_hotkey.add_argument("--name", default=DEFAULT_NAME, help="Display name for the shortcut.")
+    install_hotkey.add_argument("--print", action="store_true", help="Show what would be bound without applying it.")
+    install_hotkey.add_argument("--remove", action="store_true", help="Remove the Murmur shortcut.")
 
     return parser
 
@@ -291,6 +323,14 @@ def print_doctor(settings: Settings) -> None:
     print(f"\nstatus  {'recording active' if diagnostics['recording_active'] else 'idle'}")
     print(f"ready   {'yes' if summary['ready'] else 'no — see fixes below'}")
 
+    hotkey = diagnostics["hotkey"]
+    if hotkey["bound_key"]:
+        print(f"hotkey  bound to {hotkey['bound_key_label']}")
+    elif hotkey["supported"]:
+        print("hotkey  not bound — run: murmur install-hotkey")
+    else:
+        print(f"hotkey  bind manually: {hotkey['command']}")
+
     fixes = [c for c in diagnostics["checks"] if not c["ok"] and c["fix"]]
     if fixes:
         print("\nNext steps:")
@@ -334,3 +374,27 @@ def handle_install_autostart(args: argparse.Namespace) -> None:
         return
     path = install_autostart_entry(force=args.force)
     print(path)
+
+
+def handle_install_hotkey(args: argparse.Namespace) -> None:
+    from .hotkey import command_string, current_binding, detect_desktop, key_label, manual_instructions, murmur_command
+
+    command = command_string(murmur_command("toggle", "--target", args.target))
+    if args.remove:
+        removed = remove_hotkey(args.name)
+        print(f"removed {', '.join(removed)}" if removed else "no Murmur shortcut to remove")
+        return
+    if args.print:
+        key = args.key or current_binding(args.name) or DEFAULT_KEY
+        print(f"desktop  {detect_desktop() or 'unknown'}")
+        print(f"shortcut {key_label(key)}")
+        print(f"command  {command}")
+        print(manual_instructions(command, key, detect_desktop()))
+        return
+    try:
+        result = install_hotkey(args.key, args.target, args.name)
+    except HotkeyUnsupported as exc:
+        print(exc.instructions())
+        return
+    print(f"Bound {key_label(result.key)} → {result.command} ({result.desktop}, {result.slot}).")
+    print("Press it once to start dictating, again to transcribe and insert.")

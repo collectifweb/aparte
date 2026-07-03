@@ -6,6 +6,7 @@ import shutil
 from dataclasses import asdict, dataclass
 
 from .config import Settings
+from .hotkey import hotkey_info
 from .session import get_active_session
 
 
@@ -161,4 +162,5 @@ def collect_diagnostics(settings: Settings) -> dict:
             "can_insert": can_insert,
         },
         "recording_active": bool(active),
+        "hotkey": hotkey_info(),
     }

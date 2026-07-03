@@ -57,6 +57,7 @@ src/murmur/
   transcription.py  Whisper backends + automatic CUDA→CPU fallback
   audio.py          microphone recording (sounddevice / arecord)
   session.py        toggle-recording state for the global hotkey
+  hotkey.py         register the global dictation shortcut (Cinnamon/GNOME gsettings)
   polish.py         heuristic + Ollama text cleanup
   clipboard.py      copy / paste (wl-clipboard, xclip, wtype, xdotool)
   notify.py         desktop notifications (notify-send)

@@ -31,6 +31,18 @@ class CliParserTest(unittest.TestCase):
         self.assertEqual(args.command, "install-desktop")
         self.assertTrue(args.print)
 
+    def test_install_hotkey_defaults(self):
+        args = build_parser().parse_args(["install-hotkey"])
+        self.assertEqual(args.command, "install-hotkey")
+        self.assertIsNone(args.key)  # resolved to Super+Space or the existing binding at run time
+        self.assertEqual(args.target, "paste")
+        self.assertFalse(args.remove)
+
+    def test_install_hotkey_custom_key_and_remove(self):
+        args = build_parser().parse_args(["install-hotkey", "--key", "<Control><Alt>d", "--remove"])
+        self.assertEqual(args.key, "<Control><Alt>d")
+        self.assertTrue(args.remove)
+
 
 if __name__ == "__main__":
     unittest.main()

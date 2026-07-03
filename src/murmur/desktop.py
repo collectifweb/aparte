@@ -13,7 +13,6 @@ from urllib.parse import parse_qs, urlsplit
 from .clipboard import copy_text, paste_text
 from .config import Settings, load_config, update_config
 from .diagnostics import collect_diagnostics
-from .linux_desktop import hotkey_guidance
 from .polish import PolishOptions, build_polisher
 from .transcription import build_transcriber
 
@@ -114,9 +113,6 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                 return
             if route == "/api/doctor":
                 self._send_json(collect_diagnostics(current_settings()))
-                return
-            if route == "/api/hotkey":
-                self._send_json(hotkey_guidance())
                 return
             self.send_error(HTTPStatus.NOT_FOUND)
 

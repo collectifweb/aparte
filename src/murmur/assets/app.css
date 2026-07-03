@@ -238,9 +238,6 @@ textarea.kv {
 .diag-fix code { flex: 1; font: 12px/1.4 ui-monospace, Menlo, monospace; overflow-x: auto; white-space: nowrap; }
 .diag-fix button { flex: none; border: none; background: var(--accent); color: #fff; border-radius: 6px; padding: 4px 9px; font-size: 12px; cursor: pointer; }
 .req-badge { font-size: 11px; color: var(--danger); border: 1px solid var(--danger); border-radius: 6px; padding: 0 5px; margin-left: 6px; }
-.hotkey-card { border-top: 1px solid var(--border); padding-top: 14px; }
-.hotkey-card .diag-detail { margin-bottom: 6px; }
-.hotkey-card .hotkey-steps { color: var(--text); }
 .diag-summary {
   display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;
 }

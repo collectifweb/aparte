@@ -85,53 +85,6 @@ def install_desktop_entry(command: list[str] | None = None, force: bool = False)
     return destination
 
 
-# XDG_CURRENT_DESKTOP tokens mapped to the keys the desktop UI has tailored
-# shortcut-setup steps for. Matched case-insensitively as a substring, so
-# "X-Cinnamon" → cinnamon and "ubuntu:GNOME" → gnome.
-_DESKTOP_ENVIRONMENTS = {
-    "cinnamon": "cinnamon",
-    "gnome": "gnome",
-    "plasma": "kde",
-    "kde": "kde",
-    "xfce": "xfce",
-    "mate": "mate",
-}
-
-
-def detect_desktop_environment() -> str:
-    """Best-effort normalized desktop-environment key, or "generic" if unknown."""
-    raw = (os.getenv("XDG_CURRENT_DESKTOP") or os.getenv("DESKTOP_SESSION") or "").lower()
-    for token, key in _DESKTOP_ENVIRONMENTS.items():
-        if token in raw:
-            return key
-    return "generic"
-
-
-def toggle_command(target: str = "paste") -> list[str]:
-    """Command to bind to a global shortcut: first press records, second inserts."""
-    executable = shutil.which("murmur")
-    base = [executable] if executable else [sys.executable, "-m", "murmur"]
-    return base + ["toggle", "--target", target]
-
-
-def hotkey_guidance() -> dict:
-    """Data for the desktop UI's global-shortcut setup card: the exact command to
-    bind, the detected desktop environment, and which insertion target works."""
-    is_wayland = bool(os.getenv("WAYLAND_DISPLAY"))
-    is_x11 = bool(os.getenv("DISPLAY"))
-    paste_ok = (shutil.which("wtype") is not None and is_wayland) or (
-        shutil.which("xdotool") is not None and is_x11
-    )
-    target = "paste" if paste_ok else "copy"
-    return {
-        "command": desktop_exec(toggle_command(target)),
-        "target": target,
-        "paste_ok": paste_ok,
-        "desktop_env": detect_desktop_environment(),
-        "session_type": "wayland" if is_wayland else ("x11" if is_x11 else "unknown"),
-    }
-
-
 def default_autostart_command() -> list[str]:
     return default_exec_command() + ["--no-browser"]
 

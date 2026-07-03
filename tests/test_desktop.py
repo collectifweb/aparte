@@ -63,16 +63,5 @@ class DoctorEndpointTest(unittest.TestCase):
         self.assertIn("ready", data["summary"])
 
 
-class HotkeyEndpointTest(unittest.TestCase):
-    def test_hotkey_returns_command_and_environment(self):
-        res = make_request("GET", "/api/hotkey")
-        self.assertEqual(res["status"], int(HTTPStatus.OK))
-        data = json.loads(res["body"])
-        self.assertIn("toggle", data["command"])
-        self.assertIn(data["target"], {"paste", "copy"})
-        self.assertIn("desktop_env", data)
-        self.assertIn("session_type", data)
-
-
 if __name__ == "__main__":
     unittest.main()
