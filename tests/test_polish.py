@@ -22,6 +22,24 @@ class HeuristicPolisherTest(unittest.TestCase):
             "Hello, are you there?",
         )
 
+    def test_spoken_punctuation_only_matches_whole_words(self):
+        polisher = HeuristicPolisher()
+        self.assertEqual(
+            polisher.polish("je passe une commande demain"),
+            "Je passe une commande demain.",
+        )
+        self.assertEqual(
+            polisher.polish("voici la colonne de gauche"),
+            "Voici la colonne de gauche.",
+        )
+
+    def test_numbers_stay_inline(self):
+        polisher = HeuristicPolisher()
+        self.assertEqual(
+            polisher.polish("il y a 1 chien et 2 chats"),
+            "Il y a 1 chien et 2 chats.",
+        )
+
     def test_casual_style_does_not_force_period(self):
         polisher = HeuristicPolisher()
         self.assertEqual(

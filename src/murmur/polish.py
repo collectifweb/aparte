@@ -38,21 +38,21 @@ class HeuristicPolisher(Polisher):
         "heu",
     )
     _spoken_punctuation = {
-        " comma": ",",
-        " period": ".",
-        " full stop": ".",
-        " question mark": "?",
-        " exclamation mark": "!",
-        " colon": ":",
-        " semicolon": ";",
-        " new line": "\n",
-        " newline": "\n",
-        " virgule": ",",
-        " point d'interrogation": "?",
-        " point d exclamation": "!",
-        " deux points": ":",
-        " point virgule": ";",
-        " nouvelle ligne": "\n",
+        "comma": ",",
+        "period": ".",
+        "full stop": ".",
+        "question mark": "?",
+        "exclamation mark": "!",
+        "colon": ":",
+        "semicolon": ";",
+        "new line": "\n",
+        "newline": "\n",
+        "virgule": ",",
+        "point d'interrogation": "?",
+        "point d exclamation": "!",
+        "deux points": ":",
+        "point virgule": ";",
+        "nouvelle ligne": "\n",
     }
 
     def polish(self, text: str, options: PolishOptions | None = None) -> str:
@@ -62,7 +62,6 @@ class HeuristicPolisher(Polisher):
         text = self._normalize_space(text)
         text = self._remove_fillers(text, options.cleanup_level)
         text = self._replace_spoken_punctuation(text)
-        text = self._format_numbered_lists(text)
         text = self._space_punctuation(text)
         text = self._capitalize_sentences(text)
         text = self._apply_replacements(text, options.replacements or {})
@@ -88,16 +87,11 @@ class HeuristicPolisher(Polisher):
         return text
 
     def _replace_spoken_punctuation(self, text: str) -> str:
-        lowered = text
+        # Only replace a spoken mark when it stands as its own word, so words
+        # like "commande" or "colonne" are not mangled into ", nde" / ": ne".
         for spoken, mark in self._spoken_punctuation.items():
-            lowered = re.sub(re.escape(spoken), mark, lowered, flags=re.IGNORECASE)
-        return lowered
-
-    def _format_numbered_lists(self, text: str) -> str:
-        if not re.search(r"\b1[\).]?\s+\w+", text):
-            return text
-        text = re.sub(r"\s+(\d+)[\).]?\s+", r"\n\1. ", text)
-        return text.lstrip()
+            text = re.sub(rf"\b{re.escape(spoken)}\b", mark, text, flags=re.IGNORECASE)
+        return text
 
     def _space_punctuation(self, text: str) -> str:
         text = re.sub(r"\s+([,.;:!?])", r"\1", text)

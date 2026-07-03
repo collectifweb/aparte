@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Heuristic polisher no longer mangles words that contain a spoken-punctuation
+  keyword**: "commande" stayed ", nde", "colonne" became ": ne", etc. Spoken
+  marks (comma, colon, virgule, …) are now matched only as whole words.
+- **Numbers dictated in a sentence are left inline** instead of being reformatted
+  into a numbered list (e.g. "il y a 1 chien et 2 chats" no longer became a list).
+
 ### Added
 
 - **Global keyboard shortcut card** in the desktop Setup panel: shows the exact
