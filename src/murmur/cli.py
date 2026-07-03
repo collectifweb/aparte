@@ -264,7 +264,7 @@ def _notify_inserted(output: str, target: str) -> None:
     elif target == "stdout":
         title = "✅ Dictée prête"
     else:
-        title = "✍️ Inséré"
+        title = "✍️ Inséré (aussi dans le presse-papier)"
     notify(title, _preview(output))
 
 

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Dictation is now pasted, not typed out**: `--target paste` copies the text to
+  the clipboard first (so it is never lost if the paste lands on a non-text area)
+  and inserts it with a single Ctrl+V instead of simulating keystrokes one
+  character at a time. A stray click or a key pressed mid-insertion can no longer
+  interleave with the text or scatter it. In a terminal, paste with Ctrl+Shift+V.
+
 ### Fixed
 
 - **Heuristic polisher no longer mangles words that contain a spoken-punctuation
