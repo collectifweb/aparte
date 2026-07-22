@@ -118,6 +118,17 @@
           </label>
         </div>
         <div class="group">
+          <h3 data-i18n="set.insertion">Insertion</h3>
+          <label class="field"><span data-i18n="set.paste_mode">Manière d'insérer</span>
+            <select id="set-paste-mode">
+              <option value="clipboard" data-i18n="paste.clipboard">Presse-papiers (Ctrl+V)</option>
+              <option value="terminal" data-i18n="paste.terminal">Terminal (Ctrl+Maj+V)</option>
+              <option value="direct" data-i18n="paste.direct">Direct (frappe simulée)</option>
+            </select>
+            <small data-i18n="set.paste_mode_help">Les terminaux ignorent Ctrl+V. Le mode Direct sert aux applications qui refusent le collage — c'est plus lent et plus fragile.</small>
+          </label>
+        </div>
+        <div class="group">
           <h3 data-i18n="set.vocab">Vocabulaire</h3>
           <label class="field"><span data-i18n="set.replacements">Remplacements</span> <small data-i18n="set.replacements_help">un par ligne — dit = écrit</small>
             <textarea id="set-replacements" class="kv" spellcheck="false" placeholder="pipe wire = PipeWire"></textarea>

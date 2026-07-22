@@ -13,6 +13,48 @@ def _getenv(env):
     return lambda name, default=None: env.get(name, default)
 
 
+def run_paste(text, mode, available, env):
+    with mock.patch.object(clipboard_module.shutil, "which", side_effect=_which(available)):
+        with mock.patch.object(clipboard_module.os, "getenv", side_effect=_getenv(env)):
+            with mock.patch.object(clipboard_module.subprocess, "run") as run:
+                tool = paste_text(text, mode)
+    return tool, [call.args[0] for call in run.call_args_list]
+
+
+X11 = ({"xclip", "xdotool"}, {"DISPLAY": ":0"})
+WAYLAND = ({"wl-copy", "wtype"}, {"WAYLAND_DISPLAY": "wayland-0"})
+
+
+class PasteModeTest(unittest.TestCase):
+    """Ctrl+V does nothing in a terminal, and some apps refuse a paste entirely."""
+
+    def test_terminal_mode_sends_ctrl_shift_v(self):
+        _, commands = run_paste("ls -la", "terminal", *X11)
+        self.assertEqual(commands[-1], ["xdotool", "key", "--clearmodifiers", "ctrl+shift+v"])
+
+        _, commands = run_paste("ls -la", "terminal", *WAYLAND)
+        self.assertEqual(
+            commands[-1],
+            ["wtype", "-M", "ctrl", "-M", "shift", "-k", "v", "-m", "shift", "-m", "ctrl"],
+        )
+
+    def test_direct_mode_types_the_text_out(self):
+        _, commands = run_paste("bonjour", "direct", *X11)
+        self.assertEqual(commands[-1], ["xdotool", "type", "--clearmodifiers", "--", "bonjour"])
+
+        _, commands = run_paste("bonjour", "direct", *WAYLAND)
+        self.assertEqual(commands[-1], ["wtype", "bonjour"])
+
+    def test_every_mode_copies_to_the_clipboard_first(self):
+        for mode in clipboard_module.PASTE_MODES:
+            _, commands = run_paste("filet de sécurité", mode, *X11)
+            self.assertEqual(commands[0][0], "xclip", mode)
+
+    def test_an_unknown_mode_falls_back_to_a_plain_paste(self):
+        _, commands = run_paste("bonjour", "n'importe quoi", *X11)
+        self.assertEqual(commands[-1], ["xdotool", "key", "--clearmodifiers", "ctrl+v"])
+
+
 class PasteTextTest(unittest.TestCase):
     def test_x11_copies_first_then_pastes_with_ctrl_v(self):
         with mock.patch.object(clipboard_module.shutil, "which", side_effect=_which({"xclip", "xdotool"})):

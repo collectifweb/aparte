@@ -247,7 +247,7 @@ def dictate_once(args: argparse.Namespace, settings: Settings) -> str:
         output = transcribe_path(path, transcribe_args, settings)
         _notify_inserted(output, args.target)
         if args.target == "paste":
-            paste_text(output)
+            paste_text(output, settings.paste_mode)
         elif args.target == "copy":
             copy_text(output)
         return output
@@ -291,7 +291,7 @@ def toggle_dictation(args: argparse.Namespace, settings: Settings) -> str:
         output = transcribe_path(session.audio_path, transcribe_args, settings)
         _notify_inserted(output, args.target)
         if args.target == "paste":
-            paste_text(output)
+            paste_text(output, settings.paste_mode)
         elif args.target == "copy":
             copy_text(output)
         return output

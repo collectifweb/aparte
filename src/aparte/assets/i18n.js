@@ -102,6 +102,13 @@ window.APARTE_I18N = {
     "hotkey.auto": "Sur Cinnamon/GNOME, lie-le automatiquement dans un terminal :",
     "hotkey.manual": "Ou lie cette commande à un raccourci global toi-même (touche suggérée : {key}) :",
 
+    "set.insertion": "Insertion",
+    "set.paste_mode": "Manière d'insérer",
+    "set.paste_mode_help": "Les terminaux ignorent Ctrl+V. Le mode Direct sert aux applications qui refusent le collage — c'est plus lent et plus fragile.",
+    "paste.clipboard": "Presse-papiers (Ctrl+V)",
+    "paste.terminal": "Terminal (Ctrl+Maj+V)",
+    "paste.direct": "Direct (frappe simulée)",
+
     "update.title": "Mise à jour",
     "update.local": "Aucune vérification automatique : le dépôt distant n'est joint que si tu cliques.",
     "update.check": "Vérifier",
@@ -233,6 +240,13 @@ window.APARTE_I18N = {
     "hotkey.unbound": "No global shortcut set yet",
     "hotkey.auto": "On Cinnamon/GNOME, bind it automatically in a terminal:",
     "hotkey.manual": "Or bind this command to a global shortcut yourself (suggested key: {key}):",
+
+    "set.insertion": "Insertion",
+    "set.paste_mode": "How to insert",
+    "set.paste_mode_help": "Terminals ignore Ctrl+V. Direct mode is for apps that refuse a paste — it is slower and more fragile.",
+    "paste.clipboard": "Clipboard (Ctrl+V)",
+    "paste.terminal": "Terminal (Ctrl+Shift+V)",
+    "paste.direct": "Direct (simulated typing)",
 
     "update.title": "Update",
     "update.local": "No automatic check: the remote is only contacted when you click.",

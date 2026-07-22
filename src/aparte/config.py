@@ -27,6 +27,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "default_style": "neutral",
     "cleanup_level": "medium",
     "nonbreaking_spaces": True,
+    "paste_mode": "clipboard",
     "ollama_url": "http://127.0.0.1:11434",
     "ollama_model": "llama3.1:8b",
     "whisper_cpp": None,
@@ -54,6 +55,7 @@ class Settings:
     default_style: str = "neutral"
     cleanup_level: str = "medium"
     nonbreaking_spaces: bool = True
+    paste_mode: str = "clipboard"
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.1:8b"
     whisper_cpp: str | None = None
@@ -81,6 +83,7 @@ class Settings:
             default_style=str(config.get("default_style", "neutral")),
             cleanup_level=str(config.get("cleanup_level", "medium")),
             nonbreaking_spaces=bool(config.get("nonbreaking_spaces", True)),
+            paste_mode=get_env("PASTE_MODE") or str(config.get("paste_mode", "clipboard")),
             ollama_url=get_env("OLLAMA_URL") or str(config.get("ollama_url", DEFAULT_CONFIG["ollama_url"])),
             ollama_model=get_env("OLLAMA_MODEL") or str(config.get("ollama_model", DEFAULT_CONFIG["ollama_model"])),
             whisper_cpp=whisper_cpp if whisper_cpp is not None else _optional_str(config.get("whisper_cpp")),

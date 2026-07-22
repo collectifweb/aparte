@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Three insertion modes, chosen in Settings** (`paste_mode`): `clipboard`, one
+  atomic `Ctrl+V`, unchanged and still the default; `terminal`, which sends
+  `Ctrl+Shift+V` because terminals ignore `Ctrl+V` outright; and `direct`, which
+  types the text out for the applications that refuse a synthetic paste. Direct
+  typing had been dropped when pasting moved to the clipboard; it is back as a
+  deliberate choice rather than a fallback. All three copy to the clipboard
+  first.
 - **Update Aparté from the Setup panel.** An "Update" section shows the version
   installed, checks the remote when you ask it to, lists what is waiting, and
   runs `git pull` plus a reinstall with a live log. It restarts the app on its

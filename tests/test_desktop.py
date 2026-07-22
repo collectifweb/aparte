@@ -110,6 +110,17 @@ class OriginCheckTest(unittest.TestCase):
 
 
 class ConfigEndpointTest(unittest.TestCase):
+    def test_paste_mode_round_trips(self):
+        """A field missing from EDITABLE_FIELDS is dropped in silence, both ways."""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            with mock.patch.dict(os.environ, {"APARTE_CONFIG": str(path), "MURMUR_CONFIG": ""}):
+                body = json.dumps({"paste_mode": "terminal"}).encode("utf-8")
+                res = make_request("POST", "/api/config", body)
+
+                self.assertEqual(res["status"], int(HTTPStatus.OK))
+                self.assertEqual(json.loads(make_request("GET", "/api/config")["body"])["paste_mode"], "terminal")
+
     def test_nonbreaking_spaces_round_trips_as_a_boolean(self):
         """The settings form posts a checkbox; it must not land as the string "False"."""
         with tempfile.TemporaryDirectory() as directory:

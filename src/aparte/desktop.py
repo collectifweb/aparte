@@ -46,6 +46,7 @@ EDITABLE_FIELDS = (
     "device",
     "polish_backend",
     "nonbreaking_spaces",
+    "paste_mode",
     "replacements",
     "snippets",
 )
@@ -171,7 +172,7 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                     return
                 if self.path == "/api/paste":
                     payload = self._read_json()
-                    backend = paste_text(str(payload.get("text", "")))
+                    backend = paste_text(str(payload.get("text", "")), current_settings().paste_mode)
                     self._send_json({"ok": True, "backend": backend})
                     return
                 if self.path == "/api/update/apply":

@@ -72,12 +72,17 @@ Révisé : le commit `12ca746`, arrivé pendant l'analyse, fait déjà l'essenti
 au lieu de taper le texte caractère par caractère.
 
 - [x] Mode « presse-papiers + Ctrl+V » par défaut — fait en amont (`12ca746`)
-- [ ] Mode « Terminal » (Ctrl+Shift+V) — les terminaux ignorent Ctrl+V, et
+- [x] Mode « Terminal » (Ctrl+Shift+V) — les terminaux ignorent Ctrl+V, et
       aujourd'hui le README se contente de dire de coller à la main
-- [ ] Remettre la frappe simulée en option « Direct », pour les applications qui
+- [x] Remettre la frappe simulée en option « Direct », pour les applications qui
       bloquent le collage (LibreOffice, certaines applications Electron) : le
       repli a disparu avec `12ca746`
-- [ ] Exposer le choix du mode dans les Réglages
+- [x] Exposer le choix du mode dans les Réglages — nouveau groupe « Insertion »
+      dans le tiroir, réglage `paste_mode`, variable `APARTE_PASTE_MODE`
+
+Les trois modes copient dans le presse-papiers avant d'insérer : le filet vaut
+pour la frappe simulée autant que pour le collage. Un mode inconnu retombe sur
+Ctrl+V plutôt que de refuser.
 - ~~Restaurer le presse-papiers après collage~~ : abandonné. Le choix inverse
   est désormais assumé — la dictée reste dans le presse-papiers pour servir de
   filet si le collage tombe à côté.

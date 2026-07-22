@@ -327,6 +327,7 @@ APARTE_DEVICE=auto
 APARTE_COMPUTE_TYPE=auto
 APARTE_LANGUAGE=
 APARTE_POLISH_BACKEND=heuristic
+APARTE_PASTE_MODE=clipboard
 APARTE_OLLAMA_URL=http://127.0.0.1:11434
 APARTE_OLLAMA_MODEL=llama3.1:8b
 APARTE_WHISPER_CPP=
@@ -343,6 +344,16 @@ Polish backends:
 
 - `heuristic`: fully local, no model required, good enough for punctuation and capitalization cleanup.
 - `ollama`: local LLM rewrite through Ollama, much better for fillers, backtracking, tone, and context.
+
+Insertion modes (`paste_mode` in the config, or the **Insertion** setting in the
+desktop app). Every mode copies the dictation to the clipboard first, so it is
+never lost when the insertion lands somewhere unexpected:
+
+- `clipboard` (default): one atomic `Ctrl+V`. Right nearly everywhere.
+- `terminal`: `Ctrl+Shift+V` — terminals ignore `Ctrl+V` entirely.
+- `direct`: types the text out. For apps that refuse a synthetic paste
+  (LibreOffice, some Electron apps). Slower, and a stray click mid-insertion can
+  scatter it.
 
 ### French typography
 
