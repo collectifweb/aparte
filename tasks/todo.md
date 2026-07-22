@@ -224,6 +224,29 @@ raccourci `Super+Fin` réutilisé sans doublon, et les deux fichiers de
 configuration divergents fusionnés (14 remplacements, sauvegarde dans
 `~/.config/aparte-backup-20260722/`).
 
+## QA de l'interface (22/07, hors lots)
+
+Passe de vérification demandée après le Lot 4, mesurée au navigateur sans tête
+(brave headless + CDP, script gardé en scratchpad) plutôt qu'à l'œil :
+
+- [x] **Le panneau des dictées ne faisait pas la largeur de la colonne.** Le plan
+      de travail est un conteneur flex centré et `.recent` n'avait pas de largeur
+      propre : avec deux dictées courtes il tombait à 188 px flottant au milieu,
+      son filet réduit à un moignon, quand l'éditeur au-dessus fait 680 px.
+      `width: 100%` (`0b19d0c`)
+- [x] **Défilement latéral sous 560 px de large** : les deux boutons de la barre
+      supérieure débordaient. La barre passe à la ligne (`0b19d0c`)
+- [x] **L'application ne tenait pas sur un écran.** Il fallait 984 px de hauteur
+      utile — exactement ce qu'un écran 1080p laisse une fois les barres du
+      navigateur déduites, d'où le bas coupé. Marge basse 48 → 24 px et plafond
+      de l'éditeur 360 → 300 px : le seuil tombe à 900 px. Écarté : rendre
+      l'éditeur élastique (casse `resize: vertical`) et supprimer la hauteur
+      réservée du panneau (la page sauterait à chaque dictée)
+- [x] **Un test écrivait dans le vrai historique de l'utilisateur** :
+      `HistoryEndpointTest` posait `APARTE_RUNTIME_DIR` mais pas `APARTE_CONFIG`,
+      donc le serveur lisait la vraie config, où `history_persist` est vrai.
+      Invariant ajouté dans `CLAUDE.md` § Lancer les tests
+
 ## Lot 4 — Confort
 
 - [x] Bip sonore au début et à la fin de l'enregistrement (réglable) — deux tons

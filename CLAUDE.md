@@ -63,6 +63,12 @@ PYTHONPATH=src python3 -m unittest discover -s tests -t tests
 Le `-t tests` est nécessaire : `tests/` n'a pas de `__init__.py`, et sans lui
 la découverte échoue avec « Start directory is not importable ».
 
+**Un test qui passe par `current_settings()` doit poser `APARTE_CONFIG` sur un
+fichier temporaire**, et pas seulement `APARTE_RUNTIME_DIR`. Sinon le serveur
+lit la vraie configuration de l'utilisateur : si `history_persist` y est vrai,
+le test écrit dans `~/.local/state/aparte/history.json`, c'est-à-dire dans son
+vrai historique de dictées. C'est arrivé le 22/07 (`HistoryEndpointTest`).
+
 ## Invariants à ne pas casser
 
 ### Reprise depuis l'ancien nom (Murmur → Aparté)
@@ -93,6 +99,10 @@ configuré :
   dictée finit dans Slack ou un courriel.
 - Ne jamais ajouter d'espace avant un `:` suivi de `/` ou d'un chiffre —
   sinon `https://` et `14:30` sont cassés.
+- Les nombres (`numbers.py`) passent **avant** `_space_punctuation`, sinon la
+  règle ci-dessus ne voit pas les chiffres qu'ils viennent d'écrire. Le module
+  ne touche jamais une suite qu'il n'a pas su analyser : dans le doute, rien ne
+  bouge. Français seulement.
 
 ### Interface
 
