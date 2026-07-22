@@ -74,6 +74,21 @@
       </header>
       <div class="drawer-body">
         <div class="group">
+          <h3 data-i18n="set.audio">Micro</h3>
+          <div class="field">
+            <label for="set-microphone" data-i18n="set.microphone">Microphone</label>
+            <div class="field-row">
+              <select id="set-microphone"></select>
+              <button class="btn small" type="button" id="refresh-microphones" data-i18n="set.microphone_refresh">Actualiser</button>
+            </div>
+            <small data-i18n="set.microphone_help">S'applique au raccourci global et au terminal. Le bouton Parler passe par le micro choisi dans le navigateur.</small>
+          </div>
+          <label class="field">
+            <span class="inline"><input id="set-beep" type="checkbox"> <span data-i18n="set.beep">Bip au début et à la fin</span></span>
+            <small data-i18n="set.beep_help">Deux sons courts : un aigu quand le micro s'ouvre, un plus grave quand il se ferme. Pour dicter sans regarder l'écran.</small>
+          </label>
+        </div>
+        <div class="group">
           <h3 data-i18n="set.transcription">Transcription</h3>
           <label class="field"><span data-i18n="set.model">Modèle par défaut</span>
             <select id="set-model"></select>
@@ -120,6 +135,18 @@
           <label class="field">
             <span class="inline"><input id="set-nbsp" type="checkbox"> <span data-i18n="set.nbsp">Espaces insécables</span></span>
             <small data-i18n="set.nbsp_help">Typographie française : espace avant ? ! ; et : — décoche si une application les affiche mal</small>
+          </label>
+          <label class="field"><span data-i18n="set.short_text">Texte court</span>
+            <select id="set-short-text">
+              <option value="0" data-i18n="short.off">Toujours une phrase</option>
+              <option value="3" data-i18n="short.three">Moins de 3 mots</option>
+              <option value="5" data-i18n="short.five">Moins de 5 mots</option>
+            </select>
+            <small data-i18n="set.short_text_help">Sous ce nombre de mots, la dictée sort telle quelle : ni majuscule, ni point final. Pour les champs de recherche et les réponses d'un mot.</small>
+          </label>
+          <label class="field">
+            <span class="inline"><input id="set-trailing-space" type="checkbox"> <span data-i18n="set.trailing_space">Espace à la fin</span></span>
+            <small data-i18n="set.trailing_space_help">Termine chaque dictée par une espace, pour en enchaîner une deuxième sans la coller à la première.</small>
           </label>
         </div>
         <div class="group">

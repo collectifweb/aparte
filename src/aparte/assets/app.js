@@ -293,12 +293,46 @@ async function loadConfig() {
   $("#set-device").value = cfg.device || "auto";
   $("#set-polish").value = cfg.polish_backend || "heuristic";
   $("#set-nbsp").checked = cfg.nonbreaking_spaces !== false;
+  $("#set-short-text").value = String(cfg.short_text_words || 0);
+  $("#set-trailing-space").checked = cfg.trailing_space === true;
+  $("#set-beep").checked = cfg.beep === true;
   $("#set-paste-mode").value = cfg.paste_mode || "clipboard";
   historyPersist = cfg.history_persist === true;
   $("#set-history-persist").checked = historyPersist;
   $("#set-replacements").value = kvToText(cfg.replacements);
   $("#set-snippets").value = kvToText(cfg.snippets);
+  await loadMicrophones(cfg.microphone || "");
 }
+
+// Le micro branché après l'ouverture du panneau n'apparaîtrait pas : d'où le
+// bouton Actualiser, qui refait l'inventaire sans perdre le choix en cours.
+async function loadMicrophones(selected) {
+  const sel = $("#set-microphone");
+  const keep = selected !== undefined ? selected : sel.value;
+  let devices = [];
+  try { devices = (await (await fetch("/api/microphones")).json()).devices || []; }
+  catch (err) { devices = []; }
+  sel.innerHTML = "";
+  const auto = document.createElement("option");
+  auto.value = ""; auto.textContent = t("set.microphone_default");
+  auto.dataset.i18n = "set.microphone_default";
+  sel.appendChild(auto);
+  for (const device of devices) {
+    const opt = document.createElement("option");
+    opt.value = device.name; opt.textContent = device.label;
+    sel.appendChild(opt);
+  }
+  // Un micro débranché depuis le dernier enregistrement : on le garde dans la
+  // liste, sinon l'enregistrement suivant le remplacerait en silence.
+  if (keep && !devices.some((device) => device.name === keep)) {
+    const missing = document.createElement("option");
+    missing.value = keep; missing.textContent = t("set.microphone_missing", { name: keep });
+    sel.appendChild(missing);
+  }
+  sel.value = keep;
+}
+
+$("#refresh-microphones").addEventListener("click", () => loadMicrophones());
 
 $("#open-settings").addEventListener("click", async () => {
   openOverlay("#settings-overlay");
@@ -315,6 +349,10 @@ $("#save-settings").addEventListener("click", async () => {
       device: $("#set-device").value,
       polish_backend: $("#set-polish").value,
       nonbreaking_spaces: $("#set-nbsp").checked,
+      short_text_words: Number($("#set-short-text").value),
+      trailing_space: $("#set-trailing-space").checked,
+      microphone: $("#set-microphone").value,
+      beep: $("#set-beep").checked,
       paste_mode: $("#set-paste-mode").value,
       history_persist: $("#set-history-persist").checked,
       replacements: textToKv($("#set-replacements").value),

@@ -129,6 +129,48 @@ class FrenchTypographyTest(unittest.TestCase):
         )
 
 
+class ShortTextTest(unittest.TestCase):
+    """A few words are a search field or a chat reply, not a sentence."""
+
+    def setUp(self):
+        self.polisher = HeuristicPolisher()
+
+    def test_a_short_dictation_keeps_its_lowercase_and_gets_no_period(self):
+        options = PolishOptions(language="fr", short_text_words=5)
+        self.assertEqual(self.polisher.polish("billets de train", options), "billets de train")
+
+    def test_the_threshold_is_exclusive(self):
+        """"Moins de 3 mots" means two, not three."""
+        options = PolishOptions(language="fr", short_text_words=3)
+        self.assertEqual(self.polisher.polish("billets de train", options), "Billets de train.")
+        self.assertEqual(self.polisher.polish("billets train", options), "billets train")
+
+    def test_the_setting_is_off_by_default(self):
+        self.assertEqual(self.polisher.polish("billets", PolishOptions(language="fr")), "Billets.")
+
+    def test_replacements_still_apply_to_a_short_dictation(self):
+        options = PolishOptions(
+            language="fr", short_text_words=5, replacements={"pipe wire": "PipeWire"}
+        )
+        self.assertEqual(self.polisher.polish("pipe wire", options), "PipeWire")
+
+
+class TrailingSpaceTest(unittest.TestCase):
+    def setUp(self):
+        self.polisher = HeuristicPolisher()
+
+    def test_the_dictation_ends_with_a_space_when_asked(self):
+        options = PolishOptions(language="fr", trailing_space=True)
+        self.assertEqual(self.polisher.polish("bonjour à tous", options), "Bonjour à tous. ")
+
+    def test_nothing_is_added_by_default(self):
+        self.assertEqual(self.polisher.polish("bonjour à tous", PolishOptions(language="fr")), "Bonjour à tous.")
+
+    def test_an_empty_dictation_stays_empty(self):
+        options = PolishOptions(language="fr", trailing_space=True)
+        self.assertEqual(self.polisher.polish("   ", options), "")
+
+
 class FillerLanguageTest(unittest.TestCase):
     def test_ambiguous_words_are_only_stripped_for_their_own_language(self):
         polisher = HeuristicPolisher()

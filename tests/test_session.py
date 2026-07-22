@@ -7,6 +7,28 @@ from unittest import mock
 from aparte import session
 
 
+class StartRecordingTest(unittest.TestCase):
+    def test_the_chosen_microphone_reaches_arecord(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.dict(os.environ, {"APARTE_RUNTIME_DIR": directory}):
+                with mock.patch.object(session.shutil, "which", return_value="/usr/bin/arecord"):
+                    with mock.patch.object(session.subprocess, "Popen") as popen:
+                        popen.return_value.pid = 4242
+                        session.start_toggle_recording(16000, "plughw:CARD=Mini,DEV=0")
+                command = popen.call_args.args[0]
+        self.assertEqual(command[command.index("-D") + 1], "plughw:CARD=Mini,DEV=0")
+
+    def test_no_microphone_chosen_leaves_the_command_untouched(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.dict(os.environ, {"APARTE_RUNTIME_DIR": directory}):
+                with mock.patch.object(session.shutil, "which", return_value="/usr/bin/arecord"):
+                    with mock.patch.object(session.subprocess, "Popen") as popen:
+                        popen.return_value.pid = 4242
+                        session.start_toggle_recording()
+                command = popen.call_args.args[0]
+        self.assertNotIn("-D", command)
+
+
 class ToggleSessionTest(unittest.TestCase):
     def test_runtime_dir_can_be_overridden(self):
         with tempfile.TemporaryDirectory() as directory:

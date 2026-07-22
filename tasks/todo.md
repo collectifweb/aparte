@@ -205,13 +205,43 @@ dictée lancée au raccourci clavier. L'état d'enregistrement suit le fichier d
 session du raccourci global ; une dictée lancée depuis le bouton de la page web
 n'en crée pas, donc l'icône ne change pas dans ce cas.
 
+## Correctifs d'installation (22/07, hors lots)
+
+Trouvés en installant Aparté par-dessus l'ancienne installation `~/murmur` :
+
+- [x] Entrée de bureau invalide (`desktop-file-validate`) : `Audio` exige
+      `AudioVideo` à côté, et trois catégories principales faisaient apparaître
+      l'application **trois fois** au menu. Passé à `Utility;Accessibility;`,
+      avec deux tests qui passent les entrées au validateur (`2355ac8`)
+- [x] Le lanceur du menu démarrait un **second serveur** — port au hasard,
+      deuxième icône — puisque l'autostart en tient déjà un. `aparte desktop`
+      sonde le port et rend la main à l'instance en cours (`2ad4784`)
+
+Migration réalisée : `~/murmur` mis à jour de 11 commits, distribution `murmur`
+désinstallée au profit d'`aparte`, `include-system-site-packages = true` dans
+`pyvenv.cfg` (plutôt que de refaire le venv et retélécharger Whisper et CUDA),
+raccourci `Super+Fin` réutilisé sans doublon, et les deux fichiers de
+configuration divergents fusionnés (14 remplacements, sauvegarde dans
+`~/.config/aparte-backup-20260722/`).
+
 ## Lot 4 — Confort
 
-- [ ] Bip sonore au début et à la fin de l'enregistrement (réglable)
-- [ ] Choix du microphone dans les Réglages, avec rafraîchissement de la liste
-- [ ] Espace final garanti, pour que deux dictées successives ne se collent pas
-- [ ] Texte court : une dictée de moins de N mots ne reçoit ni majuscule ni point
-      final (utile pour dicter dans un champ de recherche)
+- [x] Bip sonore au début et à la fin de l'enregistrement (réglable) — deux tons
+      synthétisés à la volée dans `audio.py`, aucun fichier son livré. Le bip
+      d'ouverture est joué **avant** que le micro s'ouvre, sinon il s'enregistre.
+- [x] Choix du microphone dans les Réglages, avec rafraîchissement de la liste —
+      `arecord -L` filtré aux entrées `plughw:` (les seules qui rééchantillonnent
+      vers le 16 kHz de Whisper). Le nom ALSA choisi part en `-D` vers arecord,
+      côté raccourci global comme côté terminal ; le bouton Parler enregistre
+      dans le navigateur et garde donc le micro du navigateur. Un micro
+      débranché reste dans la liste, marqué, plutôt que d'être remplacé en
+      silence.
+- [x] Espace final garanti, pour que deux dictées successives ne se collent pas
+      — `trailing_space`, décoché par défaut, appliqué par les deux polisseurs.
+- [x] Texte court : une dictée de moins de N mots ne reçoit ni majuscule ni point
+      final (utile pour dicter dans un champ de recherche) — `short_text_words`,
+      désactivé par défaut. Le seuil est strict : « moins de 3 mots » laisse
+      passer trois mots. Les remplacements et snippets s'appliquent quand même.
 - [ ] Nombres en toutes lettres → chiffres, au-delà d'un seuil réglable, en français
 - [ ] États vides actionnables et infobulles explicatives dans l'interface
 

@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from . import history
-from .audio import record_wav
+from .audio import play_beep, record_wav
 from .clipboard import copy_text, paste_text
 from .config import Settings, load_config, write_default_config
 from .desktop import run_desktop
@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
             handle_output(output, args, settings)
             return 0
         if args.command == "record":
-            path = record_wav(args.seconds, args.sample_rate, settings.recorder)
+            path = record_wav(args.seconds, args.sample_rate, settings.recorder, settings.microphone)
             output = transcribe_path(path, args, settings)
             handle_output(output, args, settings)
             return 0
@@ -237,6 +237,8 @@ def polish_text(text: str, args: argparse.Namespace, settings: Settings) -> str:
             replacements=settings.replacements or {},
             snippets=settings.snippets or {},
             nonbreaking_spaces=settings.nonbreaking_spaces,
+            trailing_space=settings.trailing_space,
+            short_text_words=settings.short_text_words,
         ),
     )
 
@@ -259,7 +261,11 @@ def transcribe_path(path: Path, args: argparse.Namespace, settings: Settings) ->
 
 def dictate_once(args: argparse.Namespace, settings: Settings) -> str:
     notify("🎙️ Dictée", f"Enregistrement pendant {args.seconds:g}s…")
-    path = record_wav(args.seconds, args.sample_rate, settings.recorder)
+    if settings.beep:
+        play_beep("start")
+    path = record_wav(args.seconds, args.sample_rate, settings.recorder, settings.microphone)
+    if settings.beep:
+        play_beep("stop")
     notify("⏳ Transcription…", "Aparté traite ta dictée.", urgency="low")
     try:
         transcribe_args = argparse.Namespace(
@@ -300,11 +306,15 @@ def toggle_dictation(args: argparse.Namespace, settings: Settings) -> str:
             return f"recording {active.audio_path}"
         return "idle"
     if not active:
-        session = start_toggle_recording(args.sample_rate)
+        if settings.beep:
+            play_beep("start")
+        session = start_toggle_recording(args.sample_rate, settings.microphone)
         notify("🎙️ Dictée en cours", "Réappuie sur le raccourci pour arrêter et insérer.")
         return f"Recording started: {session.audio_path}"
 
     session = stop_toggle_recording()
+    if settings.beep:
+        play_beep("stop")
     notify("⏳ Transcription…", "Aparté traite ta dictée.", urgency="low")
     try:
         transcribe_args = argparse.Namespace(

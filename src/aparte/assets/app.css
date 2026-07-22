@@ -298,6 +298,10 @@ input[type="checkbox"] { accent-color: var(--brand); }
 }
 .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: var(--sp-3); font-size: var(--fs-ui); }
 .field small { color: var(--ink-soft); font-size: var(--fs-caption); }
+/* A control that carries an action of its own, e.g. the microphone list and
+   its refresh button. The select takes what is left. */
+.field-row { display: flex; align-items: center; gap: var(--sp-2); }
+.field-row select { flex: 1; min-width: 0; }
 .field code { background: var(--surface-2); padding: 1px 5px; border-radius: var(--r-sm); font-size: var(--fs-caption); }
 textarea.kv {
   min-height: 96px; resize: vertical;
@@ -318,6 +322,7 @@ textarea.kv {
 }
 .btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
 .btn.ghost { color: var(--ink-soft); }
+.btn.small { padding: 7px var(--sp-3); font-size: var(--fs-label); }
 .muted { color: var(--ink-soft); font-size: var(--fs-label); }
 
 /* Diagnostic */

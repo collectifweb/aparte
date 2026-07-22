@@ -399,6 +399,23 @@ never lost when the insertion lands somewhere unexpected:
   (LibreOffice, some Electron apps). Slower, and a stray click mid-insertion can
   scatter it.
 
+### Choosing a microphone
+
+The **Microphone** setting lists what ALSA can capture from — pick one, or leave
+it on the system default. **Refresh** rebuilds the list without closing the
+panel, for a microphone plugged in after opening it. A device that has since been
+unplugged stays in the list, marked as such, rather than being silently swapped
+for another one.
+
+It applies to the global shortcut and to the terminal commands (`microphone` in
+the config, an ALSA name such as `plughw:CARD=Mini,DEV=0`). The desktop app's
+**Talk** button records through the browser, so it follows whichever microphone
+the browser is set to.
+
+Tick **Beep on start and stop** (`beep`) for two short tones — a high one when
+the microphone opens, a lower one when it closes. It is off by default; turn it
+on if you dictate with the global shortcut without watching the screen.
+
 ### French typography
 
 Aparté is built for dictating in French, so the formatting rules follow French
@@ -416,6 +433,14 @@ it also stops Whisper from drifting to another language.
 
 Set `"nonbreaking_spaces": false` in the config to use ordinary spaces instead of
 non-breaking ones, for apps that handle them poorly.
+
+Two settings decide how far the formatting goes:
+
+- **Short text** (`short_text_words`, off by default): below this many words the
+  dictation comes out as spoken — no leading capital, no final period. A search
+  field and a one-word answer are not sentences.
+- **Trailing space** (`trailing_space`, off by default): ends every dictation
+  with a space, so a second one does not land glued to the first.
 
 Recorder backends:
 
@@ -455,10 +480,11 @@ interface is a focused, single-screen app:
 - a transcript editor with **Polish**, **Copy**, **Paste**, and audio import
 - a model toggle (`small` = accurate, `base` = fast); each model loads once and
   is cached, so switching is instant after first use
-- a **Settings** panel (gear icon) grouped into Transcription (model, language,
-  compute device), Formatting (style, cleanup, polish backend), and Vocabulary
-  (replacements, snippets) — saved to the config file and applied immediately,
-  including to the global-hotkey dictation flow
+- a **Settings** panel (gear icon) grouped into Microphone (input device, beep),
+  Transcription (model, language, compute device), Formatting (style, cleanup,
+  polish backend, typography), Insertion, History, and Vocabulary (replacements,
+  snippets) — saved to the config file and applied immediately, including to the
+  global-hotkey dictation flow
 - a **Configuration & diagnostics** panel that shows, with green/red status, what
   is installed vs missing (Whisper backend, GPU, microphone, paste/clipboard,
   notifications) and the exact command to fix each gap — copy-paste onboarding

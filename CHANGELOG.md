@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Pick which microphone to dictate into.** Settings lists the ALSA capture
+  devices with their real names, and a **Refresh** button rebuilds the list
+  without closing the panel. The choice reaches the global shortcut and the
+  terminal commands; a device unplugged since then stays in the list, marked, so
+  it is never silently swapped for another. The **Talk** button records through
+  the browser and keeps following the browser's own microphone.
+- **A beep when the microphone opens and closes** (`beep`, off by default): a
+  high tone to start, a lower one to stop, generated locally — no sound file
+  shipped, no library. The opening tone plays through before recording starts, so
+  it does not end up in the dictation. For dictating with the global shortcut
+  without watching the screen.
+- **Two settings for how far the formatting goes.** **Short text**
+  (`short_text_words`, off by default) leaves a dictation of fewer than N words
+  exactly as spoken — no leading capital, no final period, because a search field
+  is not a sentence. **Trailing space** (`trailing_space`, off by default) ends
+  each dictation with a space, so a second one does not land glued to the first.
+
 - **A system tray icon**, grafted onto the desktop server: two states that differ
   by shape rather than colour (three bars at rest, a filled disc while the
   microphone is open), and a menu — open Aparté, copy the last dictation, jump

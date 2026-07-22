@@ -27,8 +27,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "default_style": "neutral",
     "cleanup_level": "medium",
     "nonbreaking_spaces": True,
+    "trailing_space": False,
+    "short_text_words": 0,
     "paste_mode": "clipboard",
     "history_persist": False,
+    "microphone": "",
+    "beep": False,
     "ollama_url": "http://127.0.0.1:11434",
     "ollama_model": "llama3.1:8b",
     "whisper_cpp": None,
@@ -56,8 +60,12 @@ class Settings:
     default_style: str = "neutral"
     cleanup_level: str = "medium"
     nonbreaking_spaces: bool = True
+    trailing_space: bool = False
+    short_text_words: int = 0
     paste_mode: str = "clipboard"
     history_persist: bool = False
+    microphone: str = ""
+    beep: bool = False
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.1:8b"
     whisper_cpp: str | None = None
@@ -85,8 +93,12 @@ class Settings:
             default_style=str(config.get("default_style", "neutral")),
             cleanup_level=str(config.get("cleanup_level", "medium")),
             nonbreaking_spaces=bool(config.get("nonbreaking_spaces", True)),
+            trailing_space=bool(config.get("trailing_space", False)),
+            short_text_words=positive_int(config.get("short_text_words")),
             paste_mode=get_env("PASTE_MODE") or str(config.get("paste_mode", "clipboard")),
             history_persist=bool(config.get("history_persist", False)),
+            microphone=get_env("MICROPHONE") or str(config.get("microphone", "") or ""),
+            beep=bool(config.get("beep", False)),
             ollama_url=get_env("OLLAMA_URL") or str(config.get("ollama_url", DEFAULT_CONFIG["ollama_url"])),
             ollama_model=get_env("OLLAMA_MODEL") or str(config.get("ollama_model", DEFAULT_CONFIG["ollama_model"])),
             whisper_cpp=whisper_cpp if whisper_cpp is not None else _optional_str(config.get("whisper_cpp")),
@@ -190,6 +202,14 @@ def _optional_str(value: object) -> str | None:
     if value in {None, ""}:
         return None
     return str(value)
+
+
+def positive_int(value: object) -> int:
+    """A count coming from a config file or a form; anything odd means "off"."""
+    try:
+        return max(0, int(value))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0
 
 
 def _string_dict(value: object) -> dict[str, str]:

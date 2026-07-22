@@ -50,6 +50,20 @@ class PolishOptions:
     replacements: dict[str, str] | None = None
     snippets: dict[str, str] | None = None
     nonbreaking_spaces: bool = True
+    trailing_space: bool = False
+    # Below this many words, leave the dictation alone: no leading capital, no
+    # final period. That is what a search field or a chat box wants. 0 disables.
+    short_text_words: int = 0
+
+
+def finalize(text: str, options: PolishOptions) -> str:
+    """Last touch shared by every polisher.
+
+    The trailing space is for dictating twice in a row into the same field: the
+    second sentence would otherwise land glued to the first one.
+    """
+    text = text.strip()
+    return f"{text} " if text and options.trailing_space else text
 
 
 class Polisher:
@@ -106,17 +120,21 @@ class HeuristicPolisher(Polisher):
         text = self._normalize_space(text)
         text = self._remove_fillers(text, language, options.cleanup_level)
         text = self._replace_spoken_punctuation(text)
+        # A handful of words is a search field or a chat box, not a sentence.
+        sentence = options.short_text_words <= 0 or len(text.split()) >= options.short_text_words
         text = self._space_punctuation(text, language, space)
-        text = self._capitalize_sentences(text, language)
+        if sentence:
+            text = self._capitalize_sentences(text, language)
         text = self._apply_replacements(text, options.replacements or {})
         text = self._apply_snippets(text, options.snippets or {})
-        text = self._finish_sentence(text, options.style)
+        if sentence:
+            text = self._finish_sentence(text, options.style)
         if language == "fr":
             # Last, so the quote and apostrophe characters cannot break the
             # word-boundary matching of replacements and snippets above.
             text = self._french_quotes(text, space)
             text = self._french_apostrophes(text)
-        return text.strip()
+        return finalize(text, options)
 
     def _normalize_space(self, text: str) -> str:
         text = text.replace("\r\n", "\n").replace("\r", "\n")
@@ -243,7 +261,7 @@ class OllamaPolisher(Polisher):
             polished = response.json().get("response", "").strip()
             if not polished:
                 raise PolishError("Ollama returned an empty response")
-            return self._strip_wrapping_quotes(polished)
+            return finalize(self._strip_wrapping_quotes(polished), options)
         except Exception:
             return self.fallback.polish(text, options)
 

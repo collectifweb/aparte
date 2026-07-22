@@ -72,7 +72,7 @@ def get_active_session() -> RecordingSession | None:
     return session
 
 
-def start_toggle_recording(sample_rate: int = 16000) -> RecordingSession:
+def start_toggle_recording(sample_rate: int = 16000, device: str | None = None) -> RecordingSession:
     if get_active_session():
         raise ToggleSessionError("Recording is already active.")
     executable = shutil.which("arecord")
@@ -83,6 +83,7 @@ def start_toggle_recording(sample_rate: int = 16000) -> RecordingSession:
     command = [
         executable,
         "-q",
+        *(["-D", device] if device else []),
         "-f",
         "S16_LE",
         "-r",

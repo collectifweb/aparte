@@ -172,6 +172,15 @@ class HistoryEndpointTest(unittest.TestCase):
         self.assertEqual(res["status"], int(HTTPStatus.FORBIDDEN))
 
 
+class MicrophoneEndpointTest(unittest.TestCase):
+    def test_the_settings_panel_gets_name_and_label_pairs(self):
+        devices = [{"name": "plughw:CARD=Mini,DEV=0", "label": "Razer Seiren Mini, USB Audio"}]
+        with mock.patch("aparte.desktop.list_microphones", return_value=devices):
+            res = make_request("GET", "/api/microphones")
+        self.assertEqual(res["status"], int(HTTPStatus.OK))
+        self.assertEqual(json.loads(res["body"])["devices"], devices)
+
+
 class ConfigEndpointTest(unittest.TestCase):
     def test_paste_mode_round_trips(self):
         """A field missing from EDITABLE_FIELDS is dropped in silence, both ways."""
@@ -183,6 +192,19 @@ class ConfigEndpointTest(unittest.TestCase):
 
                 self.assertEqual(res["status"], int(HTTPStatus.OK))
                 self.assertEqual(json.loads(make_request("GET", "/api/config")["body"])["paste_mode"], "terminal")
+
+    def test_short_text_words_lands_as_a_number(self):
+        """A <select> posts strings; the polisher compares it to a word count."""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            with mock.patch.dict(os.environ, {"APARTE_CONFIG": str(path), "MURMUR_CONFIG": ""}):
+                body = json.dumps({"short_text_words": "5", "microphone": "plughw:CARD=Mini,DEV=0"})
+                res = make_request("POST", "/api/config", body.encode("utf-8"))
+
+                self.assertEqual(res["status"], int(HTTPStatus.OK))
+                saved = json.loads(path.read_text(encoding="utf-8"))
+                self.assertEqual(saved["short_text_words"], 5)
+                self.assertEqual(saved["microphone"], "plughw:CARD=Mini,DEV=0")
 
     def test_nonbreaking_spaces_round_trips_as_a_boolean(self):
         """The settings form posts a checkbox; it must not land as the string "False"."""

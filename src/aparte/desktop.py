@@ -12,8 +12,9 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from . import history
+from .audio import list_microphones
 from .clipboard import copy_text, paste_text
-from .config import Settings, load_config, update_config
+from .config import Settings, load_config, positive_int, update_config
 from .diagnostics import collect_diagnostics
 from .polish import PolishOptions, build_polisher
 from .transcription import build_transcriber
@@ -49,8 +50,12 @@ EDITABLE_FIELDS = (
     "device",
     "polish_backend",
     "nonbreaking_spaces",
+    "trailing_space",
+    "short_text_words",
     "paste_mode",
     "history_persist",
+    "microphone",
+    "beep",
     "replacements",
     "snippets",
 )
@@ -166,6 +171,9 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                 active = current_settings()
                 self._send_json({"entries": history.entries(active.history_persist)})
                 return
+            if route == "/api/microphones":
+                self._send_json({"devices": list_microphones()})
+                return
             if route == "/api/update/check":
                 # Only reach the network when the user asks for it: opening the
                 # panel must not phone home on its own.
@@ -198,6 +206,8 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                             replacements=active.replacements or {},
                             snippets=active.snippets or {},
                             nonbreaking_spaces=active.nonbreaking_spaces,
+                            trailing_space=active.trailing_space,
+                            short_text_words=active.short_text_words,
                         ),
                     )
                     self._send_json({"text": output})
@@ -326,8 +336,10 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                         value = {str(k): str(v) for k, v in dict(value).items()} if value else {}
                     elif key == "language":
                         value = (str(value).strip() or None) if value is not None else None
-                    elif key in {"nonbreaking_spaces", "history_persist"}:
+                    elif key in {"nonbreaking_spaces", "history_persist", "trailing_space", "beep"}:
                         value = bool(value)
+                    elif key == "short_text_words":
+                        value = positive_int(value)
                     else:
                         value = str(value)
                     updates[key] = value
