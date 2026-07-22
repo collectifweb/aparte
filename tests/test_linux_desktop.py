@@ -1,4 +1,6 @@
 import os
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -49,6 +51,33 @@ class LinuxDesktopTest(unittest.TestCase):
                 self.assertEqual(uninstall_autostart_entry(), path)
                 self.assertFalse(path.exists())
                 self.assertIsNone(uninstall_autostart_entry())
+
+
+@unittest.skipUnless(shutil.which("desktop-file-validate"), "desktop-file-validate not installed")
+class DesktopEntrySpecTest(unittest.TestCase):
+    """Both entries must satisfy the freedesktop spec, not merely look right.
+
+    `Audio` without `AudioVideo` is an error the validator promises to make
+    fatal, and three main categories make the app show up three times in the
+    application menu.
+    """
+
+    def _validate(self, contents: str) -> str:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "aparte.desktop"
+            path.write_text(contents, encoding="utf-8")
+            result = subprocess.run(
+                ["desktop-file-validate", str(path)],
+                capture_output=True,
+                text=True,
+            )
+            return result.stdout + result.stderr
+
+    def test_the_launcher_entry_is_valid(self):
+        self.assertEqual(self._validate(build_desktop_entry()), "")
+
+    def test_the_autostart_entry_is_valid(self):
+        self.assertEqual(self._validate(build_autostart_entry()), "")
 
 
 class LegacyEntriesTest(unittest.TestCase):

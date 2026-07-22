@@ -5,6 +5,6 @@ Comment=Local-first Linux dictation with Whisper and smart formatting
 Exec=aparte desktop
 Icon=aparte
 Terminal=false
-Categories=Utility;Audio;Accessibility;
+Categories=Utility;Accessibility;
 StartupNotify=true
 

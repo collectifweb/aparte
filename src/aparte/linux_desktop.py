@@ -73,7 +73,7 @@ def build_desktop_entry(command: list[str] | None = None) -> str:
             f"Exec={desktop_exec(command)}",
             f"Icon={ICON_NAME}",
             "Terminal=false",
-            "Categories=Utility;Audio;Accessibility;",
+            "Categories=Utility;Accessibility;",
             "StartupNotify=true",
             "",
         ]
@@ -124,7 +124,7 @@ def build_autostart_entry(command: list[str] | None = None) -> str:
             "Comment=Start the Aparté desktop server at login",
             f"Exec={desktop_exec(command)}",
             "Terminal=false",
-            "Categories=Utility;Audio;Accessibility;",
+            "Categories=Utility;Accessibility;",
             "X-GNOME-Autostart-enabled=true",
             "StartupNotify=false",
             "",
