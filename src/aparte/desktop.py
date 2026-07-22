@@ -118,6 +118,9 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
             self.send_error(HTTPStatus.NOT_FOUND)
 
         def do_POST(self) -> None:
+            if not self._origin_is_ours():
+                self.send_error(HTTPStatus.FORBIDDEN)
+                return
             try:
                 if self.path == "/api/config":
                     self._handle_save_config()
@@ -161,6 +164,18 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
 
         def log_message(self, format: str, *args: object) -> None:
             return
+
+        def _origin_is_ours(self) -> bool:
+            """Reject POSTs sent by a page that isn't the one we serve.
+
+            The server only listens on the loopback address, so nothing on the
+            network can reach it — but any web page open in the browser can post
+            here blindly, and /api/paste types text into the focused window.
+            Browsers send Origin on every POST, and the page we serve always
+            names our own address; command-line clients send none at all.
+            """
+            origin = self.headers.get("Origin")
+            return origin is None or origin == f"http://{self.headers.get('Host', '')}"
 
         def _read_json(self) -> dict[str, object]:
             length = int(self.headers.get("Content-Length", "0"))

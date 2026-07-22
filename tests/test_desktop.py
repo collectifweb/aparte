@@ -67,6 +67,35 @@ class DoctorEndpointTest(unittest.TestCase):
         self.assertIn("ready", data["summary"])
 
 
+class OriginCheckTest(unittest.TestCase):
+    """A page served from anywhere else must not be able to drive the server."""
+
+    def _post_config(self, headers):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            with mock.patch.dict(os.environ, {"APARTE_CONFIG": str(path), "MURMUR_CONFIG": ""}):
+                body = json.dumps({"default_style": "formal"}).encode("utf-8")
+                return make_request("POST", "/api/config", body, headers)
+
+    def test_a_foreign_origin_is_refused(self):
+        res = make_request(
+            "POST",
+            "/api/paste",
+            b'{"text": "coucou"}',
+            {"Host": "127.0.0.1:8765", "Origin": "https://exemple.invalid"},
+        )
+        self.assertEqual(res["status"], int(HTTPStatus.FORBIDDEN))
+
+    def test_our_own_page_is_accepted(self):
+        res = self._post_config({"Host": "127.0.0.1:8765", "Origin": "http://127.0.0.1:8765"})
+        self.assertEqual(res["status"], int(HTTPStatus.OK))
+
+    def test_a_request_without_origin_is_accepted(self):
+        """curl and the CLI send no Origin header at all."""
+        res = self._post_config({"Host": "127.0.0.1:8765"})
+        self.assertEqual(res["status"], int(HTTPStatus.OK))
+
+
 class ConfigEndpointTest(unittest.TestCase):
     def test_nonbreaking_spaces_round_trips_as_a_boolean(self):
         """The settings form posts a checkbox; it must not land as the string "False"."""
