@@ -372,6 +372,9 @@ textarea.kv {
 /* Dictées récentes — la zone réservée sous la barre d'actions.
    Elle garde sa hauteur même vide : sinon la page saute à chaque dictée. */
 .recent {
+  /* Le plan de travail est centré : sans largeur, la zone se réduit à son
+     contenu et son filet flotte au milieu, désaligné de l'éditeur. */
+  width: 100%;
   margin-top: var(--sp-5);
   padding-top: var(--sp-3);
   border-top: 1px solid var(--line);
@@ -417,6 +420,10 @@ textarea.kv {
 
 @media (max-width: 560px) {
   .result-bar { flex-direction: column; align-items: stretch; }
+  /* Sans ça, les deux boutons de la barre supérieure débordent et c'est toute
+     la page qui défile latéralement. */
+  .topbar { flex-wrap: wrap; gap: var(--sp-2); padding-inline: var(--sp-4); }
+  .topbar-actions { flex-wrap: wrap; }
 }
 
 /* Mouvement réduit : les états restent lisibles sans animation. */

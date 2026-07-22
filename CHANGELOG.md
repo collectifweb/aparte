@@ -132,6 +132,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The recent-dictations panel lines up with the editor again.** The work area
+  is centred, and the panel had no width of its own, so it shrank to fit its
+  content: after two short dictations it sat as a narrow strip floating under the
+  action bar, its rule a stub instead of spanning the column.
+- **No more sideways scrolling in a narrow window.** Below 560 px the top bar's
+  two buttons pushed past the viewport; it now wraps onto a second row.
 - **Launching Aparté while it is already running now opens the running one**
   instead of starting a second server. The menu entry and the autostart entry
   run the same command, so clicking the launcher after login used to start a
