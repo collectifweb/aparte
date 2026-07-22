@@ -54,14 +54,27 @@ async function postJson(path, payload) {
   return res.json();
 }
 
-// Contrôles que le traitement rend inopérants : le JS ignorait déjà les clics,
-// mais rien ne le montrait à l'écran.
-const BUSY_CONTROLS = ["#polish", "#copy", "#paste", "#pick-file"];
+// Les trois actions travaillent sur le contenu de l'éditeur : sur un éditeur
+// vide elles ne font rien tout en annonçant qu'elles ont réussi, et « Copier »
+// va plus loin — il remplace le presse-papiers par du vide. Elles suivent donc
+// l'éditeur autant que le traitement. « Importer audio » reste actif : c'est
+// lui qui remplit l'éditeur.
+const TEXT_ACTIONS = ["#polish", "#copy", "#paste"];
+
+function syncActionState() {
+  const busy = recordState === "processing";
+  const empty = !editor.value.trim();
+  TEXT_ACTIONS.forEach((sel) => { $(sel).disabled = busy || empty; });
+  $("#pick-file").disabled = busy;
+}
+
+// Texte tapé ou collé à la main dans l'éditeur : les actions se rallument.
+editor.addEventListener("input", syncActionState);
 
 function setRecordState(state) {
   recordState = state;
   recordBtn.classList.remove("recording", "processing");
-  BUSY_CONTROLS.forEach((sel) => { $(sel).disabled = state === "processing"; });
+  syncActionState();
   const label = recordBtn.querySelector(".record-label");
   if (state === "recording") {
     recordBtn.classList.add("recording");
@@ -103,6 +116,7 @@ async function polishEditor() {
   status(t("st.polishing"));
   const data = await postJson("/api/polish", { text: editor.value });
   editor.value = data.text;
+  syncActionState();
   status(t("st.polished"));
 }
 
@@ -331,6 +345,9 @@ async function loadMicrophones(selected) {
     sel.appendChild(missing);
   }
   sel.value = keep;
+  // Aucune entrée : la liste se réduirait en silence à « micro par défaut »,
+  // alors que le raccourci global, lui, n'a plus de quoi enregistrer.
+  $("#microphone-empty").hidden = devices.length > 0;
 }
 
 $("#refresh-microphones").addEventListener("click", () => loadMicrophones());
@@ -376,7 +393,13 @@ async function loadHealth() {
   body.innerHTML = '<p class="muted">' + t("diag.loading") + "</p>";
   let data;
   try { data = await (await fetch("/api/doctor")).json(); }
-  catch (err) { body.innerHTML = '<p class="muted">' + escapeHtml(String(err)) + "</p>"; return; }
+  catch (err) {
+    // Le tiroir garde son bouton « Rafraîchir » : la phrase y renvoie plutôt
+    // que de laisser l'utilisateur devant une erreur JavaScript brute.
+    body.innerHTML = '<p class="muted">' + escapeHtml(t("diag.error")) + "</p>"
+      + '<p class="diag-detail">' + escapeHtml(String(err)) + "</p>";
+    return;
+  }
 
   const s = data.summary;
   updateHealthDot(s);

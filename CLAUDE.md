@@ -110,6 +110,11 @@ configuré :
   compris les `aria-label` et les `title` (via `data-i18n-aria` /
   `data-i18n-title`). Un libellé écrit en dur dans `index.html` est un bogue :
   un lecteur d'écran configuré en français annoncerait de l'anglais.
+- Un contrôle désactivé change de **teinte** (`--ink-disabled`), jamais
+  d'opacité. `opacity` mélange le libellé au fond de la page et non à celui du
+  contrôle : en thème clair, l'encre à 0,45 tombait à 1,69:1. Ça se voyait
+  d'autant moins que l'état ne durait qu'une transcription — il est maintenant
+  permanent tant que l'éditeur est vide.
 - Le style de focus est **global et unique** (`:focus-visible` dans `app.css`).
   Ne pas le redéfinir par composant, et ne jamais y remettre un `border-radius` :
   ça déforme l'éditeur le temps du focus, l'outline suit déjà le rayon natif.

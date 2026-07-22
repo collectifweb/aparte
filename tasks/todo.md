@@ -267,7 +267,31 @@ Passe de vérification demandée après le Lot 4, mesurée au navigateur sans t�
       passer trois mots. Les remplacements et snippets s'appliquent quand même.
 - [x] Nombres en toutes lettres → chiffres, au-delà d'un seuil réglable, en français
       — voir le plan ci-dessous, livré avec les heures et les pourcentages
-- [ ] États vides actionnables et infobulles explicatives dans l'interface
+- [x] États vides actionnables et infobulles explicatives dans l'interface
+      - [x] **Éditeur vide → Polir, Copier et Insérer s'éteignent.** Elles
+            annonçaient leur succès sans rien faire, et « Copier » allait plus
+            loin : il remplaçait le presse-papiers par du vide. « Importer
+            audio » reste active, c'est elle qui remplit l'éditeur.
+      - [x] **« Coller » devient « Insérer ».** Le bouton n'insère pas dans
+            l'éditeur, il écrit dans l'application de devant — ce que les
+            Réglages appelaient déjà « Insertion ». Les messages d'état suivent
+            (« Insertion… », « Inséré. »).
+      - [x] **Infobulles** (`title` traduit) sur les quatre puces, le sélecteur
+            de modèle et « Polir auto ».
+      - [x] **Aucun micro détecté → une ligne le dit** sous le champ, en encre
+            pleine, et renvoie vers Configuration.
+      - [x] **Diagnostic qui n'a pas répondu** : une phrase traduite au lieu de
+            l'erreur JavaScript brute, l'erreur restant affichée en dessous.
+      - [x] **L'état désactivé passe de l'opacité à une teinte calculée.**
+            `opacity: 0.45` mélangeait le libellé au blanc de la page :
+            **1,69:1 en thème clair**, illisible, et il aurait fallu monter à
+            0,85 pour repasser le seuil — donc ne plus rien éteindre. Nouveau
+            jeton `ink-disabled` (4,63:1 clair, 4,56:1 sombre). Le défaut
+            existait déjà mais ne durait que le temps d'une transcription ;
+            c'est maintenant l'état de repos de la page. Un bouton primaire
+            désactivé rend aussi son aplat carmin.
+      - Pas touché : l'état vide du panneau des dictées, qui enseigne déjà le
+        raccourci global et la mention « rien ne sort de la machine ».
 
 ### Plan — les nombres en français
 

@@ -44,17 +44,17 @@
       <textarea id="editor" spellcheck="true" data-i18n-placeholder="editor.placeholder" placeholder="Ta dictée apparaîtra ici. Tu peux aussi coller ou taper du texte à polir."></textarea>
       <div class="result-bar">
         <div class="result-actions">
-          <button id="polish" class="chip" data-i18n="act.polish">Polir</button>
-          <button id="copy" class="chip" data-i18n="act.copy">Copier</button>
-          <button id="paste" class="chip" data-i18n="act.paste">Coller</button>
-          <button id="pick-file" class="chip ghost" data-i18n="act.import">Importer audio</button>
+          <button id="polish" class="chip" data-i18n="act.polish" data-i18n-title="act.polish_help">Polir</button>
+          <button id="copy" class="chip" data-i18n="act.copy" data-i18n-title="act.copy_help">Copier</button>
+          <button id="paste" class="chip" data-i18n="act.insert" data-i18n-title="act.insert_help">Insérer</button>
+          <button id="pick-file" class="chip ghost" data-i18n="act.import" data-i18n-title="act.import_help">Importer audio</button>
           <input id="file" type="file" accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg" hidden>
         </div>
         <div class="result-opts">
-          <label class="inline"><span data-i18n="act.model">Modèle</span>
+          <label class="inline" data-i18n-title="act.model_help"><span data-i18n="act.model">Modèle</span>
             <select id="model"></select>
           </label>
-          <label class="inline"><input id="autoPolish" type="checkbox" checked> <span data-i18n="act.autopolish">Polir auto</span></label>
+          <label class="inline" data-i18n-title="act.autopolish_help"><input id="autoPolish" type="checkbox" checked> <span data-i18n="act.autopolish">Polir auto</span></label>
         </div>
       </div>
     </section>
@@ -81,6 +81,7 @@
               <select id="set-microphone"></select>
               <button class="btn small" type="button" id="refresh-microphones" data-i18n="set.microphone_refresh">Actualiser</button>
             </div>
+            <small id="microphone-empty" class="field-empty" data-i18n="set.microphone_none" hidden>Aucune entrée détectée. Le bouton Parler fonctionne quand même, le raccourci global non. Ouvre Configuration pour voir ce qui manque.</small>
             <small data-i18n="set.microphone_help">S'applique au raccourci global et au terminal. Le bouton Parler passe par le micro choisi dans le navigateur.</small>
           </div>
           <label class="field">

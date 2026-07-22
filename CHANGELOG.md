@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The action buttons explain themselves, and switch off when they have
+  nothing to work on.** Polish, Copy and Insert are disabled while the editor
+  is empty; each button, the model picker and Auto-polish carry a translated
+  tooltip. When no microphone is detected, Settings says so instead of quietly
+  falling back to "system default". A diagnostics panel that fails to load now
+  says so in plain language rather than showing a raw JavaScript error.
+
 - **Numbers dictated in words come out as digits, in French** (`numbers_from`,
   threshold 10 by default — the French rule keeps everything below ten in
   words). Whisper already writes digits about half the time; this makes the
@@ -101,6 +108,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **"Paste" is now called "Insert".** The button never pasted into the editor —
+  it types the text into whichever application was in front, which is what
+  Settings already called "Insertion". Status messages follow.
+- **A disabled control changes colour instead of fading.** `opacity` blended the
+  label into the page background rather than the control's own: in the light
+  theme a disabled label sat at **1.69:1**, and reaching 4.5:1 would have taken
+  an opacity so high that nothing looked disabled any more. A new
+  `ink-disabled` token holds 4.63:1 in light and 4.56:1 in dark. A disabled
+  primary button also gives up its carmine fill.
+
 - **The desktop UI was redesigned around one idea: the only saturated thing on
   screen means the microphone is open.** The teal-to-indigo gradient is gone
   everywhere, including the logo. At rest the Talk button is a solid ink disc; it
@@ -137,6 +154,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   interleave with the text or scatter it. In a terminal, paste with Ctrl+Shift+V.
 
 ### Fixed
+
+- **Copy on an empty editor no longer wipes the clipboard.** It sent the empty
+  string to the system clipboard and reported "Copied." — as did Insert and
+  Polish, each announcing a success it had not performed. The three buttons are
+  now disabled until there is text.
 
 - **Heuristic polisher no longer mangles words that contain a spoken-punctuation
   keyword**: "commande" stayed ", nde", "colonne" became ": ne", etc. Spoken

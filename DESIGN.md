@@ -14,6 +14,8 @@ colors:
   ink-dark: "oklch(0.955 0.005 15)"
   ink-soft-light: "oklch(0.455 0.016 15)"
   ink-soft-dark: "oklch(0.742 0.014 15)"
+  ink-disabled-light: "oklch(0.550 0.014 15)"
+  ink-disabled-dark: "oklch(0.620 0.014 15)"
   brand-light: "oklch(0.520 0.185 5)"
   brand-dark: "oklch(0.700 0.160 5)"
   brand-fill: "oklch(0.520 0.185 5)"
@@ -220,6 +222,10 @@ couleur de marque, trois couleurs d'état. Aucun dégradé nulle part.
   `oklch(0.742 0.014 15)`) : textes d'aide, légendes, en-têtes de groupe,
   placeholder, boutons fantômes au repos. Jamais sous 6,3:1, y compris à 12 px
   sur les blocs en creux.
+- **Encre désactivée** (`ink-disabled`, clair `oklch(0.550 0.014 15)` / sombre
+  `oklch(0.620 0.014 15)`) : le libellé d'un contrôle inactif, et rien d'autre.
+  4,63:1 en clair, 4,56:1 en sombre — au-dessus du seuil, donc lisible, et
+  franchement en dessous de l'encre atténuée (7:1), donc l'état se voit.
 - **Fond** (`bg`, blanc pur en clair, `oklch(0.190 0.010 15)` en sombre) : la page.
   Le blanc est un vrai blanc, sans chaleur cachée.
 - **Surface** (`surface`) : barre supérieure, tiroirs, éditeur, puces, champs.
@@ -253,6 +259,13 @@ pictogramme passe du micro au carré d'arrêt, le libellé passe de « Parler »
 « Arrêter », l'anneau se met à pulser. Toute évolution de cet état conserve au
 moins deux de ces trois signaux non chromatiques. Même règle pour la pastille de
 santé, doublée d'un texte lu par les lecteurs d'écran.
+
+**La règle de l'état éteint.** Un contrôle désactivé change de teinte, jamais
+d'opacité. `opacity` mélange le libellé au fond de la **page**, pas à celui du
+contrôle : en thème clair, une encre à 0,45 tombe à 1,69:1, illisible, et il
+faudrait monter à 0,85 pour repasser le seuil — c'est-à-dire ne plus rien
+éteindre du tout. `ink-disabled` fait les deux à la fois. Corollaire : un bouton
+primaire désactivé rend son aplat carmin et redevient une surface neutre.
 
 **La règle du calcul.** Aucune couleur n'entre dans le système sans que son
 contraste ait été calculé contre les fonds sur lesquels elle sera posée. Le seuil
@@ -367,12 +380,20 @@ Le seul élément mémorable du système, et le seul autorisé à l'être.
 - **Style :** fond surface, filet 1 px, rayon 10 px, `8px 16px`, texte de 14 px.
 - **Variante fantôme :** texte en encre atténuée, pour les actions secondaires.
 - **Survol :** fond en creux, seulement si la puce n'est pas désactivée.
-- **Désactivé :** opacité 0,45 et curseur `not-allowed`, pendant le traitement.
+- **Désactivé :** libellé en `ink-disabled`, curseur `not-allowed`, pas de
+  survol. Deux situations, et la seconde est la plus fréquente : pendant le
+  traitement, et tant que l'éditeur est vide — Polir, Copier et Insérer n'ont
+  alors rien sur quoi travailler. « Importer audio » reste active : c'est elle
+  qui remplit l'éditeur.
+- **Infobulle :** chaque puce porte un `title` traduit qui dit ce qu'elle fait,
+  en particulier « Insérer », dont l'effet — écrire dans l'application de
+  devant — ne se devine pas depuis le libellé.
 
 ### Boutons (`.btn`, `.ghost-btn`)
 
 - **Primaire :** aplat carmin, texte blanc 600, rayon 10 px. Un seul par tiroir.
-  Au survol, `brightness(1.08)`.
+  Au survol, `brightness(1.08)`. Désactivé, il perd son aplat pour le creux :
+  un carmin plein sur un contrôle inactif garderait sa force d'appel.
 - **Fantôme (tiroir) :** fond surface, texte atténué, même géométrie.
 - **Fantôme (barre supérieure) :** fond transparent, filet 1 px, `7px 12px`,
   pictogramme de 16 px ou pastille d'état de 9 px. Au survol, le texte passe en
@@ -381,13 +402,18 @@ Le seul élément mémorable du système, et le seul autorisé à l'être.
 ### Champs (`#editor`, `select`, `textarea.kv`)
 
 - **Éditeur :** fond surface, filet 1 px, rayon 14 px, `16px 20px`, sérif 18 px
-  interligne 1,65, hauteur `min(38vh, 360px)`, redimensionnable verticalement,
+  interligne 1,65, hauteur `min(38vh, 300px)`, redimensionnable verticalement,
   sans ombre. Le placeholder est explicitement en encre atténuée, jamais laissé
   au gris par défaut du navigateur.
 - **Zones de correspondance (`.kv`) :** monospace 13 px, 96 px de haut minimum.
 - **Sélecteurs et cases à cocher :** natifs, avec `accent-color` en carmin. La
   flèche reste celle du système — habiller un contrôle standard serait réinventer
   une affordance que l'utilisateur connaît déjà.
+- **État vide d'un champ (`.field-empty`) :** quand un champ n'a rien à proposer
+  — aucune entrée micro détectée, par exemple — une ligne de 12 px en **encre
+  pleine** se glisse au-dessus du texte d'aide permanent, qui reste en encre
+  atténuée. C'est ce qui l'en détache, sans couleur : la couleur est réservée
+  aux états qui viennent avec un pictogramme.
 
 ### Tiroirs
 
@@ -488,6 +514,12 @@ d'enregistrement reste affiché plein au lieu de pulser.
   la couleur qualifie un état et vient alors avec un pictogramme.
 - **Don't** utiliser `brand-dark` comme aplat : c'est une valeur éclaircie pour du
   texte sur fond sombre, du blanc dessus tombe sous 4,5:1.
+- **Don't** éteindre un contrôle avec `opacity`. Le libellé se mélange au fond de
+  la page et tombe sous le seuil ; `ink-disabled` existe pour ça. Voir « La règle
+  de l'état éteint ».
+- **Don't** laisser une action cliquable quand elle n'a rien sur quoi agir. Une
+  puce qui répond « Copié. » sur un éditeur vide ment — et celle-là vidait le
+  presse-papiers en le disant.
 - **Don't** laisser un placeholder au style par défaut du navigateur.
 - **Don't** mettre d'ombre portée sur un champ de saisie.
 - **Don't** empiler les cartes. Le système n'en a aucune : un filet de 1 px et un
