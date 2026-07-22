@@ -138,6 +138,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   action bar, its rule a stub instead of spanning the column.
 - **No more sideways scrolling in a narrow window.** Below 560 px the top bar's
   two buttons pushed past the viewport; it now wraps onto a second row.
+- **The whole app fits on one screen again.** It needed a 984 px viewport — right
+  at the edge of what a 1080p screen leaves once the browser's own bars are
+  counted, so the recent-dictations panel was usually cut off. Two levers, no
+  restructuring: the bottom margin drops from 48 px to 24, and the editor's
+  height ceiling from 360 px to 300. It now fits from 900 px, and the editor is
+  still resizable by hand for a long text.
 - **Launching Aparté while it is already running now opens the running one**
   instead of starting a second server. The menu entry and the autostart entry
   run the same command, so clicking the launcher after login used to start a

@@ -164,7 +164,9 @@ body {
   flex: 1;
   width: min(680px, calc(100vw - var(--sp-5) * 2));
   margin: 0 auto;
-  padding: var(--sp-8) 0 var(--sp-12);
+  /* Marge basse courte : le panneau des dictées a déjà son propre espace, et
+     ces pixels-là décidaient à eux seuls si la page tenait sur un écran 1080p. */
+  padding: var(--sp-8) 0 var(--sp-6);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -227,7 +229,10 @@ body {
 .result { width: 100%; margin-top: var(--sp-1); }
 #editor {
   width: 100%;
-  min-height: min(38vh, 360px);
+  /* Plafond volontairement bas : au-delà, l'éditeur pousse la barre d'actions
+     et le panneau des dictées sous la ligne de flottaison. Il reste
+     redimensionnable à la main pour un long texte. */
+  min-height: min(38vh, 300px);
   resize: vertical;
   border: 1px solid var(--line);
   background: var(--surface);

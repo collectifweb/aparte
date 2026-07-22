@@ -152,7 +152,15 @@ class OriginCheckTest(unittest.TestCase):
 class HistoryEndpointTest(unittest.TestCase):
     def test_a_dictation_posted_by_the_browser_comes_back_in_the_list(self):
         with tempfile.TemporaryDirectory() as runtime:
-            with mock.patch.dict(os.environ, {"APARTE_RUNTIME_DIR": runtime}):
+            # Le APARTE_CONFIG est indispensable : sans lui le serveur lit la
+            # vraie config, et si history_persist y est vrai, le test écrit dans
+            # l'historique réel de l'utilisateur au lieu du dossier temporaire.
+            environment = {
+                "APARTE_RUNTIME_DIR": runtime,
+                "APARTE_CONFIG": str(Path(runtime) / "config.json"),
+                "MURMUR_CONFIG": "",
+            }
+            with mock.patch.dict(os.environ, environment):
                 body = json.dumps({"text": "une dictée"}).encode("utf-8")
                 posted = make_request("POST", "/api/history", body)
 
