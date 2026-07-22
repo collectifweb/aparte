@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A documented design system.** [PRODUCT.md](PRODUCT.md) carries the product
+  direction (users, promises, personality, anti-references, the accessibility
+  commitment) and [DESIGN.md](DESIGN.md) the visual system (OKLCH tokens for both
+  themes, scales, reference components, named rules). Read them before touching
+  anything visible.
+- **Keyboard and motion accessibility in the desktop UI**: a single visible focus
+  ring on every control, `Esc` to close a panel, focus trapped inside an open
+  panel and returned to the button that opened it, and a
+  `prefers-reduced-motion` fallback for all four animations.
+- **A disabled state on the action chips** while a transcription is being
+  processed. The clicks were already ignored; now it shows.
+
 - **French typography in the heuristic polisher**: a non-breaking space before
   `? ! ;` and `:` (skipping `https://` and `14:30`), `«  »` for paired straight
   quotes, and a typographic apostrophe. Standalone `i` is no longer upper-cased
@@ -21,6 +33,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   spelled out, used when the dictation is in French.
 
 ### Changed
+
+- **The desktop UI was redesigned around one idea: the only saturated thing on
+  screen means the microphone is open.** The teal-to-indigo gradient is gone
+  everywhere, including the logo. At rest the Talk button is a solid ink disc; it
+  floods carmine while recording. Every text/background pair now meets WCAG AA
+  (4.5:1), computed rather than eyeballed — the old “Talk” label sat at 2.49:1 on
+  the teal end of the gradient, and status messages at 4.17:1.
+- **The transcript is now set in a serif face** (a system stack, no downloaded
+  font), so the French typography Aparté produces — `« »`, curly apostrophes, the
+  space before `;` and `?` — is actually visible. The UI chrome stays in the
+  system sans-serif.
+- **The interface has real scales** for spacing, radii, type sizes, z-index and
+  motion, instead of one-off values.
+- **`aria-label`s are translated.** They were hard-coded in English and ignored
+  the language switch, so a French screen reader announced an English interface.
+  The health dot in the top bar now carries a text equivalent instead of relying
+  on colour alone.
+- **The README leads with the former name**, so anyone who remembers Murmur lands
+  on Aparté and recognises it. Screenshots are refreshed.
 
 - **Renamed from Murmur to Aparté**, to avoid confusion with the unrelated
   [Murmure](https://github.com/Kieirra/murmure) project. The Python package,

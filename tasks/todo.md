@@ -30,9 +30,13 @@ moteur Parakeet TDT 0.6B v3 en ONNX int8, processeur seulement).
 - [x] Tests verts (66)
 - [x] Note dans le README : projet indépendant, sans lien avec Murmure (Kieirra)
       ni avec Wispr Flow, + section « Upgrading from Murmur »
-- [ ] **À faire par Alexandre** : renommer le dépôt GitHub `collectifweb/murmur`
-      → `collectifweb/aparte` (GitHub laisse une redirection), et le dossier
-      local `Apps-coding/Murmur` si voulu
+- [x] Dépôt GitHub renommé en `collectifweb/aparte` par Alexandre, et l'adresse
+      du remote local mise à jour (le remote s'appelle `Murmur`, pas `origin`)
+- [ ] Optionnel : renommer le dossier local `Apps-coding/Murmur`
+
+**Livré dans le commit `c924e57`** (renommage + socle français réunis : le sed du
+renommage a touché les mêmes blocs que la typographie, un commit « renommage
+seul » n'aurait pas tourné).
 
 ---
 
@@ -113,6 +117,22 @@ colle du texte dans l'application active. Ajouter une route qui lance
 - [ ] Tests : dépôt sale refusé, remote non standard, absence de git
 
 ## Lot 3 — Le programme résident
+
+**Débloqué** : l'initialisation `/impeccable` a livré `PRODUCT.md` (159 lignes)
+et `DESIGN.md` (486 lignes : couleurs, typographie, élévation, composants, do's
+and don'ts), plus un dossier `.impeccable/`. Les trois sont encore hors de git.
+Les lire avant de coder quoi que ce soit de visible dans ce lot — icône de barre
+système, panneau d'historique, carte de mise à jour.
+
+Ce que le Lot D a déjà tranché pour ce lot :
+
+- L'**icône de barre système** a ses deux états dans `DESIGN.md` : encre au
+  repos, carmin quand le micro est ouvert, comme le disque de l'écran principal.
+  `logo.svg` est désormais un aplat, donc lisible en 16 px.
+- Le **panneau d'historique** va dans la zone vide sous l'éditeur (D4.6, laissée
+  telle quelle exprès). C'est une **liste** — filet de 1 px et fond en creux —
+  pas une grille de cartes.
+- La **carte de mise à jour** (Lot 2bis) se place au-dessus du plan `110`.
 
 Le serveur d'autostart tourne déjà en permanence : il ne manque que l'icône.
 
@@ -203,3 +223,265 @@ automatiquement et n'a pas su les réappliquer. Le renommage a été refait à z
 sur le code à jour plutôt que de résoudre les conflits — l'amont avait supprimé
 `hotkey_guidance()` et une résolution manuelle l'aurait réintroduit. L'ancien
 état reste dans `git stash` (`stash@{0}`), à supprimer une fois rassuré.
+
+---
+
+# Lot D — Design
+
+**Statut : validé et appliqué le 22/07/2026.** 83 tests au vert, rendu vérifié
+au navigateur dans les deux thèmes. Reste ouvert : **D4.6**, la zone vide sous
+l'éditeur, documentée en **D6 — La zone réservée**. Elle appartient au Lot 3 et
+c'est là que se posera le panneau d'historique.
+
+Contexte stratégique dans `PRODUCT.md`, système visuel dans `DESIGN.md`
+(régénéré sur le code livré). Toutes les valeurs ci-dessous sont calculées, pas
+estimées à l'œil.
+
+## D1 — Contrastes (le seul engagement d'accessibilité pris)
+
+Mesures sur l'interface livrée :
+
+| Élément | Actuel | Seuil | Verdict |
+|---|---|---|---|
+| « Parler » blanc sur le turquoise du dégradé | **2,49:1** | 4,5:1 | échec |
+| Texte d'état (`#6366f1` sur `#f6f7f9`) | **4,17:1** | 4,5:1 | échec |
+| Texte blanc sur bouton primaire indigo | **4,47:1** | 4,5:1 | échec |
+| Bouton « Copier » du diagnostic (12 px blanc sur indigo) | **4,47:1** | 4,5:1 | échec |
+| `--muted` sur `--panel-2`, thème clair | **4,35:1** | 4,5:1 | échec |
+| `--muted` sur `--bg`, thème clair | **4,51:1** | 4,5:1 | passe d'un cheveu |
+| Placeholder de l'éditeur | style navigateur | 4,5:1 | non défini |
+
+- [x] D1.1 — Libellé blanc sur l'aplat carmin : **6,11:1** (était 2,49:1).
+- [x] D1.2 — Messages d'état en encre (16,7:1). La classe `.status.error` porte
+      les erreurs en `--danger`, qui n'était jamais utilisé pour ça.
+- [x] D1.3 — Encre atténuée jamais sous **6,3:1**, y compris à 12 px sur les
+      blocs en creux (était 4,35:1).
+- [x] D1.4 — `::placeholder` explicite en `--ink-soft`, `opacity: 1`.
+
+## D2 — Palette
+
+Le dégradé turquoise → indigo est l'anti-référence n° 1 de `PRODUCT.md`, et
+`#6366f1` / `#14b8a6` sont les couleurs par défaut de Tailwind.
+
+**Direction : « L'aparté ».** La scène (surface calme), le projecteur (une seule
+couleur saturée, qui n'apparaît que quand le micro est ouvert), le programme
+imprimé (le texte traité comme le produit fini).
+
+Le bouton d'enregistrement passe de « dégradé au repos → rouge en cours » à
+**« encre au repos → carmin en cours »**. Le repos devient calme, l'état actif
+devient le seul aplat saturé de l'écran. C'est le principe n° 2 de `PRODUCT.md`
+rendu littéral.
+
+### Thème clair
+
+| Rôle | OKLCH | sRGB | Emploi |
+|---|---|---|---|
+| `bg` | `oklch(1 0 0)` | `#ffffff` | fond de page, blanc pur |
+| `surface` | `oklch(0.982 0.004 15)` | `#fcf8f8` | tiroirs, barre supérieure |
+| `surface-2` | `oklch(0.960 0.006 15)` | `#f6f0f0` | blocs en creux, survols |
+| `line` | `oklch(0.902 0.007 15)` | `#e3dddd` | filets 1 px |
+| `ink` | `oklch(0.235 0.014 15)` | `#241b1c` | texte principal, bouton au repos |
+| `ink-soft` | `oklch(0.455 0.016 15)` | `#5f5354` | textes secondaires |
+| `brand` | `oklch(0.520 0.185 5)` | `#b8245b` | carmin : état actif, focus, liens |
+| `ok` | `oklch(0.500 0.100 155)` | `#2a7449` | diagnostic conforme |
+| `warn` | `oklch(0.550 0.110 75)` | `#976712` | diagnostic partiel |
+| `danger` | `oklch(0.480 0.170 28)` | `#a9231e` | destructif (historique à venir) |
+
+### Thème sombre
+
+| Rôle | OKLCH | sRGB |
+|---|---|---|
+| `bg` | `oklch(0.190 0.010 15)` | `#181212` |
+| `surface` | `oklch(0.235 0.011 15)` | `#231c1c` |
+| `surface-2` | `oklch(0.282 0.012 15)` | `#2f2727` |
+| `line` | `oklch(0.335 0.014 15)` | `#3e3434` |
+| `ink` | `oklch(0.955 0.005 15)` | `#f3efef` |
+| `ink-soft` | `oklch(0.742 0.014 15)` | `#b4a8a8` |
+| `brand-ink` | `oklch(0.700 0.160 5)` | `#ee6e91` (carmin **en texte** seulement) |
+| `ok` | `oklch(0.760 0.130 155)` | `#65c98c` |
+| `warn` | `oklch(0.800 0.120 75)` | `#ebb25f` |
+| `danger` | `oklch(0.660 0.170 28)` | `#e86154` |
+
+**L'aplat carmin `#b8245b` est le même dans les deux thèmes**, avec du texte
+blanc à 6,11:1. Le `brand-ink` sombre ne sert qu'au texte, jamais en aplat.
+
+Tous les couples vérifiés, tous dans le gamut sRGB, tous ≥ 4,5:1 :
+
+```
+ink / bg              16,75    ink sombre / bg sombre        16,21
+ink-soft / bg          7,34    ink-soft sombre / bg sombre    8,03
+ink-soft / surface-2   6,52    ink-soft sombre / surface-2    6,32
+brand / bg             6,11    brand-ink / bg sombre          6,41
+brand / surface-2      5,42    brand-ink / surface-2 sombre   5,04
+blanc / brand (aplat)  6,11    ok 5,71 · warn 4,95 · danger 7,14
+```
+
+- [x] D2.1 — Les deux thèmes posés en OKLCH dans `:root`.
+- [x] D2.2 — Bouton d'enregistrement : encre au repos, carmin en cours.
+      Le repos du thème sombre est remonté à `oklch(0.510 0.016 15)` : à
+      `0.400` le disque ne se détachait plus du fond (1,99:1, il en faut 3).
+- [x] D2.3 — `--accent-grad` retiré. Plus aucun dégradé dans le projet.
+- [x] D2.4 — `logo.svg` en aplat carmin, dégradé abandonné partout.
+
+**Tranché :** le dégradé disparaît aussi du logo. Un logo à deux états lisible
+en 16 px dans une barre système ne peut pas reposer sur un dégradé.
+
+## D3 — Échelles
+
+Aujourd'hui : 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 30, 36, 48 px
+d'espacement, 7 tailles de texte, 8 rayons, 2 valeurs de `z-index`. Aucune
+échelle.
+
+- [x] D3.1 — Espacement : `4 · 8 · 12 · 16 · 20 · 24 · 32 · 48`.
+- [x] D3.2 — Rayons : `6` · `10` · `14` · `999`.
+- [x] D3.3 — Texte : `12 · 13 · 14 · 16 · 18`, tailles fixes, aucun `clamp()`.
+- [x] D3.4 — Plans : `10` barre supérieure · `100` voile · `110` tiroir.
+      Au-dessus de 110 pour les notifications et la carte de mise à jour.
+- [x] D3.5 — Mouvement : `--dur-fast: 120ms`, `--dur: 180ms`,
+      `--ease: cubic-bezier(0.16, 1, 0.3, 1)`.
+
+Ces échelles n'ont d'effet visuel que là où on les applique. Les écrans à venir
+peuvent les adopter tout de suite sans toucher à l'existant.
+
+## D4 — Composants : états manquants
+
+- [x] D4.1 — `:focus-visible` global, un seul style. Vérifié au navigateur avec
+      une vraie touche Tab : un focus posé par script ne déclenche pas
+      `:focus-visible`, c'est le comportement normal du navigateur, pas un bogue.
+      **Piège rencontré** : mettre un `border-radius` dans la règle
+      `:focus-visible` déforme l'élément le temps du focus. L'outline suit déjà
+      le rayon natif — ne rien y mettre.
+- [x] D4.2 — Puces désactivées pendant le traitement (`BUSY_CONTROLS`).
+- [x] D4.3 — Le libellé dit « Un instant… » / « One moment… » au lieu de `…`.
+- [x] D4.4 — `--shadow` retiré de `#editor`. Il ne reste que sur le disque et
+      le tiroir, les deux seules choses qui survolent vraiment.
+- [x] D4.5 — Écart de surfaces rétabli : fond blanc pur, surface `0.982`,
+      creux `0.960`, plus un filet de 1 px.
+- [ ] D4.6 — La zone sous l'éditeur reste vide. **Laissé tel quel
+      volontairement** : c'est un espace réservé, pas un oubli. Voir « D6 — La
+      zone réservée » ci-dessous.
+- [x] D4.7 — `.hero` → `.workspace`, `.hero-sub` → `.workspace-sub`. Les clés
+      i18n `hero.*` et l'id `#hero-sub` sont conservés : ce sont des
+      identifiants internes, les renommer n'apporte rien et touche deux langues.
+
+## D5 — Accessibilité, hors engagement initial
+
+Ces points sortaient du choix « contrastes AA seulement ». Faits quand même :
+ils coûtaient peu et retiraient de vrais défauts.
+
+- [x] D5.1 — Bloc `@media (prefers-reduced-motion: reduce)` en fin de
+      `app.css`. Les états restent lisibles à l'arrêt : l'anneau
+      d'enregistrement s'affiche plein au lieu de pulser.
+- [x] D5.2 — Tiroirs modaux au clavier : `Échap` ferme, `Tab` reste enfermé, le
+      focus entre sur le premier contrôle et revient au bouton déclencheur,
+      `aria-modal="true"` et `aria-labelledby` sur le titre déjà traduit.
+      Le gestionnaire `keydown` est global : un tiroir ajouté est pris en charge
+      sans code supplémentaire.
+- [x] D5.3 — Nouvel attribut `data-i18n-aria`, traité par `applyI18n()`.
+      Clés `nav.lang` et `btn.close` ajoutées dans les deux langues.
+- [x] D5.4 — `aria-label="Talk"` **supprimé** plutôt que traduit : sans lui, le
+      nom accessible du bouton est son libellé visible, qui suit déjà l'état.
+      Un attribut de moins à maintenir.
+- [x] D5.5 — La pastille de santé est doublée d'un texte masqué visuellement
+      (`.sr-only`, rattaché par `aria-describedby`), mis à jour dans la langue
+      courante via les clés `health.ok` / `health.warn` / `health.bad`.
+
+## D6 — La zone réservée (le seul point laissé ouvert)
+
+`.workspace` porte `flex: 1` et son contenu est collé en haut. Sur un écran de
+900 px de haut, il reste donc **250 à 350 px vides** sous la barre d'actions.
+C'est le seul endroit de l'interface qui ne fait rien, et le seul qui puisse
+accueillir quelque chose sans rien déplacer : l'éditeur et le disque gardent
+leur position, la zone pousse vers le bas.
+
+Elle n'a pas été remplie dans le Lot D parce qu'elle appartient au Lot 3, et
+qu'un panneau posé sans son contenu réel se conçoit mal. Les contraintes sont en
+revanche déjà tranchées.
+
+### Ce qui va dedans
+
+Le **panneau d'historique** des dernières dictées (Lot 3), clic = copie.
+
+### Ce qui est déjà décidé
+
+- **Une liste, pas une grille de cartes.** Filet de 1 px et fond en creux
+  suffisent à séparer. Voir le « Don't » correspondant dans `DESIGN.md`.
+- **Aucun aplat de couleur.** La règle du projecteur tient : si l'historique
+  prend de la couleur, l'état « ça enregistre » cesse d'être lisible du coin de
+  l'œil. Au mieux, un filet ou un texte en carmin sur l'entrée survolée.
+- **Elle reste sous la barre d'actions.** Elle ne s'intercale pas entre le
+  disque et l'éditeur : le chemin principal (parler → relire → insérer) ne doit
+  pas gagner une étape visuelle.
+- **Elle ne défile pas la page.** Si l'historique dépasse, c'est la liste qui
+  défile, pas le document — le disque et l'éditeur restent toujours visibles.
+- **Le modèle est la ligne de diagnostic** : une ligne dit ce qu'elle est et
+  porte son action, sans ouvrir de sous-écran.
+
+### Ce que l'état vide doit faire
+
+L'historique est **en mémoire vive par défaut** (Lot 3), donc il est vide à
+chaque ouverture de session. Cet état vide est la situation normale, pas
+l'exception : il doit enseigner, pas afficher « aucune dictée ».
+
+Deux choses manquent aujourd'hui à l'interface et trouveraient leur place là :
+
+1. **Le raccourci clavier global.** `PRODUCT.md` dit que c'est le chemin
+   principal du produit, et l'interface n'en parle que dans une demi-phrase sous
+   le disque. L'état vide peut afficher le raccourci réellement lié — le serveur
+   le connaît déjà, `/api/doctor` renvoie `hotkey.bound_key_label` — ou la
+   commande pour le lier s'il ne l'est pas, sur le modèle de `.diag-fix`.
+2. **« Rien ne sort de la machine ».** C'est le premier argument du produit et
+   il est invisible à l'écran (principe n° 5 de `PRODUCT.md`). Une mention
+   discrète et permanente, pas un badge.
+
+### Questions encore ouvertes
+
+- L'historique s'affiche-t-il toujours, ou seulement quand il contient quelque
+  chose ? Si la zone se vide et se remplit, la page saute à chaque dictée.
+  Piste : réserver la hauteur, l'état vide occupant la même place.
+- Cinq entrées (Lot 3) tiennent-elles dans la hauteur disponible sur un portable
+  en 1366 × 768 ? À vérifier avant de figer le nombre.
+- Que se passe-t-il quand la fenêtre est courte et que la zone n'existe plus ?
+  L'interface ne doit pas se casser sous 600 px de haut.
+
+## D7 — Ce qui est déjà bien fait
+
+À ne pas casser en passant :
+
+- `role="status"` + `aria-live="polite"` sur le fil d'état : correctement posé.
+- Le bloc de diagnostic « ce qui manque + la commande qui le répare + un bouton
+  copier » est le meilleur composant du produit et le modèle des écrans à venir.
+- Deux thèmes complets suivant `prefers-color-scheme`, sans bascule manuelle.
+- L'état d'enregistrement se lit déjà sans la couleur (pictogramme, libellé,
+  pulsation).
+- Aucune police d'affichage, aucune taille fluide : correct pour un outil.
+
+## D8 — La sérif pour l'éditeur
+
+- [x] Éditeur en `Georgia, "Liberation Serif", "DejaVu Serif",
+      "Times New Roman", serif`, 18 px, interligne 1,65, colonne ramenée de 760
+      à 680 px pour tenir autour de 70 caractères par ligne.
+
+Vérifié au navigateur : les `« »`, l'apostrophe courbe et l'espace insécable
+avant `;` et `?` se lisent à l'œil nu. C'est devenu la capture principale du
+README, parce que c'est l'argument du produit rendu visible.
+
+**Reste à confirmer sur ton poste.** La pile est système, donc le rendu dépend
+des polices installées. Ici c'est Liberation Serif ou DejaVu Serif qui sort ;
+si le résultat te déplaît sous Cinnamon, une seule ligne à changer :
+`--font-text` dans `app.css`.
+
+## D9 — Documentation et image du projet
+
+- [x] `README.md` : encadré en tête qui dit « tu cherchais Murmur, tu l'as
+      trouvé », avec le lien vers la section de migration. L'argument
+      « local, et typographie française » remonte dans l'introduction.
+- [x] Captures refaites : écran principal en clair (avec du texte français pour
+      montrer la typographie), enregistrement en cours en sombre, les deux
+      tiroirs. Anciennes captures « Murmur » remplacées.
+- [x] `CLAUDE.md` : section « Avant de toucher à quoi que ce soit de visible »
+      qui pointe vers `PRODUCT.md` et `DESIGN.md`, plus les invariants
+      d'interface (i18n des `aria-label`, focus global, tiroirs modaux,
+      mouvement réduit).
+- [x] `CHANGELOG.md` : entrées sous `[Unreleased]`.
+

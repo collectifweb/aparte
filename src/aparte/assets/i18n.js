@@ -7,10 +7,15 @@ window.APARTE_I18N = {
   fr: {
     "nav.config": "Configuration",
     "nav.settings": "Réglages",
+    "nav.lang": "Langue de l'interface",
+
+    "health.ok": "Tout est prêt.",
+    "health.warn": "Configuration partielle.",
+    "health.bad": "Configuration incomplète.",
 
     "hero.talk": "Parler",
     "hero.stop": "Arrêter",
-    "hero.processing": "…",
+    "hero.processing": "Un instant…",
     "hero.sub": "Appuie pour parler, ou utilise ton raccourci clavier global.",
     "hero.sub_incomplete": "Configuration incomplète — ouvre « Configuration » en haut à droite.",
 
@@ -57,6 +62,7 @@ window.APARTE_I18N = {
     "btn.cancel": "Annuler",
     "btn.save": "Enregistrer",
     "btn.refresh": "Rafraîchir",
+    "btn.close": "Fermer",
 
     "diag.title": "Configuration & diagnostic",
     "diag.loading": "Chargement…",
@@ -114,10 +120,15 @@ window.APARTE_I18N = {
   en: {
     "nav.config": "Setup",
     "nav.settings": "Settings",
+    "nav.lang": "Interface language",
+
+    "health.ok": "Everything is ready.",
+    "health.warn": "Partial setup.",
+    "health.bad": "Setup incomplete.",
 
     "hero.talk": "Talk",
     "hero.stop": "Stop",
-    "hero.processing": "…",
+    "hero.processing": "One moment…",
     "hero.sub": "Press to talk, or use your global keyboard shortcut.",
     "hero.sub_incomplete": "Setup incomplete — open “Setup” in the top right.",
 
@@ -164,6 +175,7 @@ window.APARTE_I18N = {
     "btn.cancel": "Cancel",
     "btn.save": "Save",
     "btn.refresh": "Refresh",
+    "btn.close": "Close",
 
     "diag.title": "Setup & diagnostics",
     "diag.loading": "Loading…",

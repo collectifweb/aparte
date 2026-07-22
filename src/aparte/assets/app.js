@@ -30,12 +30,17 @@ function applyI18n() {
   document.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => { el.placeholder = t(el.dataset.i18nPlaceholder); });
   document.querySelectorAll("[data-i18n-title]").forEach((el) => { el.title = t(el.dataset.i18nTitle); });
+  document.querySelectorAll("[data-i18n-aria]").forEach((el) => { el.setAttribute("aria-label", t(el.dataset.i18nAria)); });
   setRecordState(recordState);
   heroSub.textContent = setupIncomplete ? t("hero.sub_incomplete") : t("hero.sub");
+  if (lastHealth) updateHealthDot(lastHealth);
   if (!$("#health-overlay").hidden) loadHealth();
 }
 
-function status(message) { statusEl.textContent = message || ""; }
+function status(message, kind) {
+  statusEl.textContent = message || "";
+  statusEl.classList.toggle("error", kind === "error");
+}
 
 async function postJson(path, payload) {
   const res = await fetch(path, {
@@ -47,9 +52,14 @@ async function postJson(path, payload) {
   return res.json();
 }
 
+// Contrôles que le traitement rend inopérants : le JS ignorait déjà les clics,
+// mais rien ne le montrait à l'écran.
+const BUSY_CONTROLS = ["#polish", "#copy", "#paste", "#pick-file"];
+
 function setRecordState(state) {
   recordState = state;
   recordBtn.classList.remove("recording", "processing");
+  BUSY_CONTROLS.forEach((sel) => { $(sel).disabled = state === "processing"; });
   const label = recordBtn.querySelector(".record-label");
   if (state === "recording") {
     recordBtn.classList.add("recording");
@@ -154,7 +164,7 @@ recordBtn.addEventListener("click", async () => {
     const session = recordingSession;
     recordingSession = null;
     const blob = await session.stop();
-    try { await transcribeBlob(blob); } catch (err) { status(String(err)); setRecordState("idle"); }
+    try { await transcribeBlob(blob); } catch (err) { status(String(err), "error"); setRecordState("idle"); }
     return;
   }
   try {
@@ -163,19 +173,19 @@ recordBtn.addEventListener("click", async () => {
     status(t("st.recording"));
   } catch (err) {
     recordingSession = null;
-    status(t("st.mic_error") + err);
+    status(t("st.mic_error") + err, "error");
   }
 });
 
 /* ---------- Action chips ---------- */
 $("#polish").addEventListener("click", async () => {
-  try { await polishEditor(); } catch (err) { status(String(err)); }
+  try { await polishEditor(); } catch (err) { status(String(err), "error"); }
 });
 $("#pick-file").addEventListener("click", () => $("#file").click());
 $("#file").addEventListener("change", async () => {
   const file = $("#file").files[0];
   if (!file) return;
-  try { await transcribeBlob(file); } catch (err) { status(String(err)); setRecordState("idle"); }
+  try { await transcribeBlob(file); } catch (err) { status(String(err), "error"); setRecordState("idle"); }
 });
 $("#copy").addEventListener("click", async () => {
   status(t("st.copying"));
@@ -184,24 +194,55 @@ $("#copy").addEventListener("click", async () => {
     status(t("st.copied"));
   } catch (err) {
     try { await navigator.clipboard.writeText(editor.value); status(t("st.copied_browser")); }
-    catch (_) { status(String(err)); }
+    catch (_) { status(String(err), "error"); }
   }
 });
 $("#paste").addEventListener("click", async () => {
   status(t("st.pasting"));
   try { await postJson("/api/paste", { text: editor.value }); status(t("st.pasted")); }
-  catch (err) { status(String(err)); }
+  catch (err) { status(String(err), "error"); }
 });
 
 /* ---------- Drawers ---------- */
-function openOverlay(id) { $(id).hidden = false; }
-function closeOverlay(el) { el.hidden = true; }
+const FOCUSABLE = 'button:not(:disabled), select, textarea, input:not([type="hidden"]), [href], [tabindex]:not([tabindex="-1"])';
+let lastFocused = null;
+
+function openOverlay(id) {
+  lastFocused = document.activeElement;
+  const ov = $(id);
+  ov.hidden = false;
+  const first = ov.querySelector(FOCUSABLE);
+  if (first) first.focus();
+}
+function closeOverlay(el) {
+  el.hidden = true;
+  if (lastFocused && document.contains(lastFocused)) lastFocused.focus();
+  lastFocused = null;
+}
+function openOverlayEl() {
+  return Array.from(document.querySelectorAll(".overlay")).find((ov) => !ov.hidden) || null;
+}
+
 document.querySelectorAll("[data-close]").forEach((b) =>
   b.addEventListener("click", (e) => closeOverlay(e.target.closest(".overlay")))
 );
 document.querySelectorAll(".overlay").forEach((ov) =>
   ov.addEventListener("click", (e) => { if (e.target === ov) closeOverlay(ov); })
 );
+
+// Échap ferme le tiroir, Tab y reste enfermé tant qu'il est ouvert.
+document.addEventListener("keydown", (e) => {
+  const ov = openOverlayEl();
+  if (!ov) return;
+  if (e.key === "Escape") { closeOverlay(ov); return; }
+  if (e.key !== "Tab") return;
+  const items = Array.from(ov.querySelectorAll(FOCUSABLE)).filter((el) => el.offsetParent !== null);
+  if (!items.length) return;
+  const first = items[0];
+  const last = items[items.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
 
 /* ---------- Language selector ---------- */
 $("#ui-lang").value = lang;
@@ -255,7 +296,7 @@ async function loadConfig() {
 
 $("#open-settings").addEventListener("click", async () => {
   openOverlay("#settings-overlay");
-  try { await loadConfig(); } catch (err) { status(String(err)); }
+  try { await loadConfig(); } catch (err) { status(String(err), "error"); }
 });
 
 $("#save-settings").addEventListener("click", async () => {
@@ -274,7 +315,7 @@ $("#save-settings").addEventListener("click", async () => {
     $("#model").value = $("#set-model").value;
     closeOverlay($("#settings-overlay"));
     status(t("st.settings_saved"));
-  } catch (err) { status(String(err)); }
+  } catch (err) { status(String(err), "error"); }
 });
 
 /* ---------- Diagnostics ---------- */
@@ -348,10 +389,17 @@ async function loadHealth() {
   );
 }
 
+let lastHealth = null;
+
+// La pastille porte une couleur ; le texte lu par les lecteurs d'écran porte la
+// même information sans elle.
 function updateHealthDot(summary) {
+  lastHealth = summary;
+  const state = summary.ready ? "ok" : (summary.can_transcribe ? "warn" : "bad");
   const dot = $("#health-dot");
   dot.classList.remove("ok", "warn", "bad");
-  dot.classList.add(summary.ready ? "ok" : (summary.can_transcribe ? "warn" : "bad"));
+  dot.classList.add(state);
+  $("#health-dot-text").textContent = t("health." + state);
 }
 
 function escapeHtml(s) {

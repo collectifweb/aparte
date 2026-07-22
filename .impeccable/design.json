@@ -1,0 +1,200 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-22",
+  "title": "Design System: Aparté",
+  "extensions": {
+    "colorMeta": {
+      "brand-fill": {
+        "role": "primary",
+        "displayName": "Carmin de scène",
+        "canonical": "oklch(0.520 0.185 5)",
+        "tonalRamp": ["#250006", "#4d001d", "#7e0037", "#ae1753", "#d74473", "#fe6d96", "#ffafc1", "#fee8ec"]
+      },
+      "ink-light": {
+        "role": "neutral",
+        "displayName": "Encre",
+        "canonical": "oklch(0.235 0.014 15)",
+        "tonalRamp": ["#110909", "#2c2223", "#493f40", "#695e5f", "#8b7f80", "#aea2a2", "#d2c6c6", "#f8ebeb"]
+      },
+      "ink-soft-light": {
+        "role": "neutral",
+        "displayName": "Encre atténuée",
+        "canonical": "oklch(0.455 0.016 15)",
+        "tonalRamp": ["#110809", "#2c2222", "#4a3f3f", "#6a5e5e", "#8c7f7f", "#afa1a2", "#d3c5c6", "#f9eaeb"]
+      },
+      "surface-light": {
+        "role": "neutral",
+        "displayName": "Surface",
+        "canonical": "oklch(0.982 0.004 15)",
+        "tonalRamp": ["#0d0a0b", "#272424", "#444141", "#636060", "#858181", "#a7a4a4", "#ccc8c8", "#f1eded"]
+      },
+      "ok-light": {
+        "role": "tertiary",
+        "displayName": "Vert conforme",
+        "canonical": "oklch(0.500 0.100 155)",
+        "tonalRamp": ["#001202", "#002e15", "#00502a", "#277247", "#4c9468", "#6fb889", "#93ddad", "#c4ffd7"]
+      },
+      "warn-light": {
+        "role": "tertiary",
+        "displayName": "Ambre d'avertissement",
+        "canonical": "oklch(0.550 0.110 75)",
+        "tonalRamp": ["#220000", "#362000", "#5a3b00", "#835700", "#a8782a", "#cd9b50", "#f3bf75", "#ffebd2"]
+      },
+      "danger-light": {
+        "role": "tertiary",
+        "displayName": "Rouge orangé",
+        "canonical": "oklch(0.480 0.170 28)",
+        "tonalRamp": ["#250000", "#4f0000", "#810005", "#ad2922", "#d55044", "#fe7566", "#ffb3a9", "#ffe9e5"]
+      }
+    },
+    "typographyMeta": {
+      "transcript": { "displayName": "Texte dicté", "purpose": "Sérif 18 px. Réservé à l'éditeur : c'est le produit fini, et la seule vitrine de la typographie française." },
+      "wordmark": { "displayName": "Mot-symbole", "purpose": "« Aparté » dans la barre supérieure. Seul interlettrage négatif du système." },
+      "headline": { "displayName": "Titre de tiroir", "purpose": "Un seul par tiroir. Rien ne dépasse cette taille." },
+      "action": { "displayName": "Libellé d'action", "purpose": "Le libellé du disque d'enregistrement. Seul texte de 16 px de l'interface." },
+      "ui": { "displayName": "Interface", "purpose": "Puces, boutons, champs, messages d'état. Le corps de travail de l'écran." },
+      "label": { "displayName": "En-tête de groupe", "purpose": "Majuscules espacées, réservées aux groupes de réglages dans les tiroirs." },
+      "caption": { "displayName": "Légende", "purpose": "Textes d'aide, détails de diagnostic, pastilles de résumé." },
+      "mono": { "displayName": "Monospace", "purpose": "Commandes shell copiables et tables « dit = écrit »." }
+    },
+    "shadows": [
+      { "name": "shadow", "value": "0 8px 24px oklch(0.235 0.014 15 / 0.14)", "purpose": "Unique ombre du thème clair. Disque d'enregistrement et tiroir, rien d'autre." },
+      { "name": "shadow-dark", "value": "0 10px 30px oklch(0 0 0 / 0.45)", "purpose": "Équivalent en thème sombre." },
+      { "name": "scrim", "value": "oklch(0.235 0.014 15 / 0.45) · oklch(0.120 0.010 15 / 0.62)", "purpose": "Voile plein écran derrière les tiroirs, une valeur par thème." }
+    ],
+    "motion": [
+      { "name": "dur-fast", "value": "120ms", "purpose": "Pression, survols." },
+      { "name": "dur", "value": "180ms", "purpose": "Transitions d'état, entrée de tiroir." },
+      { "name": "ease", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Courbe unique du système, sortie exponentielle sans rebond." },
+      { "name": "pulse", "value": "1.6s ease-out infinite", "purpose": "Anneau d'enregistrement. Signal principal de l'état « micro ouvert »." },
+      { "name": "spin", "value": "0.8s linear infinite", "purpose": "Anneau de traitement." },
+      { "name": "reduced-motion", "value": "@media (prefers-reduced-motion: reduce)", "purpose": "Neutralise les quatre animations et laisse chaque état lisible à l'arrêt : l'anneau d'enregistrement reste plein au lieu de pulser." }
+    ],
+    "breakpoints": [
+      { "name": "compact", "value": "560px" }
+    ],
+    "zIndex": [
+      { "name": "topbar", "value": "10" },
+      { "name": "overlay", "value": "100" },
+      { "name": "drawer", "value": "110" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Bouton d'enregistrement (repos)",
+      "kind": "custom",
+      "refersTo": "record-button",
+      "description": "La scène avant le projecteur : un disque d'encre, massif et silencieux.",
+      "html": "<button class=\"ds-record\"><svg viewBox=\"0 0 24 24\" class=\"ds-record-mic\"><path fill=\"currentColor\" d=\"M12 15a3.5 3.5 0 0 0 3.5-3.5v-5a3.5 3.5 0 1 0-7 0v5A3.5 3.5 0 0 0 12 15Zm6-3.5a6 6 0 0 1-5 5.91V21h-2v-3.59a6 6 0 0 1-5-5.91h2a4 4 0 0 0 8 0Z\"/></svg><span class=\"ds-record-label\">Parler</span></button>",
+      "css": ".ds-record { position: relative; width: 168px; height: 168px; border-radius: 999px; border: none; cursor: pointer; background: var(--record-rest, oklch(0.235 0.014 15)); color: #fff; box-shadow: var(--shadow, 0 8px 24px oklch(0.235 0.014 15 / 0.14)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; transition: transform 120ms cubic-bezier(0.16,1,0.3,1), background 180ms cubic-bezier(0.16,1,0.3,1); } .ds-record:hover { transform: translateY(-2px); } .ds-record:active { transform: translateY(0); } .ds-record:focus-visible { outline: 2px solid var(--brand, oklch(0.520 0.185 5)); outline-offset: 2px; } .ds-record-mic { width: 52px; height: 52px; } .ds-record-label { font: 600 16px/1.2 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.01em; }"
+    },
+    {
+      "name": "Bouton d'enregistrement (en cours)",
+      "kind": "custom",
+      "refersTo": "record-button-recording",
+      "description": "Le projecteur. Le seul aplat saturé autorisé à l'écran, et seulement pendant que le micro est ouvert.",
+      "html": "<button class=\"ds-record-on\"><span class=\"ds-record-on-ring\"></span><span class=\"ds-record-on-stop\"></span><span class=\"ds-record-on-label\">Arrêter</span></button>",
+      "css": ".ds-record-on { position: relative; width: 168px; height: 168px; border-radius: 999px; border: none; cursor: pointer; background: var(--brand-fill, oklch(0.520 0.185 5)); color: #fff; box-shadow: var(--shadow, 0 8px 24px oklch(0.235 0.014 15 / 0.14)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; } .ds-record-on-stop { width: 30px; height: 30px; border-radius: 6px; background: #fff; } .ds-record-on-label { font: 600 16px/1.2 ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.01em; } .ds-record-on-ring { position: absolute; inset: -6px; border-radius: 999px; border: 3px solid var(--brand-fill, oklch(0.520 0.185 5)); opacity: 1; animation: ds-pulse 1.6s ease-out infinite; } @keyframes ds-pulse { 0% { transform: scale(1); opacity: 0.7; } 100% { transform: scale(1.35); opacity: 0; } } @media (prefers-reduced-motion: reduce) { .ds-record-on-ring { animation: none; opacity: 1; } }"
+    },
+    {
+      "name": "Éditeur",
+      "kind": "input",
+      "refersTo": "editor",
+      "description": "Le programme imprimé : le texte dicté, en sérif, sans ombre, avec un placeholder au contraste défini.",
+      "html": "<textarea class=\"ds-editor\" placeholder=\"Ta dictée apparaîtra ici. Tu peux aussi coller ou taper du texte à polir.\">« Bonjour Sarah, merci pour l’envoi. Est-ce que ça te va ? »</textarea>",
+      "css": ".ds-editor { width: 100%; min-height: 180px; resize: vertical; border: 1px solid var(--line, oklch(0.902 0.007 15)); background: var(--surface, oklch(0.982 0.004 15)); color: var(--ink, oklch(0.235 0.014 15)); border-radius: 14px; padding: 16px 20px; font: 18px/1.65 Georgia, 'Liberation Serif', 'DejaVu Serif', serif; } .ds-editor::placeholder { color: var(--ink-soft, oklch(0.455 0.016 15)); opacity: 1; } .ds-editor:focus-visible { outline: 2px solid var(--brand, oklch(0.520 0.185 5)); outline-offset: 2px; }"
+    },
+    {
+      "name": "Puce d'action",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Polir, Copier, Coller. La variante fantôme porte les actions secondaires ; l'état désactivé sert pendant le traitement.",
+      "html": "<button class=\"ds-chip\">Polir</button> <button class=\"ds-chip ds-chip-ghost\">Importer audio</button> <button class=\"ds-chip\" disabled>Coller</button>",
+      "css": ".ds-chip { background: var(--surface, oklch(0.982 0.004 15)); color: var(--ink, oklch(0.235 0.014 15)); border: 1px solid var(--line, oklch(0.902 0.007 15)); border-radius: 10px; padding: 8px 16px; font: 400 14px/1.4 ui-sans-serif, system-ui, sans-serif; cursor: pointer; transition: background 120ms cubic-bezier(0.16,1,0.3,1); } .ds-chip:hover:not(:disabled) { background: var(--surface-2, oklch(0.960 0.006 15)); } .ds-chip:focus-visible { outline: 2px solid var(--brand, oklch(0.520 0.185 5)); outline-offset: 2px; } .ds-chip:disabled { opacity: 0.45; cursor: not-allowed; } .ds-chip-ghost { color: var(--ink-soft, oklch(0.455 0.016 15)); }"
+    },
+    {
+      "name": "Bouton primaire",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Un seul par tiroir. Aplat carmin, blanc dessus à 6,11:1.",
+      "html": "<button class=\"ds-btn-primary\">Enregistrer</button>",
+      "css": ".ds-btn-primary { background: var(--brand-fill, oklch(0.520 0.185 5)); border: 1px solid var(--brand-fill, oklch(0.520 0.185 5)); color: #fff; border-radius: 10px; padding: 9px 16px; font: 600 14px/1.4 ui-sans-serif, system-ui, sans-serif; cursor: pointer; transition: filter 120ms cubic-bezier(0.16,1,0.3,1); } .ds-btn-primary:hover:not(:disabled) { filter: brightness(1.08); } .ds-btn-primary:focus-visible { outline: 2px solid var(--brand, oklch(0.520 0.185 5)); outline-offset: 2px; }"
+    },
+    {
+      "name": "Bouton de barre supérieure",
+      "kind": "nav",
+      "refersTo": "topbar-button",
+      "description": "Fantôme à filet, avec pastille d'état doublée d'un texte masqué visuellement.",
+      "html": "<button class=\"ds-topbtn\" aria-describedby=\"ds-health\"><span class=\"ds-dot ds-dot-ok\"></span>Configuration</button><span class=\"ds-sr\" id=\"ds-health\">Tout est prêt.</span>",
+      "css": ".ds-topbtn { display: inline-flex; align-items: center; gap: 8px; background: transparent; color: var(--ink-soft, oklch(0.455 0.016 15)); border: 1px solid var(--line, oklch(0.902 0.007 15)); border-radius: 10px; padding: 7px 12px; font: 400 14px/1.4 ui-sans-serif, system-ui, sans-serif; cursor: pointer; transition: color 120ms, background 120ms; } .ds-topbtn:hover { color: var(--ink, oklch(0.235 0.014 15)); background: var(--surface-2, oklch(0.960 0.006 15)); } .ds-topbtn:focus-visible { outline: 2px solid var(--brand, oklch(0.520 0.185 5)); outline-offset: 2px; } .ds-dot { width: 9px; height: 9px; border-radius: 999px; background: var(--ink-soft, oklch(0.455 0.016 15)); } .ds-dot-ok { background: var(--ok, oklch(0.500 0.100 155)); } .ds-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }"
+    },
+    {
+      "name": "Champ de réglage",
+      "kind": "input",
+      "refersTo": "drawer",
+      "description": "Libellé, contrôle natif, texte d'aide. La flèche du sélecteur reste celle du système, par choix.",
+      "html": "<label class=\"ds-field\"><span>Modèle par défaut</span><select class=\"ds-select\"><option>small</option><option>base</option></select><small>small = précis · base = rapide · medium = qualité max</small></label>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 5px; font: 400 14px/1.4 ui-sans-serif, system-ui, sans-serif; color: var(--ink, oklch(0.235 0.014 15)); } .ds-field small { color: var(--ink-soft, oklch(0.455 0.016 15)); font-size: 12px; } .ds-select { background: var(--surface, oklch(0.982 0.004 15)); color: var(--ink, oklch(0.235 0.014 15)); border: 1px solid var(--line, oklch(0.902 0.007 15)); border-radius: 10px; padding: 7px 9px; font: inherit; font-size: 14px; } .ds-select:focus-visible { outline: 2px solid var(--brand, oklch(0.520 0.185 5)); outline-offset: 2px; }"
+    },
+    {
+      "name": "Ligne de diagnostic",
+      "kind": "card",
+      "refersTo": "drawer",
+      "description": "Ce qui manque, et la commande qui le répare, sur la même ligne. Le modèle des écrans à venir.",
+      "html": "<div class=\"ds-diag\"><span class=\"ds-diag-icon\">!</span><div class=\"ds-diag-main\"><div class=\"ds-diag-label\">Moteur Whisper local<span class=\"ds-req\">requis</span></div><div class=\"ds-diag-detail\">faster-whisper, openai-whisper ou whisper.cpp</div><div class=\"ds-diag-fix\"><code>pip install -e \".[whisper]\"</code><button>Copier</button></div></div></div>",
+      "css": ".ds-diag { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line, oklch(0.902 0.007 15)); font-family: ui-sans-serif, system-ui, sans-serif; } .ds-diag-icon { flex: none; width: 18px; height: 18px; border-radius: 999px; margin-top: 2px; font-size: 12px; font-weight: 700; display: grid; place-items: center; color: var(--on-state, #fff); background: var(--danger, oklch(0.480 0.170 28)); } .ds-diag-main { flex: 1; min-width: 0; } .ds-diag-label { font-size: 14px; font-weight: 500; color: var(--ink, oklch(0.235 0.014 15)); } .ds-req { font-size: 11px; color: var(--danger, oklch(0.480 0.170 28)); border: 1px solid var(--danger, oklch(0.480 0.170 28)); border-radius: 6px; padding: 0 5px; margin-left: 8px; } .ds-diag-detail { color: var(--ink-soft, oklch(0.455 0.016 15)); font-size: 12px; } .ds-diag-fix { display: flex; align-items: center; gap: 8px; margin-top: 8px; background: var(--surface-2, oklch(0.960 0.006 15)); border: 1px solid var(--line, oklch(0.902 0.007 15)); border-radius: 6px; padding: 8px; } .ds-diag-fix code { flex: 1; font: 12px/1.4 ui-monospace, Menlo, monospace; overflow-x: auto; white-space: nowrap; color: var(--ink, oklch(0.235 0.014 15)); } .ds-diag-fix button { flex: none; border: none; background: var(--brand-fill, oklch(0.520 0.185 5)); color: #fff; border-radius: 6px; padding: 4px 9px; font-size: 12px; cursor: pointer; }"
+    },
+    {
+      "name": "Pastille de résumé",
+      "kind": "chip",
+      "refersTo": "pill",
+      "description": "Transcription, Micro, Insertion. Toujours doublées d'un ✓ ou d'un ✕ : jamais la couleur seule.",
+      "html": "<span class=\"ds-pill ds-pill-ok\">Micro ✓</span> <span class=\"ds-pill ds-pill-bad\">Transcription ✕</span>",
+      "css": ".ds-pill { display: inline-block; font: 400 12px/1.4 ui-sans-serif, system-ui, sans-serif; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line, oklch(0.902 0.007 15)); color: var(--ink-soft, oklch(0.455 0.016 15)); } .ds-pill-ok { color: var(--ok, oklch(0.500 0.100 155)); border-color: var(--ok, oklch(0.500 0.100 155)); } .ds-pill-bad { color: var(--danger, oklch(0.480 0.170 28)); border-color: var(--danger, oklch(0.480 0.170 28)); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "L'aparté",
+    "overview": "Au théâtre, un aparté est ce qu'un personnage dit à voix basse, en se tournant vers la salle, pendant que la scène continue. La scène : une surface calme qui ne demande rien, blanc pur en thème clair, brun très sombre en thème sombre, des filets de 1 px, aucune carte, aucune ombre décorative ; au repos, le bouton d'enregistrement est un disque d'encre. Le projecteur : une seule couleur saturée, le carmin, et une seule chose a le droit de la porter en grand, le bouton pendant que le micro est ouvert. Le programme imprimé : le texte dicté est composé en sérif, parce que c'est le produit fini et la seule vitrine de l'argument français. Le registre est produit : l'interface sert la tâche, elle ne se vend pas.",
+    "keyCharacteristics": [
+      "Un écran unique, sans navigation, où un seul élément domine : le disque de 168 px.",
+      "Deux thèmes complets pilotés par prefers-color-scheme, sans bascule manuelle.",
+      "Deux familles sur un axe de contraste : sérif pour le texte de l'utilisateur, sans-serif système pour l'interface.",
+      "Aucune police d'affichage, aucune taille fluide : tout tient entre 12 et 18 px.",
+      "Colonne centrale de 680 px, tiroirs de 460 px ancrés à droite.",
+      "Aucun assemblage : HTML, CSS et JS écrits à la main, sans compilation ni bibliothèque."
+    ],
+    "rules": [
+      { "name": "La règle du projecteur", "body": "Une seule chose a le droit d'être saturée à grande échelle : le bouton d'enregistrement, et seulement pendant que le micro est ouvert. Si deux aplats saturés coexistent, l'information « ça enregistre » est perdue.", "section": "colors" },
+      { "name": "La règle du daltonien", "body": "L'état d'enregistrement se lit sans la couleur : pictogramme micro → carré d'arrêt, libellé « Parler » → « Arrêter », anneau qui pulse. Au moins deux de ces trois signaux non chromatiques sont conservés.", "section": "colors" },
+      { "name": "La règle du calcul", "body": "Aucune couleur n'entre dans le système sans que son contraste ait été calculé contre les fonds où elle sera posée. Seuil 4,5:1, y compris à 12 px et sur un aplat. « Ça a l'air lisible » n'est pas une vérification.", "section": "colors" },
+      { "name": "La règle des deux voix", "body": "La sérif est réservée au texte de l'utilisateur : l'éditeur, et rien d'autre. Un libellé en sérif brouille la seule distinction que ce système fait vraiment.", "section": "typography" },
+      { "name": "La règle des 18 px", "body": "Rien ne dépasse 18 px. Tailles fixes, jamais fluides : l'utilisateur regarde toujours cet écran à la même distance.", "section": "typography" },
+      { "name": "La règle des majuscules réservées", "body": "Les majuscules espacées sont l'affaire des en-têtes de groupe à l'intérieur des tiroirs, et de rien d'autre.", "section": "typography" },
+      { "name": "La règle du champ à plat", "body": "Une ombre portée sur un champ de saisie fait flotter quelque chose qui est en creux dans la page. L'ombre appartient à ce qui survole.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do vérifier chaque couple texte/fond par calcul, seuil 4,5:1, y compris à 12 px et sur les aplats.",
+      "Do garder un seul style de focus pour toute l'interface, sans border-radius : l'outline suit le rayon natif.",
+      "Do écrire chaque nouvelle chaîne dans i18n.js, en français et en anglais, y compris les aria-label.",
+      "Do accompagner chaque réglage de sa commande équivalente, en monospace avec un bouton « copier ».",
+      "Do encadrer toute animation par @media (prefers-reduced-motion: reduce), en laissant l'état lisible à l'arrêt.",
+      "Do vérifier tout nouveau composant dans les deux thèmes.",
+      "Do garder les contrôles natifs natifs."
+    ],
+    "donts": [
+      "Don't utiliser un dégradé, nulle part.",
+      "Don't poser un deuxième aplat saturé à l'écran.",
+      "Don't écrire un message informatif en couleur.",
+      "Don't utiliser brand-dark comme aplat : du blanc dessus tombe sous 4,5:1.",
+      "Don't laisser un placeholder au style par défaut du navigateur.",
+      "Don't mettre d'ombre portée sur un champ de saisie.",
+      "Don't empiler les cartes : le panneau d'historique à venir est une liste.",
+      "Don't installer un sur-titre en petites majuscules espacées au-dessus des sections de l'écran principal.",
+      "Don't composer l'interface en sérif, ni le texte dicté en sans-serif.",
+      "Don't ajouter d'étape de compilation, de bibliothèque, de police distante ou de dépendance CDN.",
+      "Don't glisser vers le gris sur gris de l'utilitaire système.",
+      "Don't faire porter une information par la couleur seule."
+    ]
+  }
+}

@@ -1,9 +1,25 @@
 # Aparté
 
+> ### 👋 Looking for **Murmur**? You found it.
+>
+> This project was called **Murmur** until it was renamed to **Aparté**, to avoid
+> confusion with the unrelated [Murmure](https://github.com/Kieirra/murmure)
+> project. Same repository, same app, new name.
+>
+> Already running Murmur? Nothing breaks: your config is migrated automatically,
+> `MURMUR_*` environment variables still work, and the old `murmur` command still
+> launches Aparté — so a global shortcut bound to it keeps working. See
+> [Upgrading from Murmur](#upgrading-from-murmur-the-previous-name).
+
 [![CI](https://github.com/collectifweb/aparte/actions/workflows/ci.yml/badge.svg)](https://github.com/collectifweb/aparte/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Aparté is a local-first dictation app for Linux. It can run as a CLI, as a command bound to a global keyboard shortcut, or as a lightweight local desktop web app.
+
+Nothing leaves your machine: Whisper runs locally, formatting runs locally, and
+there is no account, no API key, and no network call. It is also the only
+dictation app that takes **French typography** seriously — non-breaking spaces
+before `? ! ; :`, real `« »` quotes, curly apostrophes.
 
 The first version focuses on the core Flow-like loop:
 
@@ -15,6 +31,18 @@ The first version focuses on the core Flow-like loop:
 ## Screenshots
 
 ![Aparté dictation screen](docs/screenshots/main.png)
+
+One screen: a Talk button, a transcript editor, and nothing else in the way. The
+transcript is set in a serif face, so the French typography Aparté produces is
+actually visible — look at the `« »`, the curly apostrophes, and the spacing
+before `;` and `?`.
+
+![Aparté while recording](docs/screenshots/recording.png)
+
+Aparté follows your desktop's light or dark theme. While the microphone is open,
+the button is the only saturated thing on screen — you can tell it is recording
+from the corner of your eye, and without relying on colour alone (the icon and
+the label change too).
 
 Grouped settings and built-in setup diagnostics — the diagnostics show what is
 installed and the exact command to fix anything missing, so any Linux user can
@@ -106,10 +134,7 @@ python -m pip install -e ".[whisper,recording]"   # add ,cuda for NVIDIA GPUs
 
 ### Upgrading from Murmur (the previous name)
 
-This project was called **Murmur** until it was renamed to **Aparté**, to avoid
-confusion with the unrelated [Murmure](https://github.com/Kieirra/murmure)
-project. Pull and re-run the install script as above; the rename is handled for
-you:
+Pull and re-run the install script as above; the rename is handled for you:
 
 - `~/.config/murmur/config.json` is moved to `~/.config/aparte/config.json` on
   first run, so your settings, replacements, and snippets carry over.
@@ -379,9 +404,16 @@ interface is a focused, single-screen app:
   for any Linux user
 
 The interface is bilingual (English / French) with a language switch in the top
-bar; it defaults to the browser language. The frontend lives in
-`src/aparte/assets/` (`index.html`, `app.css`, `app.js`, `i18n.js`, `logo.svg`)
-and is served as static files, so it is easy to contribute to.
+bar; it defaults to the browser language. It follows your desktop's light or dark
+theme automatically, and the whole keyboard path works: `Tab` reaches every
+control with a visible focus ring, `Esc` closes a panel, and animations are
+skipped when your system asks for reduced motion.
+
+The frontend lives in `src/aparte/assets/` (`index.html`, `app.css`, `app.js`,
+`i18n.js`, `logo.svg`) and is served as static files, with **no build step and no
+library**, so it is easy to contribute to. The design system it follows is
+documented in [DESIGN.md](DESIGN.md), and the product direction behind it in
+[PRODUCT.md](PRODUCT.md).
 
 ## Desktop notifications
 
