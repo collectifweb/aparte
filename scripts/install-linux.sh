@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# install-linux.sh — set up Murmur in a local virtualenv.
+# install-linux.sh — set up Aparté in a local virtualenv.
 #
 # Steps: (optionally) apt-install system deps, create .venv (with an ensurepip
-# fallback for minimal Python builds), install Murmur with the whisper +
+# fallback for minimal Python builds), install Aparté with the whisper +
 # recording extras (plus cuda when an NVIDIA GPU is detected), write a default
 # config, and register the desktop launcher (icon + menu entry).
 #
@@ -59,13 +59,13 @@ if command -v nvidia-smi >/dev/null 2>&1; then
   EXTRAS="$EXTRAS,cuda"
 fi
 python -m pip install -e ".[$EXTRAS]"
-python -m murmur config init || true
-python -m murmur install-desktop --force
+python -m aparte config init || true
+python -m aparte install-desktop --force
 
 echo
-echo "Installed Murmur."
-echo "Run: source .venv/bin/activate && murmur doctor"
-echo "Bind the dictation hotkey (Cinnamon/GNOME): murmur install-hotkey"
+echo "Installed Aparté."
+echo "Run: source .venv/bin/activate && aparte doctor"
+echo "Bind the dictation hotkey (Cinnamon/GNOME): aparte install-hotkey"
 echo "If you skipped --with-system-deps, install the copy/paste tools for your session:"
 echo "  X11:     sudo apt install xclip xdotool"
 echo "  Wayland: sudo apt install wl-clipboard wtype"

@@ -7,8 +7,13 @@ from pathlib import Path
 from typing import Any
 
 
-APP_DIR_NAME = "murmur"
+APP_DIR_NAME = "aparte"
 CONFIG_FILE_NAME = "config.json"
+
+# The app was renamed from Murmur to Aparté. Existing installs still keep their
+# config under the old directory and may still export the old variable names.
+LEGACY_APP_DIR_NAME = "murmur"
+LEGACY_ENV_PREFIX = "MURMUR_"
 
 
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -21,6 +26,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "polish_backend": "heuristic",
     "default_style": "neutral",
     "cleanup_level": "medium",
+    "nonbreaking_spaces": True,
     "ollama_url": "http://127.0.0.1:11434",
     "ollama_model": "llama3.1:8b",
     "whisper_cpp": None,
@@ -47,6 +53,7 @@ class Settings:
     polish_backend: str = "heuristic"
     default_style: str = "neutral"
     cleanup_level: str = "medium"
+    nonbreaking_spaces: bool = True
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.1:8b"
     whisper_cpp: str | None = None
@@ -56,24 +63,26 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
+        migrate_legacy_config()
         config_path = get_config_path()
         config = load_config(config_path)
-        language = os.getenv("MURMUR_LANGUAGE") or None
-        whisper_cpp = os.getenv("MURMUR_WHISPER_CPP") or None
+        language = get_env("LANGUAGE")
+        whisper_cpp = get_env("WHISPER_CPP")
         replacements = _string_dict(config.get("replacements", DEFAULT_CONFIG["replacements"]))
         snippets = _string_dict(config.get("snippets", DEFAULT_CONFIG["snippets"]))
         return cls(
-            transcriber=os.getenv("MURMUR_TRANSCRIBER", str(config.get("transcriber", "auto"))),
-            recorder=os.getenv("MURMUR_RECORDER", str(config.get("recorder", "auto"))),
-            model=os.getenv("MURMUR_MODEL", str(config.get("model", "small"))),
-            device=os.getenv("MURMUR_DEVICE", str(config.get("device", "auto"))),
-            compute_type=os.getenv("MURMUR_COMPUTE_TYPE", str(config.get("compute_type", "auto"))),
+            transcriber=get_env("TRANSCRIBER") or str(config.get("transcriber", "auto")),
+            recorder=get_env("RECORDER") or str(config.get("recorder", "auto")),
+            model=get_env("MODEL") or str(config.get("model", "small")),
+            device=get_env("DEVICE") or str(config.get("device", "auto")),
+            compute_type=get_env("COMPUTE_TYPE") or str(config.get("compute_type", "auto")),
             language=language if language is not None else _optional_str(config.get("language")),
-            polish_backend=os.getenv("MURMUR_POLISH_BACKEND", str(config.get("polish_backend", "heuristic"))),
+            polish_backend=get_env("POLISH_BACKEND") or str(config.get("polish_backend", "heuristic")),
             default_style=str(config.get("default_style", "neutral")),
             cleanup_level=str(config.get("cleanup_level", "medium")),
-            ollama_url=os.getenv("MURMUR_OLLAMA_URL", str(config.get("ollama_url", DEFAULT_CONFIG["ollama_url"]))),
-            ollama_model=os.getenv("MURMUR_OLLAMA_MODEL", str(config.get("ollama_model", DEFAULT_CONFIG["ollama_model"]))),
+            nonbreaking_spaces=bool(config.get("nonbreaking_spaces", True)),
+            ollama_url=get_env("OLLAMA_URL") or str(config.get("ollama_url", DEFAULT_CONFIG["ollama_url"])),
+            ollama_model=get_env("OLLAMA_MODEL") or str(config.get("ollama_model", DEFAULT_CONFIG["ollama_model"])),
             whisper_cpp=whisper_cpp if whisper_cpp is not None else _optional_str(config.get("whisper_cpp")),
             replacements=replacements,
             snippets=snippets,
@@ -81,18 +90,51 @@ class Settings:
         )
 
 
+def get_env(name: str) -> str | None:
+    """Read ``APARTE_<name>``, falling back to the pre-rename ``MURMUR_<name>``."""
+    return os.getenv(f"APARTE_{name}") or os.getenv(f"{LEGACY_ENV_PREFIX}{name}") or None
+
+
 def get_config_path() -> Path:
-    override = os.getenv("MURMUR_CONFIG")
+    override = get_env("CONFIG")
     if override:
         return Path(override).expanduser()
+    return _config_home() / APP_DIR_NAME / CONFIG_FILE_NAME
+
+
+def get_legacy_config_path() -> Path:
+    return _config_home() / LEGACY_APP_DIR_NAME / CONFIG_FILE_NAME
+
+
+def _config_home() -> Path:
     xdg_config_home = os.getenv("XDG_CONFIG_HOME")
     if xdg_config_home:
-        return Path(xdg_config_home).expanduser() / APP_DIR_NAME / CONFIG_FILE_NAME
-    return Path.home() / ".config" / APP_DIR_NAME / CONFIG_FILE_NAME
+        return Path(xdg_config_home).expanduser()
+    return Path.home() / ".config"
+
+
+def migrate_legacy_config() -> Path | None:
+    """Move a pre-rename ``murmur`` config over to the ``aparte`` location.
+
+    Only acts on the default path, and only when nothing is there yet, so an
+    explicit path (tests, ``APARTE_CONFIG``) is never a migration target.
+    Returns the new path when a file was moved.
+    """
+    path = get_config_path()
+    if path.exists() or path != _config_home() / APP_DIR_NAME / CONFIG_FILE_NAME:
+        return None
+    legacy = get_legacy_config_path()
+    if not legacy.exists():
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    legacy.replace(path)
+    return path
 
 
 def load_config(path: Path | None = None) -> dict[str, Any]:
-    path = path or get_config_path()
+    if path is None:
+        migrate_legacy_config()
+        path = get_config_path()
     if not path.exists():
         return DEFAULT_CONFIG.copy()
     with path.open("r", encoding="utf-8") as handle:

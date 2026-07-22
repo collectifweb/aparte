@@ -7,10 +7,16 @@ import sys
 from pathlib import Path
 
 
-DESKTOP_FILE_NAME = "murmur.desktop"
-AUTOSTART_FILE_NAME = "murmur.desktop"
-ICON_NAME = "murmur"
+DESKTOP_FILE_NAME = "aparte.desktop"
+AUTOSTART_FILE_NAME = "aparte.desktop"
+ICON_NAME = "aparte"
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+
+# Files written before the app was renamed from Murmur to Aparté. They are
+# removed on install, otherwise the menu shows two entries and — worse — two
+# autostart entries race for the same port at login.
+LEGACY_DESKTOP_FILE_NAME = "murmur.desktop"
+LEGACY_ICON_NAME = "murmur"
 
 
 def user_applications_dir() -> Path:
@@ -46,10 +52,10 @@ def autostart_dir() -> Path:
 
 
 def default_exec_command() -> list[str]:
-    executable = shutil.which("murmur")
+    executable = shutil.which("aparte")
     if executable:
         return [executable, "desktop"]
-    return [sys.executable, "-m", "murmur", "desktop"]
+    return [sys.executable, "-m", "aparte", "desktop"]
 
 
 def desktop_exec(command: list[str]) -> str:
@@ -62,7 +68,7 @@ def build_desktop_entry(command: list[str] | None = None) -> str:
         [
             "[Desktop Entry]",
             "Type=Application",
-            "Name=Murmur",
+            "Name=Aparté",
             "Comment=Local-first Linux dictation with Whisper and smart formatting",
             f"Exec={desktop_exec(command)}",
             f"Icon={ICON_NAME}",
@@ -74,8 +80,27 @@ def build_desktop_entry(command: list[str] | None = None) -> str:
     )
 
 
+def remove_legacy_entries() -> list[Path]:
+    """Delete the pre-rename launcher, icon, and autostart entry. Best-effort."""
+    removed = []
+    candidates = [
+        user_applications_dir() / LEGACY_DESKTOP_FILE_NAME,
+        autostart_dir() / LEGACY_DESKTOP_FILE_NAME,
+        user_icon_path().with_name(f"{LEGACY_ICON_NAME}.svg"),
+    ]
+    for path in candidates:
+        try:
+            if path.exists():
+                path.unlink()
+                removed.append(path)
+        except OSError:
+            pass
+    return removed
+
+
 def install_desktop_entry(command: list[str] | None = None, force: bool = False) -> Path:
     install_icon()
+    remove_legacy_entries()
     destination = user_applications_dir() / DESKTOP_FILE_NAME
     if destination.exists() and not force:
         raise FileExistsError(f"Desktop entry already exists: {destination}")
@@ -95,8 +120,8 @@ def build_autostart_entry(command: list[str] | None = None) -> str:
         [
             "[Desktop Entry]",
             "Type=Application",
-            "Name=Murmur",
-            "Comment=Start the Murmur desktop server at login",
+            "Name=Aparté",
+            "Comment=Start the Aparté desktop server at login",
             f"Exec={desktop_exec(command)}",
             "Terminal=false",
             "Categories=Utility;Audio;Accessibility;",
@@ -108,6 +133,7 @@ def build_autostart_entry(command: list[str] | None = None) -> str:
 
 
 def install_autostart_entry(command: list[str] | None = None, force: bool = False) -> Path:
+    remove_legacy_entries()
     destination = autostart_dir() / AUTOSTART_FILE_NAME
     if destination.exists() and not force:
         raise FileExistsError(f"Autostart entry already exists: {destination}")

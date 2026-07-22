@@ -1,8 +1,8 @@
 import unittest
 from unittest import mock
 
-from murmur import clipboard as clipboard_module
-from murmur.clipboard import ClipboardError, paste_text
+from aparte import clipboard as clipboard_module
+from aparte.clipboard import ClipboardError, paste_text
 
 
 def _which(available):

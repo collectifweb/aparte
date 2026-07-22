@@ -4,13 +4,13 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from murmur import session
+from aparte import session
 
 
 class ToggleSessionTest(unittest.TestCase):
     def test_runtime_dir_can_be_overridden(self):
         with tempfile.TemporaryDirectory() as directory:
-            with mock.patch.dict(os.environ, {"MURMUR_RUNTIME_DIR": directory}):
+            with mock.patch.dict(os.environ, {"APARTE_RUNTIME_DIR": directory}):
                 self.assertEqual(session.get_runtime_dir(), Path(directory))
 
     def test_stale_session_is_cleared(self):
@@ -20,7 +20,7 @@ class ToggleSessionTest(unittest.TestCase):
                 '{"pid": 999999999, "audio_path": "/tmp/missing.wav", "sample_rate": 16000, "started_at": 1}',
                 encoding="utf-8",
             )
-            with mock.patch.dict(os.environ, {"MURMUR_RUNTIME_DIR": directory}):
+            with mock.patch.dict(os.environ, {"APARTE_RUNTIME_DIR": directory}):
                 self.assertIsNone(session.get_active_session())
                 self.assertFalse(state.exists())
 
@@ -36,7 +36,7 @@ class ToggleSessionTest(unittest.TestCase):
                     clear=False,
                 ):
                     with mock.patch("tempfile.gettempdir", return_value=temp_dir):
-                        self.assertEqual(session.get_runtime_dir(), Path(temp_dir) / f"murmur-{os.getuid()}")
+                        self.assertEqual(session.get_runtime_dir(), Path(temp_dir) / f"aparte-{os.getuid()}")
             finally:
                 read_only.chmod(0o700)
 

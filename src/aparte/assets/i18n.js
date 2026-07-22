@@ -2,8 +2,8 @@
 
 // Bilingual UI strings. Keys are shared between languages; app.js applies them
 // to elements carrying data-i18n / data-i18n-placeholder / data-i18n-title and
-// uses t(key) for dynamic messages. The CLI `murmur doctor` stays English.
-window.MURMUR_I18N = {
+// uses t(key) for dynamic messages. The CLI `aparte doctor` stays English.
+window.APARTE_I18N = {
   fr: {
     "nav.config": "Configuration",
     "nav.settings": "Réglages",
@@ -48,6 +48,8 @@ window.MURMUR_I18N = {
     "set.polish_engine": "Moteur de polish",
     "polish.heuristic": "Heuristique (local, sans modèle)",
     "polish.ollama": "Ollama (LLM local)",
+    "set.nbsp": "Espaces insécables",
+    "set.nbsp_help": "Typographie française : espace avant ? ! ; et : — décoche si une application les affiche mal",
     "set.replacements": "Remplacements",
     "set.replacements_help": "un par ligne — dit = écrit",
     "set.snippets": "Snippets",
@@ -153,6 +155,8 @@ window.MURMUR_I18N = {
     "set.polish_engine": "Polish engine",
     "polish.heuristic": "Heuristic (local, no model)",
     "polish.ollama": "Ollama (local LLM)",
+    "set.nbsp": "Non-breaking spaces",
+    "set.nbsp_help": "French typography: a space before ? ! ; and : — uncheck if an app renders them badly",
     "set.replacements": "Replacements",
     "set.replacements_help": "one per line — said = written",
     "set.snippets": "Snippets",

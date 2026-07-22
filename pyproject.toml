@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "murmur"
+name = "aparte"
 version = "0.1.0"
 description = "Local-first Linux dictation app with Whisper transcription and smart formatting."
 readme = "README.md"
@@ -26,9 +26,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/collectifweb/murmur"
-Repository = "https://github.com/collectifweb/murmur"
-Issues = "https://github.com/collectifweb/murmur/issues"
+Homepage = "https://github.com/collectifweb/aparte"
+Repository = "https://github.com/collectifweb/aparte"
+Issues = "https://github.com/collectifweb/aparte/issues"
 
 [project.optional-dependencies]
 whisper = [
@@ -47,11 +47,14 @@ dev = [
 ]
 
 [project.scripts]
-murmur = "murmur.cli:main"
+aparte = "aparte.cli:main"
+# Deprecated pre-rename alias, kept so a global shortcut still bound to the old
+# binary keeps working after the update. Remove in a later release.
+murmur = "aparte.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-murmur = ["assets/*"]
+aparte = ["assets/*"]
 

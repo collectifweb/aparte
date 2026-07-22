@@ -39,6 +39,7 @@ EDITABLE_FIELDS = (
     "language",
     "device",
     "polish_backend",
+    "nonbreaking_spaces",
     "replacements",
     "snippets",
 )
@@ -50,7 +51,7 @@ def run_desktop(host: str, port: int, settings: Settings, open_browser: bool = T
     url = f"http://{host}:{server.server_port}"
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
-    print(f"Murmur desktop running at {url}")
+    print(f"Aparté desktop running at {url}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -136,6 +137,7 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                             cleanup_level=cleanup_level,
                             replacements=active.replacements or {},
                             snippets=active.snippets or {},
+                            nonbreaking_spaces=active.nonbreaking_spaces,
                         ),
                     )
                     self._send_json({"text": output})
@@ -174,7 +176,7 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                 suffix = ".wav"
             elif "audio/mpeg" in content_type:
                 suffix = ".mp3"
-            handle = tempfile.NamedTemporaryFile(prefix="murmur-upload-", suffix=suffix, delete=False)
+            handle = tempfile.NamedTemporaryFile(prefix="aparte-upload-", suffix=suffix, delete=False)
             path = Path(handle.name)
             handle.write(body)
             handle.close()
@@ -206,6 +208,8 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                         value = {str(k): str(v) for k, v in dict(value).items()} if value else {}
                     elif key == "language":
                         value = (str(value).strip() or None) if value is not None else None
+                    elif key == "nonbreaking_spaces":
+                        value = bool(value)
                     else:
                         value = str(value)
                     updates[key] = value

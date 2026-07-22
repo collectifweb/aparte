@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest import mock
 
-from murmur import hotkey
+from aparte import hotkey
 
 
 class DesktopDetectionTest(unittest.TestCase):
@@ -35,12 +35,12 @@ class HelpersTest(unittest.TestCase):
         self.assertEqual(hotkey._next_free_slot([]), "custom0")
 
     def test_toggle_command_is_absolute(self):
-        with mock.patch("murmur.hotkey.shutil.which", return_value="/venv/bin/murmur"):
-            self.assertEqual(hotkey.toggle_command("paste"), "/venv/bin/murmur toggle --target paste")
+        with mock.patch("aparte.hotkey.shutil.which", return_value="/venv/bin/aparte"):
+            self.assertEqual(hotkey.toggle_command("paste"), "/venv/bin/aparte toggle --target paste")
 
     def test_manual_instructions_mention_command_and_key(self):
-        text = hotkey.manual_instructions("/venv/bin/murmur toggle --target paste", "<Super>space", "cinnamon")
-        self.assertIn("/venv/bin/murmur toggle --target paste", text)
+        text = hotkey.manual_instructions("/venv/bin/aparte toggle --target paste", "<Super>space", "cinnamon")
+        self.assertIn("/venv/bin/aparte toggle --target paste", text)
         self.assertIn("Super+Space", text)
         self.assertIn("System Settings", text)
 
@@ -58,13 +58,13 @@ class InstallHotkeyTest(unittest.TestCase):
                 return "''"  # empty name/command for existing slots
             return ""
 
-        return mock.patch("murmur.hotkey._gsettings", side_effect=fake)
+        return mock.patch("aparte.hotkey._gsettings", side_effect=fake)
 
     def test_install_allocates_next_slot_on_cinnamon(self):
-        with mock.patch("murmur.hotkey.detect_desktop", return_value="cinnamon"), mock.patch(
-            "murmur.hotkey.shutil.which", return_value="/venv/bin/murmur"
+        with mock.patch("aparte.hotkey.detect_desktop", return_value="cinnamon"), mock.patch(
+            "aparte.hotkey.shutil.which", return_value="/venv/bin/aparte"
         ), self._patch_gsettings("['custom0', 'custom1', 'custom2', 'custom3']"):
-            result = hotkey.install_hotkey("<Super>space", "paste", "Murmur dictation")
+            result = hotkey.install_hotkey("<Super>space", "paste", "Aparté dictation")
 
         self.assertEqual(result.slot, "custom4")
         self.assertEqual(result.desktop, "cinnamon")
@@ -75,6 +75,34 @@ class InstallHotkeyTest(unittest.TestCase):
         list_set = next(c for c in self.calls if c[0] == "set" and c[2] == "custom-list")
         self.assertIn("custom4", list_set[-1])
 
+    def test_install_reuses_and_relabels_a_pre_rename_slot(self):
+        """A shortcut bound before the rename is updated in place, not duplicated."""
+
+        def fake(*args):
+            if args[0] == "get" and args[-1] == "custom-list":
+                return "['custom0']"
+            if args[0] == "get" and args[-1] == "command":
+                return "'/venv/bin/murmur toggle --target paste'"
+            if args[0] == "get" and args[-1] == "name":
+                return "'Murmur dictation'"
+            if args[0] == "get" and args[-1] == "binding":
+                return "['<Control>d']"
+            return ""
+
+        with mock.patch("aparte.hotkey.detect_desktop", return_value="cinnamon"), mock.patch(
+            "aparte.hotkey.shutil.which", return_value="/venv/bin/aparte"
+        ), mock.patch("aparte.hotkey._gsettings", side_effect=fake) as gs:
+            result = hotkey.install_hotkey(None, "paste", "Aparté dictation")
+
+        calls = [c.args for c in gs.call_args_list]
+        self.assertEqual(result.slot, "custom0")  # reused, no duplicate slot
+        self.assertEqual(result.key, "<Control>d")  # keeps the key already chosen
+        name_set = next(c for c in calls if c[0] == "set" and c[-2] == "name")
+        self.assertEqual(name_set[-1], "'Aparté dictation'")  # stale label refreshed
+        command_set = next(c for c in calls if c[0] == "set" and c[-2] == "command")
+        self.assertIn("aparte toggle", command_set[-1])  # repointed at the new binary
+        self.assertFalse(any(c[0] == "set" and c[2] == "custom-list" for c in calls))
+
     def test_install_uses_string_binding_on_gnome(self):
         def fake(*args):
             if args[0] == "get" and args[-1] == "custom-keybindings":
@@ -83,10 +111,10 @@ class InstallHotkeyTest(unittest.TestCase):
                 return "''"
             return ""
 
-        with mock.patch("murmur.hotkey.detect_desktop", return_value="gnome"), mock.patch(
-            "murmur.hotkey.shutil.which", return_value="/venv/bin/murmur"
-        ), mock.patch("murmur.hotkey._gsettings", side_effect=fake) as gs:
-            result = hotkey.install_hotkey("<Super>space", "paste", "Murmur dictation")
+        with mock.patch("aparte.hotkey.detect_desktop", return_value="gnome"), mock.patch(
+            "aparte.hotkey.shutil.which", return_value="/venv/bin/aparte"
+        ), mock.patch("aparte.hotkey._gsettings", side_effect=fake) as gs:
+            result = hotkey.install_hotkey("<Super>space", "paste", "Aparté dictation")
 
         self.assertEqual(result.slot, "custom0")
         binding_set = next(c.args for c in gs.call_args_list if c.args[0] == "set" and c.args[-2] == "binding")
@@ -95,10 +123,10 @@ class InstallHotkeyTest(unittest.TestCase):
         list_set = next(c.args for c in gs.call_args_list if c.args[0] == "set" and c.args[2] == "custom-keybindings")
         self.assertIn("/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/", list_set[-1])
 
-    def test_remove_drops_murmur_slot_and_resets_child(self):
-        with mock.patch("murmur.hotkey.detect_desktop", return_value="cinnamon"), mock.patch(
-            "murmur.hotkey.shutil.which", return_value="/venv/bin/murmur"
-        ), mock.patch("murmur.hotkey._gsettings", side_effect=self._reuse_fake()) as gs:
+    def test_remove_drops_aparte_slot_and_resets_child(self):
+        with mock.patch("aparte.hotkey.detect_desktop", return_value="cinnamon"), mock.patch(
+            "aparte.hotkey.shutil.which", return_value="/venv/bin/aparte"
+        ), mock.patch("aparte.hotkey._gsettings", side_effect=self._reuse_fake()) as gs:
             removed = hotkey.remove_hotkey()
 
         self.assertEqual(removed, ["custom0"])
@@ -108,20 +136,20 @@ class InstallHotkeyTest(unittest.TestCase):
         # …and its child keys are reset
         self.assertTrue(any(c.args[0] == "reset-recursively" for c in gs.call_args_list))
 
-    def test_remove_is_noop_without_murmur_slot(self):
+    def test_remove_is_noop_without_aparte_slot(self):
         def fake(*args):
             if args[0] == "get" and args[-1] == "custom-list":
                 return "['custom0']"
             return "'/usr/bin/diodon'" if args[-1] == "command" else "'Diodon'"
 
-        with mock.patch("murmur.hotkey.detect_desktop", return_value="cinnamon"), mock.patch(
-            "murmur.hotkey.shutil.which", return_value="/venv/bin/murmur"
-        ), mock.patch("murmur.hotkey._gsettings", side_effect=fake):
+        with mock.patch("aparte.hotkey.detect_desktop", return_value="cinnamon"), mock.patch(
+            "aparte.hotkey.shutil.which", return_value="/venv/bin/aparte"
+        ), mock.patch("aparte.hotkey._gsettings", side_effect=fake):
             self.assertEqual(hotkey.remove_hotkey(), [])
 
     def test_unsupported_desktop_raises_with_instructions(self):
-        with mock.patch("murmur.hotkey.detect_desktop", return_value="sway"), mock.patch(
-            "murmur.hotkey.shutil.which", return_value=None
+        with mock.patch("aparte.hotkey.detect_desktop", return_value="sway"), mock.patch(
+            "aparte.hotkey.shutil.which", return_value=None
         ):
             with self.assertRaises(hotkey.HotkeyUnsupported) as ctx:
                 hotkey.install_hotkey()
@@ -132,19 +160,19 @@ class InstallHotkeyTest(unittest.TestCase):
             if args[0] == "get" and args[-1] == "custom-list":
                 return "['custom0']"
             if args[0] == "get" and args[-1] == "command":
-                return "'/venv/bin/murmur toggle --target paste'"
+                return "'/venv/bin/aparte toggle --target paste'"
             if args[0] == "get" and args[-1] == "binding":
                 return binding
             if args[0] == "get":
-                return "'Dictée vocale (Murmur)'"
+                return "'Dictée vocale (Aparté)'"
             return ""
 
         return fake
 
-    def test_install_reuses_existing_murmur_slot(self):
-        with mock.patch("murmur.hotkey.detect_desktop", return_value="cinnamon"), mock.patch(
-            "murmur.hotkey.shutil.which", return_value="/venv/bin/murmur"
-        ), mock.patch("murmur.hotkey._gsettings", side_effect=self._reuse_fake()) as gs:
+    def test_install_reuses_existing_aparte_slot(self):
+        with mock.patch("aparte.hotkey.detect_desktop", return_value="cinnamon"), mock.patch(
+            "aparte.hotkey.shutil.which", return_value="/venv/bin/aparte"
+        ), mock.patch("aparte.hotkey._gsettings", side_effect=self._reuse_fake()) as gs:
             result = hotkey.install_hotkey()
 
         self.assertEqual(result.slot, "custom0")
@@ -154,15 +182,15 @@ class InstallHotkeyTest(unittest.TestCase):
         self.assertFalse(any(c.args[0] == "set" and c.args[-2] == "name" for c in gs.call_args_list))
 
     def test_install_preserves_existing_key_unless_overridden(self):
-        with mock.patch("murmur.hotkey.detect_desktop", return_value="cinnamon"), mock.patch(
-            "murmur.hotkey.shutil.which", return_value="/venv/bin/murmur"
-        ), mock.patch("murmur.hotkey._gsettings", side_effect=self._reuse_fake()):
+        with mock.patch("aparte.hotkey.detect_desktop", return_value="cinnamon"), mock.patch(
+            "aparte.hotkey.shutil.which", return_value="/venv/bin/aparte"
+        ), mock.patch("aparte.hotkey._gsettings", side_effect=self._reuse_fake()):
             # bare install keeps the key the user already chose
             self.assertEqual(hotkey.install_hotkey().key, "<Primary><Shift>End")
 
-        with mock.patch("murmur.hotkey.detect_desktop", return_value="cinnamon"), mock.patch(
-            "murmur.hotkey.shutil.which", return_value="/venv/bin/murmur"
-        ), mock.patch("murmur.hotkey._gsettings", side_effect=self._reuse_fake()):
+        with mock.patch("aparte.hotkey.detect_desktop", return_value="cinnamon"), mock.patch(
+            "aparte.hotkey.shutil.which", return_value="/venv/bin/aparte"
+        ), mock.patch("aparte.hotkey._gsettings", side_effect=self._reuse_fake()):
             # an explicit --key moves it
             self.assertEqual(hotkey.install_hotkey("<Super>space").key, "<Super>space")
 

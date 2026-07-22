@@ -1,8 +1,8 @@
-"""Register a global keyboard shortcut that toggles Murmur dictation.
+"""Register a global keyboard shortcut that toggles Aparté dictation.
 
-The Flow-like flow is one shortcut bound to ``murmur toggle``: press once to
+The Flow-like flow is one shortcut bound to ``aparte toggle``: press once to
 start recording, press again to transcribe and insert into the focused app. The
-binding itself lives in the desktop environment, not in a Murmur process, so it
+binding itself lives in the desktop environment, not in a Aparté process, so it
 survives reboots without a background daemon.
 
 Cinnamon and GNOME expose custom keybindings through ``gsettings``, so this
@@ -23,20 +23,23 @@ import sys
 from dataclasses import dataclass
 
 DEFAULT_KEY = "<Super>space"
-DEFAULT_NAME = "Murmur dictation"
+DEFAULT_NAME = "Aparté dictation"
+# Shortcut installed before the app was renamed from Murmur to Aparté. Matched so
+# an existing binding is reused and relabelled instead of being duplicated.
+LEGACY_NAME = "Murmur dictation"
 
 
-def murmur_command(*args: str) -> list[str]:
-    """Absolute command to invoke the Murmur CLI from a shortcut or launcher.
+def aparte_command(*args: str) -> list[str]:
+    """Absolute command to invoke the Aparté CLI from a shortcut or launcher.
 
-    Prefer the resolved ``murmur`` entry point so the shortcut keeps working
-    outside the virtualenv; fall back to ``python -m murmur`` when it is not on
+    Prefer the resolved ``aparte`` entry point so the shortcut keeps working
+    outside the virtualenv; fall back to ``python -m aparte`` when it is not on
     PATH (e.g. an editable install that was never activated).
     """
-    executable = shutil.which("murmur")
+    executable = shutil.which("aparte")
     if executable:
         return [executable, *args]
-    return [sys.executable, "-m", "murmur", *args]
+    return [sys.executable, "-m", "aparte", *args]
 
 
 def command_string(command: list[str]) -> str:
@@ -44,11 +47,11 @@ def command_string(command: list[str]) -> str:
 
 
 def toggle_command(target: str = "paste") -> str:
-    return command_string(murmur_command("toggle", "--target", target))
+    return command_string(aparte_command("toggle", "--target", target))
 
 
 def install_command() -> str:
-    return command_string(murmur_command("install-hotkey"))
+    return command_string(aparte_command("install-hotkey"))
 
 
 def detect_desktop() -> str:
@@ -207,13 +210,15 @@ def _next_free_slot(slots: list[str]) -> str:
     return f"custom{index}"
 
 
-def _is_murmur_slot(provider: GsettingsProvider, slot: str, name: str) -> bool:
+def _is_aparte_slot(provider: GsettingsProvider, slot: str, name: str) -> bool:
     try:
         command = _child_get(provider, slot, "command")
         label = _child_get(provider, slot, "name")
     except subprocess.CalledProcessError:
         return False
-    return ("murmur" in command and "toggle" in command) or _strip(label) == name
+    if "toggle" in command and ("aparte" in command or "murmur" in command):
+        return True
+    return _strip(label) in {name, LEGACY_NAME}
 
 
 def _strip(raw: str) -> str:
@@ -231,11 +236,11 @@ def _current_slots(provider: GsettingsProvider) -> tuple[list[str], list[str]]:
 def install_hotkey(key: str | None = None, target: str = "paste", name: str = DEFAULT_NAME) -> HotkeyResult:
     """Register (or update) the global dictation shortcut for the current desktop.
 
-    Re-runs reuse the existing Murmur slot instead of piling up duplicates. When
-    ``key`` is None, an already-bound Murmur shortcut keeps its current
+    Re-runs reuse the existing Aparté slot instead of piling up duplicates. When
+    ``key`` is None, an already-bound Aparté shortcut keeps its current
     accelerator (so a bare ``install-hotkey`` is non-destructive); only an
     explicit ``--key`` moves it. A reused slot also keeps whatever name the user
-    gave it; only freshly created slots get ``name``.
+    gave it, unless it still carries the pre-rename default label.
     """
     command = toggle_command(target)
     provider = _provider()
@@ -243,7 +248,7 @@ def install_hotkey(key: str | None = None, target: str = "paste", name: str = DE
         raise HotkeyUnsupported(detect_desktop(), command, key or DEFAULT_KEY)
 
     entries, slots = _current_slots(provider)
-    slot = next((s for s in slots if _is_murmur_slot(provider, s, name)), None)
+    slot = next((s for s in slots if _is_aparte_slot(provider, s, name)), None)
     is_new = slot is None
     if slot is None:
         slot = _next_free_slot(slots)
@@ -251,7 +256,7 @@ def install_hotkey(key: str | None = None, target: str = "paste", name: str = DE
     else:
         resolved_key = key or _slot_binding(provider, slot) or DEFAULT_KEY
 
-    if is_new:
+    if is_new or _strip(_child_get(provider, slot, "name")) == LEGACY_NAME:
         _child_set(provider, slot, "name", _quote(name))
     _child_set(provider, slot, "command", _quote(command))
     _child_set(provider, slot, "binding", _binding_value(provider, resolved_key))
@@ -268,12 +273,12 @@ def _slot_binding(provider: GsettingsProvider, slot: str) -> str | None:
 
 
 def remove_hotkey(name: str = DEFAULT_NAME) -> list[str]:
-    """Remove any Murmur dictation shortcut. Returns the removed slot names."""
+    """Remove any Aparté dictation shortcut. Returns the removed slot names."""
     provider = _provider()
     if provider is None:
         return []
     entries, slots = _current_slots(provider)
-    removed = [s for s in slots if _is_murmur_slot(provider, s, name)]
+    removed = [s for s in slots if _is_aparte_slot(provider, s, name)]
     if not removed:
         return []
     kept = [entry for entry, slot in zip(entries, slots) if slot not in removed]
@@ -284,20 +289,20 @@ def remove_hotkey(name: str = DEFAULT_NAME) -> list[str]:
 
 
 def current_binding(name: str = DEFAULT_NAME) -> str | None:
-    """Return the key currently bound to Murmur, or None. Never raises."""
+    """Return the key currently bound to Aparté, or None. Never raises."""
     try:
         provider = _provider()
         if provider is None:
             return None
         _, slots = _current_slots(provider)
-        slot = next((s for s in slots if _is_murmur_slot(provider, s, name)), None)
+        slot = next((s for s in slots if _is_aparte_slot(provider, s, name)), None)
         return _slot_binding(provider, slot) if slot is not None else None
     except Exception:
         return None
 
 
 def hotkey_info() -> dict:
-    """Shortcut status for the desktop diagnostics panel and `murmur doctor`."""
+    """Shortcut status for the desktop diagnostics panel and `aparte doctor`."""
     desktop = detect_desktop()
     bound = current_binding()
     return {

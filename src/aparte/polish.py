@@ -10,6 +10,38 @@ class PolishError(RuntimeError):
     pass
 
 
+NBSP = " "
+
+# Function words used to tell French from English when no dictation language is
+# set. French typography is the point of this app, so it must not depend on the
+# user having found the language setting first.
+_FRENCH_HINTS = re.compile(
+    r"\b(je|tu|il|elle|nous|vous|ils|elles|le|la|les|un|une|des|du|de|et|est|sont|"
+    r"que|qui|pas|plus|pour|dans|avec|sur|mais|donc|ce|cette|mon|ma|mes|son|sa|ses|"
+    r"tout|toute|bien|aussi|tres|merci|bonjour|oui|non|alors|comme|quand|faire)\b",
+    re.IGNORECASE,
+)
+_FRENCH_ACCENTS = re.compile(r"[àâäçéèêëîïôöùûüÿœæ]", re.IGNORECASE)
+
+
+def detect_language(text: str) -> str:
+    """Best-effort ``fr``/``en`` guess from the text itself."""
+    if _FRENCH_ACCENTS.search(text):
+        return "fr"
+    return "fr" if len(_FRENCH_HINTS.findall(text)) >= 2 else "en"
+
+
+def resolve_language(language: str | None, text: str) -> str:
+    """Which typography rules to follow: the setting, or the text when unset.
+
+    Anything that is neither French nor English falls back to the English rules,
+    which are the neutral ones (no space before double punctuation).
+    """
+    if language:
+        return "fr" if language.lower().startswith("fr") else "en"
+    return detect_language(text)
+
+
 @dataclass(frozen=True)
 class PolishOptions:
     style: str = "neutral"
@@ -17,6 +49,7 @@ class PolishOptions:
     cleanup_level: str = "medium"
     replacements: dict[str, str] | None = None
     snippets: dict[str, str] | None = None
+    nonbreaking_spaces: bool = True
 
 
 class Polisher:
@@ -27,16 +60,25 @@ class Polisher:
 class HeuristicPolisher(Polisher):
     """Small local cleanup layer for usable dictation without an LLM."""
 
+    # Hesitation sounds are not real words in either language, so they are safe
+    # to strip whatever the dictation language is.
     _fillers = (
         "um",
         "uh",
         "erm",
         "hmm",
+        "hum",
         "you know",
         "i mean",
         "euh",
         "heu",
     )
+    # These *are* real words in their own language ("genre de", "I feel like"),
+    # so they only go at the "high" level, and only for the language dictated.
+    _fillers_high = {
+        "en": ("like", "basically", "actually"),
+        "fr": ("ben", "bah", "tsé", "genre"),
+    }
     _spoken_punctuation = {
         "comma": ",",
         "period": ".",
@@ -59,14 +101,21 @@ class HeuristicPolisher(Polisher):
         if not text.strip():
             return ""
         options = options or PolishOptions()
+        language = resolve_language(options.language, text)
+        space = NBSP if options.nonbreaking_spaces else " "
         text = self._normalize_space(text)
-        text = self._remove_fillers(text, options.cleanup_level)
+        text = self._remove_fillers(text, language, options.cleanup_level)
         text = self._replace_spoken_punctuation(text)
-        text = self._space_punctuation(text)
-        text = self._capitalize_sentences(text)
+        text = self._space_punctuation(text, language, space)
+        text = self._capitalize_sentences(text, language)
         text = self._apply_replacements(text, options.replacements or {})
         text = self._apply_snippets(text, options.snippets or {})
         text = self._finish_sentence(text, options.style)
+        if language == "fr":
+            # Last, so the quote and apostrophe characters cannot break the
+            # word-boundary matching of replacements and snippets above.
+            text = self._french_quotes(text, space)
+            text = self._french_apostrophes(text)
         return text.strip()
 
     def _normalize_space(self, text: str) -> str:
@@ -75,11 +124,11 @@ class HeuristicPolisher(Polisher):
         text = re.sub(r" *\n *", "\n", text)
         return text.strip()
 
-    def _remove_fillers(self, text: str, cleanup_level: str) -> str:
+    def _remove_fillers(self, text: str, language: str, cleanup_level: str) -> str:
         if cleanup_level == "light":
             fillers = ("um", "uh", "euh", "heu")
         elif cleanup_level == "high":
-            fillers = self._fillers + ("like", "basically", "actually")
+            fillers = self._fillers + self._fillers_high.get(language, ())
         else:
             fillers = self._fillers
         for filler in fillers:
@@ -93,8 +142,15 @@ class HeuristicPolisher(Polisher):
             text = re.sub(rf"\b{re.escape(spoken)}\b", mark, text, flags=re.IGNORECASE)
         return text
 
-    def _space_punctuation(self, text: str) -> str:
-        text = re.sub(r"\s+([,.;:!?])", r"\1", text)
+    def _space_punctuation(self, text: str, language: str, space: str) -> str:
+        # Drop whatever space precedes punctuation, including a previously
+        # inserted non-breaking one, then re-add what the language calls for.
+        text = re.sub(r"[^\S\n]+([,.;:!?])", r"\1", text)
+        if language == "fr":
+            # French puts a space before ; ! ? and :, but not before , and . —
+            # skipping ":" in "https://" and "14:30", which are not punctuation.
+            text = re.sub(r"(?<=\S)([;!?])", rf"{space}\1", text)
+            text = re.sub(r"(?<=\S):(?![/\d])", f"{space}:", text)
         text = re.sub(r"([,;!?])(?=\S)", r"\1 ", text)
         text = re.sub(r"(:)(?=[^\s/\d])", r"\1 ", text)
         text = re.sub(r"(?<![A-Za-z0-9])\.(?=\S)", ". ", text)
@@ -103,7 +159,17 @@ class HeuristicPolisher(Polisher):
         text = re.sub(r"\n\s+", "\n", text)
         return text
 
-    def _capitalize_sentences(self, text: str) -> str:
+    def _french_quotes(self, text: str, space: str) -> str:
+        """Turn straight double quotes into « … », but only if they pair up."""
+        if text.count('"') < 2 or text.count('"') % 2:
+            return text
+        return re.sub(r'"\s*([^"]*?)\s*"', rf"«{space}\1{space}»", text)
+
+    def _french_apostrophes(self, text: str) -> str:
+        """Curly apostrophe between letters: l'ami → l’ami, but not 'quoted'."""
+        return re.sub(r"(?<=\w)'(?=\w)", "’", text)
+
+    def _capitalize_sentences(self, text: str, language: str = "en") -> str:
         chars = list(text)
         capitalize_next = True
         for i, char in enumerate(chars):
@@ -118,7 +184,10 @@ class HeuristicPolisher(Polisher):
             elif not char.isspace():
                 capitalize_next = False
         text = "".join(chars)
-        text = re.sub(r"\bi\b", "I", text)
+        if language != "fr":
+            # Standalone "i" is the English pronoun; in French it is a letter
+            # being spelled out, and upper-casing it is wrong.
+            text = re.sub(r"\bi\b", "I", text)
         return text
 
     def _finish_sentence(self, text: str, style: str) -> str:
@@ -178,7 +247,16 @@ class OllamaPolisher(Polisher):
         except Exception:
             return self.fallback.polish(text, options)
 
+    _FRENCH_STYLES = {
+        "neutral": "neutre",
+        "formal": "formel",
+        "casual": "décontracté",
+        "very-casual": "très décontracté",
+    }
+
     def _prompt(self, text: str, options: PolishOptions) -> str:
+        if resolve_language(options.language, text) == "fr":
+            return self._french_prompt(text, options)
         language = options.language or "the same language as the input"
         return f"""Rewrite this voice dictation into clean, ready-to-paste text.
 
@@ -196,6 +274,42 @@ Rules:
 Dictation:
 {text}
 """
+
+    def _french_prompt(self, text: str, options: PolishOptions) -> str:
+        style = self._FRENCH_STYLES.get(options.style, options.style)
+        spacing = (
+            "espace insécable avant ? ! ; et :"
+            if options.nonbreaking_spaces
+            else "espace avant ? ! ; et :"
+        )
+        return f"""Réécris cette dictée vocale en un texte propre, prêt à coller.
+
+Règles :
+- Garde le sens d'origine, n'ajoute aucune information.
+- Supprime les hésitations et les faux départs.
+- Conserve les termes techniques, les sigles, les commandes, les chemins et le code.
+- Ponctue et mets les majuscules correctement.
+- Respecte la typographie française : {spacing}, guillemets « », apostrophe ’.
+- Mets en forme les listes numérotées ou à puces évidentes.
+- Adopte un ton {style}.
+- Ne renvoie que le texte final, en français, sans commentaire.
+{self._french_context_prompt(options)}
+
+Dictée :
+{text}
+"""
+
+    def _french_context_prompt(self, options: PolishOptions) -> str:
+        lines: list[str] = []
+        if options.replacements:
+            lines.append("- Utilise exactement ces orthographes quand elles s'appliquent :")
+            for raw, replacement in options.replacements.items():
+                lines.append(f"  - {raw} -> {replacement}")
+        if options.snippets:
+            lines.append("- Remplace les raccourcis dictés « slash NOM » ou « insert NOM » par :")
+            for name, value in options.snippets.items():
+                lines.append(f"  - {name} : {value}")
+        return "\n".join(lines)
 
     def _context_prompt(self, options: PolishOptions) -> str:
         lines: list[str] = []

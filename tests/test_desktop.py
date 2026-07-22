@@ -1,11 +1,15 @@
 import json
+import os
+import tempfile
 import unittest
 from email.message import Message
 from http import HTTPStatus
 from io import BytesIO
+from pathlib import Path
+from unittest import mock
 
-from murmur.config import Settings
-from murmur.desktop import ASSETS_DIR, STATIC_FILES, handler_factory
+from aparte.config import Settings
+from aparte.desktop import ASSETS_DIR, STATIC_FILES, handler_factory
 
 
 def make_request(method, path, body=b"", headers=None):
@@ -43,7 +47,7 @@ class StaticAssetsTest(unittest.TestCase):
     def test_index_served_at_root(self):
         res = make_request("GET", "/")
         self.assertEqual(res["status"], int(HTTPStatus.OK))
-        self.assertIn(b"<title>Murmur</title>", res["body"])
+        self.assertIn("<title>Aparté</title>".encode("utf-8"), res["body"])
         self.assertEqual(res["headers"]["Content-Type"], "text/html; charset=utf-8")
 
     def test_app_js_uses_browser_wav_recording(self):
@@ -61,6 +65,21 @@ class DoctorEndpointTest(unittest.TestCase):
         self.assertIn("summary", data)
         self.assertIn("checks", data)
         self.assertIn("ready", data["summary"])
+
+
+class ConfigEndpointTest(unittest.TestCase):
+    def test_nonbreaking_spaces_round_trips_as_a_boolean(self):
+        """The settings form posts a checkbox; it must not land as the string "False"."""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            with mock.patch.dict(os.environ, {"APARTE_CONFIG": str(path), "MURMUR_CONFIG": ""}):
+                body = json.dumps({"nonbreaking_spaces": False}).encode("utf-8")
+                res = make_request("POST", "/api/config", body)
+
+                self.assertEqual(res["status"], int(HTTPStatus.OK))
+                self.assertIs(json.loads(res["body"])["config"]["nonbreaking_spaces"], False)
+                self.assertIs(json.loads(path.read_text(encoding="utf-8"))["nonbreaking_spaces"], False)
+                self.assertIs(json.loads(make_request("GET", "/api/config")["body"])["nonbreaking_spaces"], False)
 
 
 if __name__ == "__main__":

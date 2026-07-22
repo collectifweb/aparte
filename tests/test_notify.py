@@ -1,8 +1,8 @@
 import unittest
 from unittest import mock
 
-from murmur import notify as notify_module
-from murmur.notify import _preview, notify
+from aparte import notify as notify_module
+from aparte.notify import _preview, notify
 
 
 class NotifyTest(unittest.TestCase):

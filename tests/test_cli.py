@@ -1,6 +1,6 @@
 import unittest
 
-from murmur.cli import build_parser
+from aparte.cli import build_parser
 
 
 class CliParserTest(unittest.TestCase):

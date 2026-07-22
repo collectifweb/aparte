@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Murmur</title>
+  <title>Aparté</title>
   <link rel="icon" href="/logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/app.css">
 </head>
@@ -11,7 +11,7 @@
   <header class="topbar">
     <div class="brand">
       <img src="/logo.svg" class="logo" alt="">
-      <span class="wordmark">Murmur</span>
+      <span class="wordmark">Aparté</span>
     </div>
     <nav class="topbar-actions">
       <select id="ui-lang" class="lang-select" title="Language / Langue" aria-label="Language">
@@ -110,6 +110,10 @@
               <option value="heuristic" data-i18n="polish.heuristic">Heuristique (local, sans modèle)</option>
               <option value="ollama" data-i18n="polish.ollama">Ollama (LLM local)</option>
             </select>
+          </label>
+          <label class="field">
+            <span class="inline"><input id="set-nbsp" type="checkbox"> <span data-i18n="set.nbsp">Espaces insécables</span></span>
+            <small data-i18n="set.nbsp_help">Typographie française : espace avant ? ! ; et : — décoche si une application les affiche mal</small>
           </label>
         </div>
         <div class="group">

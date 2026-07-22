@@ -8,8 +8,8 @@ const heroSub = $("#hero-sub");
 let recordingSession = null;
 
 /* ---------- i18n ---------- */
-const I18N = window.MURMUR_I18N || { en: {}, fr: {} };
-let lang = localStorage.getItem("murmur_lang");
+const I18N = window.APARTE_I18N || { en: {}, fr: {} };
+let lang = localStorage.getItem("aparte_lang");
 if (!I18N[lang]) lang = (navigator.language || "en").slice(0, 2);
 if (!I18N[lang]) lang = "en";
 let recordState = "idle";
@@ -207,7 +207,7 @@ document.querySelectorAll(".overlay").forEach((ov) =>
 $("#ui-lang").value = lang;
 $("#ui-lang").addEventListener("change", () => {
   lang = $("#ui-lang").value;
-  localStorage.setItem("murmur_lang", lang);
+  localStorage.setItem("aparte_lang", lang);
   applyI18n();
 });
 
@@ -248,6 +248,7 @@ async function loadConfig() {
   $("#set-language").value = cfg.language || "";
   $("#set-device").value = cfg.device || "auto";
   $("#set-polish").value = cfg.polish_backend || "heuristic";
+  $("#set-nbsp").checked = cfg.nonbreaking_spaces !== false;
   $("#set-replacements").value = kvToText(cfg.replacements);
   $("#set-snippets").value = kvToText(cfg.snippets);
 }
@@ -266,6 +267,7 @@ $("#save-settings").addEventListener("click", async () => {
       language: $("#set-language").value,
       device: $("#set-device").value,
       polish_backend: $("#set-polish").value,
+      nonbreaking_spaces: $("#set-nbsp").checked,
       replacements: textToKv($("#set-replacements").value),
       snippets: textToKv($("#set-snippets").value),
     });

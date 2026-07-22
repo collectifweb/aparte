@@ -2,8 +2,15 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from murmur.config import Settings, load_config, update_config, write_default_config
+from aparte.config import (
+    Settings,
+    load_config,
+    migrate_legacy_config,
+    update_config,
+    write_default_config,
+)
 
 
 class ConfigTest(unittest.TestCase):
@@ -37,20 +44,67 @@ class ConfigTest(unittest.TestCase):
             self.assertEqual(merged["default_style"], "casual")
 
     def test_settings_uses_whispr_config_override(self):
-        old_config = os.environ.get("MURMUR_CONFIG")
+        old_config = os.environ.get("APARTE_CONFIG")
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"
             path.write_text('{"default_style": "casual", "replacements": {"foo": "FOO"}}', encoding="utf-8")
-            os.environ["MURMUR_CONFIG"] = str(path)
+            os.environ["APARTE_CONFIG"] = str(path)
             try:
                 settings = Settings.from_env()
             finally:
                 if old_config is None:
-                    os.environ.pop("MURMUR_CONFIG", None)
+                    os.environ.pop("APARTE_CONFIG", None)
                 else:
-                    os.environ["MURMUR_CONFIG"] = old_config
+                    os.environ["APARTE_CONFIG"] = old_config
             self.assertEqual(settings.default_style, "casual")
             self.assertEqual(settings.replacements, {"foo": "FOO"})
+
+
+class LegacyConfigMigrationTest(unittest.TestCase):
+    """The app was renamed from Murmur to Aparté; existing configs must survive."""
+
+    def _clean_env(self, directory):
+        return mock.patch.dict(
+            os.environ,
+            {"XDG_CONFIG_HOME": directory, "APARTE_CONFIG": "", "MURMUR_CONFIG": ""},
+            clear=False,
+        )
+
+    def test_pre_rename_config_moves_to_the_new_location(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self._clean_env(directory):
+                legacy = Path(directory) / "murmur" / "config.json"
+                legacy.parent.mkdir(parents=True)
+                legacy.write_text('{"model": "base"}', encoding="utf-8")
+
+                moved = migrate_legacy_config()
+
+                self.assertEqual(moved, Path(directory) / "aparte" / "config.json")
+                self.assertFalse(legacy.exists())
+                self.assertEqual(load_config()["model"], "base")
+
+    def test_existing_config_is_never_overwritten(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self._clean_env(directory):
+                legacy = Path(directory) / "murmur" / "config.json"
+                legacy.parent.mkdir(parents=True)
+                legacy.write_text('{"model": "base"}', encoding="utf-8")
+                current = Path(directory) / "aparte" / "config.json"
+                current.parent.mkdir(parents=True)
+                current.write_text('{"model": "medium"}', encoding="utf-8")
+
+                self.assertIsNone(migrate_legacy_config())
+                self.assertTrue(legacy.exists())
+                self.assertEqual(load_config()["model"], "medium")
+
+    def test_legacy_env_var_is_still_read(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.dict(
+                os.environ,
+                {"XDG_CONFIG_HOME": directory, "APARTE_MODEL": "", "MURMUR_MODEL": "medium"},
+                clear=False,
+            ):
+                self.assertEqual(Settings.from_env().model, "medium")
 
 
 if __name__ == "__main__":

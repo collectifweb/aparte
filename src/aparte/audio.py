@@ -30,7 +30,7 @@ def record_wav(seconds: float, sample_rate: int = 16000, backend: str = "auto") 
             raise RecordingError("arecord was not found on PATH.")
     message = (
         "No microphone recorder found. Install sounddevice or alsa-utils/arecord, "
-        "or set MURMUR_RECORDER=sounddevice|arecord."
+        "or set APARTE_RECORDER=sounddevice|arecord."
     )
     if last_error:
         message = f"{message} Last error: {last_error}"
@@ -50,7 +50,7 @@ def _record_wav_sounddevice(seconds: float, sample_rate: int) -> Path:
     data = sd.rec(frames, samplerate=sample_rate, channels=1, dtype="int16")
     sd.wait()
 
-    handle = tempfile.NamedTemporaryFile(prefix="murmur-", suffix=".wav", delete=False)
+    handle = tempfile.NamedTemporaryFile(prefix="aparte-", suffix=".wav", delete=False)
     path = Path(handle.name)
     handle.close()
 
@@ -63,7 +63,7 @@ def _record_wav_sounddevice(seconds: float, sample_rate: int) -> Path:
 
 
 def _record_wav_arecord(seconds: float, sample_rate: int) -> Path:
-    handle = tempfile.NamedTemporaryFile(prefix="murmur-", suffix=".wav", delete=False)
+    handle = tempfile.NamedTemporaryFile(prefix="aparte-", suffix=".wav", delete=False)
     path = Path(handle.name)
     handle.close()
     duration = max(1, math.ceil(seconds))

@@ -4,9 +4,9 @@ import types
 import unittest
 from pathlib import Path
 
-from murmur.cli import transcribe_path
-from murmur.config import Settings
-from murmur.transcription import FasterWhisperTranscriber, TranscriptionError
+from aparte.cli import transcribe_path
+from aparte.config import Settings
+from aparte.transcription import FasterWhisperTranscriber, TranscriptionError
 
 
 class TextTranscriptionTest(unittest.TestCase):

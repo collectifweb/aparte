@@ -117,7 +117,7 @@ def collect_checks(settings: Settings) -> list[Check]:
             bool(settings.config_path and settings.config_path.exists()),
             "System",
             detail=str(settings.config_path or ""),
-            fix="murmur config init",
+            fix="aparte config init",
         ),
         Check(
             "notify",

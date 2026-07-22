@@ -1,6 +1,6 @@
-# Contributing to Murmur
+# Contributing to Aparté
 
-Thanks for your interest in Murmur — a local-first dictation app for Linux.
+Thanks for your interest in Aparté — a local-first dictation app for Linux.
 Contributions of all kinds are welcome: bug reports, fixes, features, docs, and
 testing on different desktop environments.
 
@@ -18,8 +18,8 @@ testing on different desktop environments.
 Requires Python 3.10+.
 
 ```bash
-git clone git@github.com:collectifweb/murmur.git
-cd murmur
+git clone git@github.com:collectifweb/aparte.git
+cd aparte
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e ".[whisper,recording,dev]"
@@ -35,7 +35,7 @@ Optional extras:
 - System tools for recording/insertion: `sudo apt install alsa-utils xclip xdotool`
   (X11) or `wl-clipboard wtype` (Wayland).
 
-Run `murmur doctor` (or open the **Configuration** panel in `murmur desktop`) to
+Run `aparte doctor` (or open the **Configuration** panel in `aparte desktop`) to
 see what is set up.
 
 ## Running the tests
@@ -51,7 +51,7 @@ real model download or audio device in a test.
 ## Code layout
 
 ```
-src/murmur/
+src/aparte/
   cli.py            argparse entry point and command handlers
   config.py         Settings, config file load/update
   transcription.py  Whisper backends + automatic CUDA→CPU fallback
@@ -68,7 +68,7 @@ src/murmur/
 ```
 
 The desktop UI is plain HTML/CSS/JS served as static files from
-`src/murmur/assets/` — no build step, no framework. Edit those files directly
+`src/aparte/assets/` — no build step, no framework. Edit those files directly
 and reload the page. UI strings are bilingual: add a key to both `fr` and `en`
 in `assets/i18n.js` and reference it with `data-i18n="key"` in HTML or `t("key")`
 in `app.js`. Diagnostic check labels are translated by their `key`, so adding a

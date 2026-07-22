@@ -1,11 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Murmur">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Aparté">
   <defs>
-    <linearGradient id="murmurBg" x1="0" y1="0" x2="1" y2="1">
+    <linearGradient id="aparteBg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#14b8a6"/>
       <stop offset="1" stop-color="#6366f1"/>
     </linearGradient>
   </defs>
-  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#murmurBg)"/>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#aparteBg)"/>
   <g fill="#ffffff" opacity="0.97">
     <rect x="118" y="201" width="36" height="110" rx="18"/>
     <rect x="178" y="161" width="36" height="190" rx="18"/>

@@ -83,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="murmur")
+    parser = argparse.ArgumentParser(prog="aparte")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     polish = subparsers.add_parser("polish", help="Polish dictated text from an argument or stdin.")
@@ -146,7 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("doctor", help="Check optional Linux integrations and local backends.")
 
-    config = subparsers.add_parser("config", help="Manage persistent Murmur configuration.")
+    config = subparsers.add_parser("config", help="Manage persistent Aparté configuration.")
     config_subparsers = config.add_subparsers(dest="config_command", required=True)
     config_init = config_subparsers.add_parser("init", help="Write a default config file.")
     config_init.add_argument("--force", action="store_true", help="Overwrite an existing config file.")
@@ -188,7 +188,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     install_hotkey.add_argument("--name", default=DEFAULT_NAME, help="Display name for the shortcut.")
     install_hotkey.add_argument("--print", action="store_true", help="Show what would be bound without applying it.")
-    install_hotkey.add_argument("--remove", action="store_true", help="Remove the Murmur shortcut.")
+    install_hotkey.add_argument("--remove", action="store_true", help="Remove the Aparté shortcut.")
 
     return parser
 
@@ -213,6 +213,7 @@ def polish_text(text: str, args: argparse.Namespace, settings: Settings) -> str:
             cleanup_level=getattr(args, "cleanup_level", None) or settings.cleanup_level,
             replacements=settings.replacements or {},
             snippets=settings.snippets or {},
+            nonbreaking_spaces=settings.nonbreaking_spaces,
         ),
     )
 
@@ -236,7 +237,7 @@ def transcribe_path(path: Path, args: argparse.Namespace, settings: Settings) ->
 def dictate_once(args: argparse.Namespace, settings: Settings) -> str:
     notify("🎙️ Dictée", f"Enregistrement pendant {args.seconds:g}s…")
     path = record_wav(args.seconds, args.sample_rate, settings.recorder)
-    notify("⏳ Transcription…", "Murmur traite ta dictée.", urgency="low")
+    notify("⏳ Transcription…", "Aparté traite ta dictée.", urgency="low")
     try:
         transcribe_args = argparse.Namespace(
             polish=not args.no_polish,
@@ -280,7 +281,7 @@ def toggle_dictation(args: argparse.Namespace, settings: Settings) -> str:
         return f"Recording started: {session.audio_path}"
 
     session = stop_toggle_recording()
-    notify("⏳ Transcription…", "Murmur traite ta dictée.", urgency="low")
+    notify("⏳ Transcription…", "Aparté traite ta dictée.", urgency="low")
     try:
         transcribe_args = argparse.Namespace(
             polish=not args.no_polish,
@@ -327,7 +328,7 @@ def print_doctor(settings: Settings) -> None:
     if hotkey["bound_key"]:
         print(f"hotkey  bound to {hotkey['bound_key_label']}")
     elif hotkey["supported"]:
-        print("hotkey  not bound — run: murmur install-hotkey")
+        print("hotkey  not bound — run: aparte install-hotkey")
     else:
         print(f"hotkey  bind manually: {hotkey['command']}")
 
@@ -377,12 +378,12 @@ def handle_install_autostart(args: argparse.Namespace) -> None:
 
 
 def handle_install_hotkey(args: argparse.Namespace) -> None:
-    from .hotkey import command_string, current_binding, detect_desktop, key_label, manual_instructions, murmur_command
+    from .hotkey import command_string, current_binding, detect_desktop, key_label, manual_instructions, aparte_command
 
-    command = command_string(murmur_command("toggle", "--target", args.target))
+    command = command_string(aparte_command("toggle", "--target", args.target))
     if args.remove:
         removed = remove_hotkey(args.name)
-        print(f"removed {', '.join(removed)}" if removed else "no Murmur shortcut to remove")
+        print(f"removed {', '.join(removed)}" if removed else "no Aparté shortcut to remove")
         return
     if args.print:
         key = args.key or current_binding(args.name) or DEFAULT_KEY

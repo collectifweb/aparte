@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
-Name=Murmur
+Name=Aparté
 Comment=Local-first Linux dictation with Whisper and smart formatting
-Exec=murmur desktop
-Icon=murmur
+Exec=aparte desktop
+Icon=aparte
 Terminal=false
 Categories=Utility;Audio;Accessibility;
 StartupNotify=true

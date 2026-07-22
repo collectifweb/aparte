@@ -1,7 +1,7 @@
 import unittest
 
-from murmur.config import Settings
-from murmur.diagnostics import collect_checks, collect_diagnostics
+from aparte.config import Settings
+from aparte.diagnostics import collect_checks, collect_diagnostics
 
 
 class DiagnosticsTest(unittest.TestCase):
