@@ -145,5 +145,26 @@ class ApplyUpdateTest(unittest.TestCase):
         self.assertNotIn(update.DONE_MARKER, log)
 
 
+class RestartTest(unittest.TestCase):
+    def _relaunch_command(self, argv):
+        with mock.patch.object(update.os, "execv") as execv:
+            with mock.patch.object(update.sys, "argv", argv):
+                update.restart()
+        return execv.call_args[0][1][1:]
+
+    def test_a_console_script_is_rerun_as_is(self):
+        self.assertEqual(
+            self._relaunch_command(["/home/x/.local/bin/aparte", "desktop"]),
+            ["/home/x/.local/bin/aparte", "desktop"],
+        )
+
+    def test_a_module_run_goes_back_through_dash_m(self):
+        """Re-running src/aparte/__main__.py directly breaks the relative imports."""
+        self.assertEqual(
+            self._relaunch_command(["/src/aparte/__main__.py", "desktop", "--no-browser"]),
+            ["-m", "aparte", "desktop", "--no-browser"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

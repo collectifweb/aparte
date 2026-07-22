@@ -177,5 +177,7 @@ def restart() -> None:
     package and re-running it directly would break the relative imports.
     """
     if Path(sys.argv[0]).name == "__main__.py":
-        os.execv(sys.executable, [sys.executable, "-m", "aparte", *sys.argv[1:]])
-    os.execv(sys.executable, [sys.executable, *sys.argv])
+        argv = [sys.executable, "-m", "aparte", *sys.argv[1:]]
+    else:
+        argv = [sys.executable, *sys.argv]
+    os.execv(sys.executable, argv)
