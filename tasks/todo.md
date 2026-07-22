@@ -97,24 +97,39 @@ dans le navigateur peut poster vers `127.0.0.1:8765` en aveugle — et `/api/pas
 colle du texte dans l'application active. Ajouter une route qui lance
 `pip install` sans cette vérification serait nettement plus grave.
 
-- [ ] Refuser les requêtes POST dont l'en-tête `Origin` n'est ni absent ni
-      `http://127.0.0.1:<port>` (à faire avant le reste, ~10 lignes)
-- [ ] `GET /api/update/check` : `git fetch`, puis nombre de commits de retard et
-      titres des nouveautés
-- [ ] `POST /api/update/apply` : `git pull` puis `pip install -e .`, sortie
+- [x] Refuser les requêtes POST dont l'en-tête `Origin` n'est ni absent ni
+      notre propre adresse (commit `19b5243`)
+- [x] `GET /api/update/check` : nombre de commits de retard et titres des
+      nouveautés — le `git fetch` seulement sur clic, jamais à l'ouverture
+- [x] `POST /api/update/apply` : `git pull` puis `pip install -e .`, sortie
       renvoyée au fur et à mesure
-- [ ] Carte « Mise à jour » dans le panneau Configuration & diagnostic : version
+- [x] Bloc « Mise à jour » dans le panneau Configuration & diagnostic : version
       installée, nouveautés disponibles, bouton, journal en direct
-- [ ] Refuser et expliquer, plutôt que tenter, quand :
+- [x] Refuser et expliquer, plutôt que tenter, quand :
       - le dépôt a des modifications locales non commitées (sinon le pull les
         met de côté en silence — c'est exactement ce qui est arrivé le 22/07)
       - la branche n'a pas de branche de suivi
       - le dossier n'est pas un dépôt git, ou l'installation n'est pas en mode
         modifiable : afficher « mise à jour manuelle » au lieu d'un bouton mort
-- [ ] Ne pas supposer que le remote s'appelle `origin` — lire la branche de
+- [x] Ne pas supposer que le remote s'appelle `origin` — lire la branche de
       suivi réelle (`@{u}`). Chez Alexandre le remote s'appelle `Murmur`.
-- [ ] Redémarrer le serveur à la fin (il se met à jour lui-même)
-- [ ] Tests : dépôt sale refusé, remote non standard, absence de git
+- [x] Redémarrer le serveur à la fin (il se met à jour lui-même)
+- [x] Tests : dépôt sale refusé, remote non standard, absence de git
+
+**Livré** dans `src/aparte/update.py` (commit `a567048`), branche
+`feat/update-from-ui`, posée sur la refonte `design/lot-d`. Deux points décidés
+en cours de route, non prévus au plan :
+
+- La réinstallation ne passe que les extras déjà présents (`whisper`,
+  `recording`, `cuda` détectés par module). Passer une liste fixe téléchargerait
+  plusieurs gigaoctets sur une installation qui s'en était volontairement passée.
+- `_available_port()` pose `SO_REUSEADDR` avant de tester le port. Sans ça, le
+  test échoue sur les connexions encore en `TIME_WAIT` et l'application revient
+  d'une mise à jour sur un autre port que celui que le navigateur surveille.
+
+Reste ouvert : après le redémarrage, le navigateur attend 3 s avant de sonder le
+serveur, parce que rien ne distingue l'ancien processus du nouveau. Un identifiant
+de démarrage renvoyé par `/api/config` rendrait l'attente exacte.
 
 ## Lot 3 — Le programme résident
 

@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Update Aparté from the Setup panel.** An "Update" section shows the version
+  installed, checks the remote when you ask it to, lists what is waiting, and
+  runs `git pull` plus a reinstall with a live log. It restarts the app on its
+  own afterwards, since the running server still holds the old code. It refuses
+  and explains rather than trying, when the checkout has uncommitted changes,
+  when the branch tracks no remote, or when Aparté was not installed from a
+  clone. The remote is read from the branch's own upstream, never assumed to be
+  `origin`, and the reinstall only passes the extras already installed. Nothing
+  contacts the network until you press Check.
 - **A documented design system.** [PRODUCT.md](PRODUCT.md) carries the product
   direction (users, promises, personality, anti-references, the accessibility
   commitment) and [DESIGN.md](DESIGN.md) the visual system (OKLCH tokens for both
@@ -76,6 +85,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   marks (comma, colon, virgule, …) are now matched only as whole words.
 - **Numbers dictated in a sentence are left inline** instead of being reformatted
   into a numbered list (e.g. "il y a 1 chien et 2 chats" no longer became a list).
+
+### Security
+
+- **The desktop server now refuses POSTs from pages it did not serve.** It only
+  listens on 127.0.0.1, so nothing on the network could reach it, but any page
+  open in the browser could post to it blindly — and `/api/paste` types text
+  into whatever window has focus. Requests carrying no `Origin` header, which is
+  every command-line client, are unaffected.
 
 ### Added
 
