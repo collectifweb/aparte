@@ -113,6 +113,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Numbers dictated in a sentence are left inline** instead of being reformatted
   into a numbered list (e.g. "il y a 1 chien et 2 chats" no longer became a list).
 
+### Fixed
+
+- **Launching Aparté while it is already running now opens the running one**
+  instead of starting a second server. The menu entry and the autostart entry
+  run the same command, so clicking the launcher after login used to start a
+  rival server on a random port, with its own tray icon. Anything else holding
+  the port is left alone and the usual free-port search still applies.
+- **The desktop entry passes `desktop-file-validate`.** `Audio` without
+  `AudioVideo` is an error the validator warns will become fatal, and three main
+  categories made the app appear three times in the application menu.
+
 ### Security
 
 - **The desktop server now refuses POSTs from pages it did not serve.** It only

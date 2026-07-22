@@ -4,6 +4,7 @@ import json
 import socket
 import tempfile
 import threading
+import urllib.request
 import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -56,6 +57,16 @@ EDITABLE_FIELDS = (
 
 
 def run_desktop(host: str, port: int, settings: Settings, open_browser: bool = True) -> None:
+    # The menu launcher and the autostart entry run the same command, and the
+    # server is already up from login. Starting a second one would take a random
+    # port and put a second icon in the tray, so hand over to the running one.
+    running = already_running(host, port)
+    if running:
+        print(f"Aparté is already running at {running}")
+        if open_browser:
+            webbrowser.open(running)
+        return
+
     port = _available_port(host, port)
     server = ThreadingHTTPServer((host, port), handler_factory(settings))
     url = f"http://{host}:{server.server_port}"
@@ -75,6 +86,21 @@ def run_desktop(host: str, port: int, settings: Settings, open_browser: bool = T
         print("\nStopping desktop server.")
     finally:
         server.server_close()
+
+
+def already_running(host: str, port: int, timeout: float = 2.0) -> str | None:
+    """The address of an Aparté server already listening here, if there is one.
+
+    Anything else holding the port — another application, a stale service — is
+    not us, and the caller falls back to its usual free-port search.
+    """
+    url = f"http://{host}:{port}"
+    try:
+        with urllib.request.urlopen(f"{url}/api/config", timeout=timeout) as response:
+            payload = json.loads(response.read())
+    except (OSError, ValueError):
+        return None
+    return url if isinstance(payload, dict) and "allowed_models" in payload else None
 
 
 def _available_port(host: str, preferred_port: int) -> int:

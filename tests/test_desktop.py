@@ -1,15 +1,18 @@
 import json
 import os
+import socket
 import tempfile
+import threading
 import unittest
 from email.message import Message
 from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from pathlib import Path
 from unittest import mock
 
 from aparte.config import Settings
-from aparte.desktop import ASSETS_DIR, STATIC_FILES, handler_factory
+from aparte.desktop import ASSETS_DIR, STATIC_FILES, already_running, handler_factory
 
 
 def make_request(method, path, body=b"", headers=None):
@@ -39,6 +42,43 @@ def make_request(method, path, body=b"", headers=None):
     handler.do_GET() if method == "GET" else handler.do_POST()
     captured["body"] = handler.wfile.getvalue()
     return captured
+
+
+class AlreadyRunningTest(unittest.TestCase):
+    """Clicking the menu entry while the session's server runs must not start a
+    second one: it would take a random port and add a second tray icon."""
+
+    def _serve(self, handler):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return server.server_port
+
+    def test_finds_an_aparte_server(self):
+        port = self._serve(handler_factory(Settings()))
+        self.assertEqual(already_running("127.0.0.1", port), f"http://127.0.0.1:{port}")
+
+    def test_ignores_a_port_nobody_is_listening_on(self):
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            free_port = probe.getsockname()[1]
+        self.assertIsNone(already_running("127.0.0.1", free_port, timeout=0.5))
+
+    def test_ignores_another_application_holding_the_port(self):
+        class Stranger(BaseHTTPRequestHandler):
+            def do_GET(self):
+                body = b'{"hello": "not aparte"}'
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                return
+
+        port = self._serve(Stranger)
+        self.assertIsNone(already_running("127.0.0.1", port))
 
 
 class StaticAssetsTest(unittest.TestCase):
