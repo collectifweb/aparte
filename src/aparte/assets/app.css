@@ -364,6 +364,39 @@ textarea.kv {
 .pill.ok { color: var(--ok); border-color: var(--ok); }
 .pill.bad { color: var(--danger); border-color: var(--danger); }
 
+/* Dictées récentes — la zone réservée sous la barre d'actions.
+   Elle garde sa hauteur même vide : sinon la page saute à chaque dictée. */
+.recent {
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+  min-height: 116px;
+  max-height: 30vh;
+  overflow-y: auto;
+}
+.recent-empty {
+  display: grid; gap: var(--sp-2);
+  color: var(--ink-soft); font-size: var(--fs-caption);
+}
+.recent-item {
+  display: flex; align-items: baseline; gap: var(--sp-3);
+  width: 100%; text-align: left; cursor: pointer;
+  padding: var(--sp-2); border: none; border-bottom: 1px solid var(--line);
+  border-radius: var(--r-sm); background: none;
+  color: var(--ink); font: inherit; font-size: var(--fs-ui);
+  transition: background var(--dur-fast) var(--ease);
+}
+.recent-item:last-child { border-bottom: none; }
+.recent-item:hover { background: var(--surface-2); }
+.recent-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-when { flex: none; color: var(--ink-soft); font-size: var(--fs-caption); }
+
+/* Fenêtre courte : la zone rend sa hauteur réservée plutôt que de pousser
+   l'éditeur hors de l'écran. */
+@media (max-height: 700px) {
+  .recent { min-height: 0; max-height: 22vh; }
+}
+
 /* Mise à jour */
 .update-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; margin-top: var(--sp-3); }
 .update-commits {

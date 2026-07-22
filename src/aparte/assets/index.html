@@ -58,6 +58,11 @@
         </div>
       </div>
     </section>
+
+    <!-- La zone réservée sous la barre d'actions (DESIGN.md § Plan de travail) :
+         une liste, jamais des cartes, aucun aplat de couleur, et elle défile
+         elle-même plutôt que de pousser le disque et l'éditeur hors de l'écran. -->
+    <section class="recent" id="recent" data-i18n-aria="recent.label"></section>
   </main>
 
   <!-- Settings drawer -->
@@ -126,6 +131,13 @@
               <option value="direct" data-i18n="paste.direct">Direct (frappe simulée)</option>
             </select>
             <small data-i18n="set.paste_mode_help">Les terminaux ignorent Ctrl+V. Le mode Direct sert aux applications qui refusent le collage — c'est plus lent et plus fragile.</small>
+          </label>
+        </div>
+        <div class="group">
+          <h3 data-i18n="set.history">Historique</h3>
+          <label class="field">
+            <span class="inline"><input id="set-history-persist" type="checkbox"> <span data-i18n="set.history_persist">Garder l'historique entre les sessions</span></span>
+            <small data-i18n="set.history_persist_help">Par défaut les dictées vivent en mémoire et disparaissent à la déconnexion. Cochée, les cinq dernières sont écrites dans ~/.local/state/aparte.</small>
           </label>
         </div>
         <div class="group">

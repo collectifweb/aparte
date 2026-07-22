@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The last five dictations, kept in memory.** They appear under the action bar
+  in the desktop app; click one to copy it. `aparte last` recalls the most recent
+  one from the terminal (`--target paste` re-inserts it). A dictation can carry a
+  password or a private message, so the history lives in the runtime directory —
+  tmpfs, wiped at logout — and only reaches the disk when the new **Keep history
+  between sessions** setting says so, as a file only you can read. Every Aparté
+  process shares the one store, so a dictation made through the global hotkey
+  shows up in the app without either one having to be running for the other.
+  When the list is empty, which is the normal state at the start of a session, it
+  shows the global shortcut instead of announcing its own emptiness.
 - **Three insertion modes, chosen in Settings** (`paste_mode`): `clipboard`, one
   atomic `Ctrl+V`, unchanged and still the default; `terminal`, which sends
   `Ctrl+Shift+V` because terminals ignore `Ctrl+V` outright; and `direct`, which

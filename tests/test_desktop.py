@@ -109,6 +109,29 @@ class OriginCheckTest(unittest.TestCase):
         self.assertEqual(res["status"], int(HTTPStatus.OK))
 
 
+class HistoryEndpointTest(unittest.TestCase):
+    def test_a_dictation_posted_by_the_browser_comes_back_in_the_list(self):
+        with tempfile.TemporaryDirectory() as runtime:
+            with mock.patch.dict(os.environ, {"APARTE_RUNTIME_DIR": runtime}):
+                body = json.dumps({"text": "une dictée"}).encode("utf-8")
+                posted = make_request("POST", "/api/history", body)
+
+                self.assertEqual(posted["status"], int(HTTPStatus.OK))
+                self.assertEqual(json.loads(posted["body"])["entries"][0]["text"], "une dictée")
+
+                listed = json.loads(make_request("GET", "/api/history")["body"])["entries"]
+                self.assertEqual([item["text"] for item in listed], ["une dictée"])
+
+    def test_a_foreign_page_cannot_write_to_the_history(self):
+        res = make_request(
+            "POST",
+            "/api/history",
+            b'{"text": "injecte"}',
+            {"Host": "127.0.0.1:8765", "Origin": "https://exemple.invalid"},
+        )
+        self.assertEqual(res["status"], int(HTTPStatus.FORBIDDEN))
+
+
 class ConfigEndpointTest(unittest.TestCase):
     def test_paste_mode_round_trips(self):
         """A field missing from EDITABLE_FIELDS is dropped in silence, both ways."""

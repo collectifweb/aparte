@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from . import history
 from .clipboard import copy_text, paste_text
 from .config import Settings, load_config, update_config
 from .diagnostics import collect_diagnostics
@@ -47,6 +48,7 @@ EDITABLE_FIELDS = (
     "polish_backend",
     "nonbreaking_spaces",
     "paste_mode",
+    "history_persist",
     "replacements",
     "snippets",
 )
@@ -126,6 +128,10 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
             if route == "/api/doctor":
                 self._send_json(collect_diagnostics(current_settings()))
                 return
+            if route == "/api/history":
+                active = current_settings()
+                self._send_json({"entries": history.entries(active.history_persist)})
+                return
             if route == "/api/update/check":
                 # Only reach the network when the user asks for it: opening the
                 # panel must not phone home on its own.
@@ -174,6 +180,12 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                     payload = self._read_json()
                     backend = paste_text(str(payload.get("text", "")), current_settings().paste_mode)
                     self._send_json({"ok": True, "backend": backend})
+                    return
+                if self.path == "/api/history":
+                    active = current_settings()
+                    payload = self._read_json()
+                    history.record(str(payload.get("text", "")), active.history_persist)
+                    self._send_json({"entries": history.entries(active.history_persist)})
                     return
                 if self.path == "/api/update/apply":
                     self._handle_update_apply()
@@ -280,7 +292,7 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                         value = {str(k): str(v) for k, v in dict(value).items()} if value else {}
                     elif key == "language":
                         value = (str(value).strip() or None) if value is not None else None
-                    elif key == "nonbreaking_spaces":
+                    elif key in {"nonbreaking_spaces", "history_persist"}:
                         value = bool(value)
                     else:
                         value = str(value)

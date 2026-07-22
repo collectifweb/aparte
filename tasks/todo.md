@@ -156,13 +156,31 @@ Ce que le Lot D a déjà tranché pour ce lot :
 
 Le serveur d'autostart tourne déjà en permanence : il ne manque que l'icône.
 
+**Fait, sans dépendance** — l'historique (`src/aparte/history.py`) :
+
+- [x] Historique des 5 dernières dictées, **en mémoire vive par défaut**,
+      écriture sur disque seulement si l'utilisateur l'active explicitement
+      (réglage `history_persist`, fichier en 0600 sous `~/.local/state/aparte`)
+- [x] Affichage de l'historique sur l'écran d'accueil, clic = copie
+- [x] Commande `aparte last --target paste` pour recoller la dernière dictée
+
+Décision d'architecture : l'historique est un fichier dans le dossier d'exécution
+(`XDG_RUNTIME_DIR`, tmpfs, effacé à la déconnexion) et non la mémoire d'un
+processus. Le raccourci clavier lance un processus court, le serveur en est un
+autre, `aparte last` un troisième — un fichier en tmpfs les réunit sans serveur
+à joindre ni port à deviner, tout en restant « en mémoire vive ».
+
+Les trois questions ouvertes du D6 sont tranchées : la zone garde une hauteur
+réservée de 116 px même vide (la page ne saute pas) ; la liste défile
+elle-même au-delà de 30 % de la hauteur de fenêtre, donc cinq entrées tiennent
+sur un portable ; sous 700 px de haut, la hauteur réservée est rendue plutôt que
+de pousser l'éditeur hors de l'écran.
+
+**Reste — l'icône de barre système**, seule partie qui demande une dépendance :
+
 - [ ] Icône de barre système greffée sur le serveur desktop (pystray/AppIndicator)
 - [ ] Deux états visuels : au repos / en train d'enregistrer
 - [ ] Menu : Ouvrir Aparté · Copier la dernière dictée · Réglages · Quitter
-- [ ] Historique des 5 dernières dictées, **en mémoire vive par défaut**,
-      écriture sur disque seulement si l'utilisateur l'active explicitement
-- [ ] Affichage de l'historique sur l'écran d'accueil, clic = copie
-- [ ] Commande `aparte last --target paste` pour recoller la dernière dictée
 
 ## Lot 4 — Confort
 

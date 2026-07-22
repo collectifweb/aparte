@@ -4,6 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from . import history
 from .audio import record_wav
 from .clipboard import copy_text, paste_text
 from .config import Settings, load_config, write_default_config
@@ -41,12 +42,12 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "transcribe":
             output = transcribe_path(Path(args.audio), args, settings)
-            handle_output(output, args)
+            handle_output(output, args, settings)
             return 0
         if args.command == "record":
             path = record_wav(args.seconds, args.sample_rate, settings.recorder)
             output = transcribe_path(path, args, settings)
-            handle_output(output, args)
+            handle_output(output, args, settings)
             return 0
         if args.command == "dictate":
             output = dictate_once(args, settings)
@@ -55,6 +56,17 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "toggle":
             output = toggle_dictation(args, settings)
             print(output)
+            return 0
+        if args.command == "last":
+            text = history.last(settings.history_persist)
+            if not text:
+                print("error: nothing dictated yet in this session", file=sys.stderr)
+                return 1
+            if args.target == "paste":
+                paste_text(text, settings.paste_mode)
+            elif args.target == "copy":
+                copy_text(text)
+            print(text)
             return 0
         if args.command == "desktop":
             run_desktop(args.host, args.port, settings, open_browser=not args.no_browser)
@@ -134,6 +146,17 @@ def build_parser() -> argparse.ArgumentParser:
     toggle.add_argument("--keep-audio", action="store_true", help="Keep the temporary recording file.")
     toggle.add_argument("--status", action="store_true", help="Print whether a toggle recording is active.")
     add_polish_args(toggle)
+
+    last = subparsers.add_parser(
+        "last",
+        help="Re-insert the most recent dictation, without dictating again.",
+    )
+    last.add_argument(
+        "--target",
+        choices=["paste", "copy", "stdout"],
+        default="stdout",
+        help="Where the recalled dictation should go.",
+    )
 
     desktop = subparsers.add_parser("desktop", help="Launch the local Linux desktop app.")
     desktop.add_argument("--host", default="127.0.0.1")
@@ -246,6 +269,7 @@ def dictate_once(args: argparse.Namespace, settings: Settings) -> str:
         )
         output = transcribe_path(path, transcribe_args, settings)
         _notify_inserted(output, args.target)
+        history.record(output, settings.history_persist)
         if args.target == "paste":
             paste_text(output, settings.paste_mode)
         elif args.target == "copy":
@@ -290,6 +314,7 @@ def toggle_dictation(args: argparse.Namespace, settings: Settings) -> str:
         )
         output = transcribe_path(session.audio_path, transcribe_args, settings)
         _notify_inserted(output, args.target)
+        history.record(output, settings.history_persist)
         if args.target == "paste":
             paste_text(output, settings.paste_mode)
         elif args.target == "copy":
@@ -300,9 +325,9 @@ def toggle_dictation(args: argparse.Namespace, settings: Settings) -> str:
             session.audio_path.unlink(missing_ok=True)
 
 
-def handle_output(output: str, args: argparse.Namespace) -> None:
+def handle_output(output: str, args: argparse.Namespace, settings: Settings) -> None:
     if getattr(args, "paste", False):
-        paste_text(output)
+        paste_text(output, settings.paste_mode)
     elif getattr(args, "copy", False):
         copy_text(output)
     print(output)

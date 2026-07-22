@@ -328,6 +328,7 @@ APARTE_COMPUTE_TYPE=auto
 APARTE_LANGUAGE=
 APARTE_POLISH_BACKEND=heuristic
 APARTE_PASTE_MODE=clipboard
+APARTE_RUNTIME_DIR=
 APARTE_OLLAMA_URL=http://127.0.0.1:11434
 APARTE_OLLAMA_MODEL=llama3.1:8b
 APARTE_WHISPER_CPP=
@@ -344,6 +345,22 @@ Polish backends:
 
 - `heuristic`: fully local, no model required, good enough for punctuation and capitalization cleanup.
 - `ollama`: local LLM rewrite through Ollama, much better for fillers, backtracking, tone, and context.
+
+### Recent dictations
+
+The last five dictations sit under the action bar in the desktop app; click one
+to copy it. From a terminal, `aparte last` prints the most recent one and
+`aparte last --target paste` re-inserts it into the focused window.
+
+They live in the runtime directory (`$XDG_RUNTIME_DIR/aparte`, which is tmpfs and
+wiped when you log out), because a dictation can carry a password or a private
+message. Tick **Keep history between sessions** in Settings — or set
+`history_persist` in the config — to write them to `~/.local/state/aparte`
+instead, in a file only you can read.
+
+Every Aparté process shares that one store, so a dictation made through the
+global hotkey shows up in the app, and vice versa, without either one having to
+be running for the other.
 
 Insertion modes (`paste_mode` in the config, or the **Insertion** setting in the
 desktop app). Every mode copies the dictation to the clipboard first, so it is

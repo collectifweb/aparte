@@ -14,6 +14,7 @@ if (!I18N[lang]) lang = (navigator.language || "en").slice(0, 2);
 if (!I18N[lang]) lang = "en";
 let recordState = "idle";
 let setupIncomplete = false;
+let historyPersist = false;
 
 function t(key, vars) {
   let s = (I18N[lang] && I18N[lang][key]) || (I18N.en && I18N.en[key]) || key;
@@ -35,6 +36,7 @@ function applyI18n() {
   heroSub.textContent = setupIncomplete ? t("hero.sub_incomplete") : t("hero.sub");
   if (lastHealth) updateHealthDot(lastHealth);
   if (!$("#health-overlay").hidden) loadHealth();
+  renderRecent(recentEntries);
 }
 
 function status(message, kind) {
@@ -91,6 +93,7 @@ async function transcribeBlob(blob) {
     } else {
       status(data.text.trim() ? t("st.transcript_ready") : t("st.no_speech"));
     }
+    if (editor.value.trim()) recordRecent(editor.value);
   } finally {
     setRecordState("idle");
   }
@@ -291,6 +294,8 @@ async function loadConfig() {
   $("#set-polish").value = cfg.polish_backend || "heuristic";
   $("#set-nbsp").checked = cfg.nonbreaking_spaces !== false;
   $("#set-paste-mode").value = cfg.paste_mode || "clipboard";
+  historyPersist = cfg.history_persist === true;
+  $("#set-history-persist").checked = historyPersist;
   $("#set-replacements").value = kvToText(cfg.replacements);
   $("#set-snippets").value = kvToText(cfg.snippets);
 }
@@ -311,6 +316,7 @@ $("#save-settings").addEventListener("click", async () => {
       polish_backend: $("#set-polish").value,
       nonbreaking_spaces: $("#set-nbsp").checked,
       paste_mode: $("#set-paste-mode").value,
+      history_persist: $("#set-history-persist").checked,
       replacements: textToKv($("#set-replacements").value),
       snippets: textToKv($("#set-snippets").value),
     });
@@ -390,12 +396,87 @@ async function loadHealth() {
 
   body.innerHTML = html;
   loadUpdate(false);
-  body.querySelectorAll("[data-copy]").forEach((b) =>
+  wireCopyButtons(body);
+}
+
+function wireCopyButtons(root) {
+  root.querySelectorAll("[data-copy]").forEach((b) =>
     b.addEventListener("click", async () => {
       try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = t("diag.copied"); setTimeout(() => (b.textContent = t("diag.copy")), 1500); }
       catch (_) {}
     })
   );
+}
+
+/* ---------- Dictées récentes ---------- */
+// L'historique vit en mémoire vive : il est vide à chaque ouverture de session,
+// et cet état vide est donc la situation normale. Il enseigne le raccourci
+// global plutôt que d'annoncer son propre vide.
+let hotkeyInfo = null;
+let recentEntries = [];
+
+async function loadRecent() {
+  try {
+    renderRecent((await (await fetch("/api/history")).json()).entries || []);
+  } catch (_) {}
+}
+
+async function recordRecent(text) {
+  try {
+    renderRecent((await postJson("/api/history", { text })).entries || []);
+  } catch (_) {}
+}
+
+function renderRecent(entries) {
+  recentEntries = entries;
+  const box = $("#recent");
+  if (!entries.length) {
+    box.innerHTML = emptyRecent();
+    wireCopyButtons(box);
+    return;
+  }
+  box.innerHTML = entries
+    .map(
+      (entry, index) => `<button class="recent-item" data-index="${index}" title="${escapeHtml(t("recent.copy"))}">
+        <span class="recent-text">${escapeHtml(entry.text)}</span>
+        <span class="recent-when">${escapeHtml(relativeTime(entry.at))}</span>
+      </button>`
+    )
+    .join("");
+  box.querySelectorAll(".recent-item").forEach((button) =>
+    button.addEventListener("click", () => copyRecent(entries[+button.dataset.index].text))
+  );
+}
+
+function emptyRecent() {
+  const key = hotkeyInfo && hotkeyInfo.bound_key_label;
+  const fix =
+    !key && hotkeyInfo && hotkeyInfo.supported
+      ? `<div class="diag-fix"><code>${escapeHtml(hotkeyInfo.install_command)}</code><button data-copy="${escapeHtml(hotkeyInfo.install_command)}">${t("diag.copy")}</button></div>`
+      : "";
+  return `<div class="recent-empty">
+      <span>${escapeHtml(key ? t("recent.hotkey_bound", { key }) : t("recent.hotkey_unbound"))}</span>
+      ${fix}
+      <span>${escapeHtml(t(historyPersist ? "recent.local_kept" : "recent.local"))}</span>
+    </div>`;
+}
+
+async function copyRecent(text) {
+  status(t("st.copying"));
+  try {
+    await postJson("/api/copy", { text });
+    status(t("st.copied"));
+  } catch (err) {
+    try { await navigator.clipboard.writeText(text); status(t("st.copied_browser")); }
+    catch (_) { status(String(err), "error"); }
+  }
+}
+
+function relativeTime(at) {
+  const seconds = Math.max(0, Date.now() / 1000 - (at || 0));
+  if (seconds < 60) return t("time.now");
+  if (seconds < 3600) return t("time.minutes", { n: Math.round(seconds / 60) });
+  return t("time.hours", { n: Math.round(seconds / 3600) });
 }
 
 /* ---------- Mise à jour ---------- */
@@ -526,7 +607,10 @@ applyI18n();
   try {
     const data = await (await fetch("/api/doctor")).json();
     updateHealthDot(data.summary);
+    hotkeyInfo = data.hotkey || null;
     setupIncomplete = !data.summary.ready;
     heroSub.textContent = setupIncomplete ? t("hero.sub_incomplete") : t("hero.sub");
   } catch (_) {}
+  // Après le diagnostic : l'état vide affiche le raccourci qu'il vient d'y lire.
+  loadRecent();
 })();
