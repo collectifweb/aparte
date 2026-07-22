@@ -1,7 +1,11 @@
-<!-- Icône de barre système, micro ouvert. La silhouette change complètement —
-     un disque plein au lieu de trois barres — pour que l'état se lise sans la
-     couleur, et à 22 px du coin de l'œil. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="Aparté — enregistrement">
+  <!-- Icône de barre système, micro ouvert. La silhouette change complètement —
+       un disque plein au lieu de trois barres — pour que l'état se lise sans la
+       couleur, et à 22 px du coin de l'œil.
+
+       Commentaire à l'intérieur de la balise racine : voir aparte-tray.svg. Ce
+       fichier-ci passait de justesse, sa balise tombant à l'octet 215 sur les
+       256 que gdk-pixbuf renifle. Une phrase de plus et il tombait aussi. -->
   <rect x="1" y="1" width="22" height="22" rx="6" fill="#b8245b"/>
   <circle cx="12" cy="12" r="5.2" fill="#ffffff"/>
 </svg>

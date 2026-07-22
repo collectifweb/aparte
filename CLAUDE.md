@@ -89,6 +89,16 @@ configuré :
   l'ancienne entrée de démarrage. Sans ça : deux icônes au menu, et deux
   serveurs qui se disputent le port à l'ouverture de session.
 
+### Icônes SVG
+
+Le commentaire d'un fichier SVG va **à l'intérieur** de la balise racine, jamais
+au-dessus. `gdk-pixbuf` reconnaît un format en reniflant les 256 premiers octets :
+un en-tête plus long y cache le `<svg`, le chargeur répond « format non reconnu »
+et le panneau dessine un creux vide à la place de l'icône. `aparte-tray.svg` a
+vécu ça — sa balise racine était à l'octet 403, donc l'icône de barre système
+n'apparaissait que pendant l'enregistrement, qui utilise l'autre fichier.
+`test_every_svg_declares_its_format_within_the_sniff_window` monte la garde.
+
 ### Typographie
 
 - La typographie française s'applique **après** les remplacements et les

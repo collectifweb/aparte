@@ -1,9 +1,15 @@
-<!-- Icône de barre système, état au repos. Dessinée pour 22 px : trois barres
-     épaisses plutôt que les cinq du logo, qui se réduiraient à des traits d'un
-     pixel et demi. L'aplat carmin est conservé dans les deux états parce qu'un
-     panneau peut être clair ou sombre et qu'un logo neutre disparaîtrait sur
-     l'un des deux ; c'est la forme, pas la couleur, qui dit l'état. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="Aparté">
+  <!-- Icône de barre système, état au repos. Dessinée pour 22 px : trois barres
+       épaisses plutôt que les cinq du logo, qui se réduiraient à des traits d'un
+       pixel et demi. L'aplat carmin est conservé dans les deux états parce qu'un
+       panneau peut être clair ou sombre et qu'un logo neutre disparaîtrait sur
+       l'un des deux ; c'est la forme, pas la couleur, qui dit l'état.
+
+       Le commentaire est à l'intérieur de la balise racine, jamais au-dessus :
+       gdk-pixbuf reconnaît un format en reniflant les 256 premiers octets du
+       fichier. Un en-tête plus long y cache la balise racine, le chargeur rend
+       « format non reconnu », et le panneau affiche un creux vide à la place de
+       l'icône. C'est exactement ce qui est arrivé à ce fichier. -->
   <rect x="1" y="1" width="22" height="22" rx="6" fill="#b8245b"/>
   <g fill="#ffffff">
     <rect x="6.5" y="9" width="2.6" height="6" rx="1.3"/>

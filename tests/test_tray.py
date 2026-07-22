@@ -20,6 +20,22 @@ class TrayAvailabilityTest(unittest.TestCase):
         for name in (tray.ICON_IDLE, tray.ICON_RECORDING):
             self.assertTrue((tray.ASSETS_DIR / f"{name}.svg").exists(), name)
 
+    def test_every_svg_declares_its_format_within_the_sniff_window(self):
+        """gdk-pixbuf recognises a file from its first 256 bytes.
+
+        A comment placed above the root tag pushes `<svg` past that window: the
+        loader answers "unrecognised image format" and the panel draws an empty
+        gap where the icon should be. That is exactly what happened to the idle
+        tray icon, whose header comment put the root tag at byte 403 — so the
+        icon only ever appeared while recording, which uses the other file.
+        Comments belong inside the root element.
+        """
+        for path in sorted(tray.ASSETS_DIR.glob("*.svg")):
+            with self.subTest(icon=path.name):
+                start = path.read_bytes().find(b"<svg")
+                self.assertNotEqual(start, -1, "no root tag at all")
+                self.assertLess(start, 256)
+
 
 class TrayLabelsTest(unittest.TestCase):
     def _labels_for(self, **env):

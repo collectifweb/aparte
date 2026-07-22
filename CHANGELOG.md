@@ -155,6 +155,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The tray icon is now visible at rest, not only while recording.** Its SVG
+  opened with a long comment above the root tag, which pushed `<svg` to byte 403
+  — past the 256 bytes gdk-pixbuf reads to recognise a file format. The loader
+  rejected it, so the panel drew an empty one-millimetre gap; the recording icon,
+  whose comment is shorter, loaded fine and appeared. Both files now carry their
+  comment inside the root element, and a test guards the rule.
+
 - **Copy on an empty editor no longer wipes the clipboard.** It sent the empty
   string to the system clipboard and reported "Copied." — as did Insert and
   Polish, each announcing a success it had not performed. The three buttons are
