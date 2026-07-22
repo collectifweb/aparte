@@ -1,0 +1,13 @@
+<!-- Icône de barre système, état au repos. Dessinée pour 22 px : trois barres
+     épaisses plutôt que les cinq du logo, qui se réduiraient à des traits d'un
+     pixel et demi. L'aplat carmin est conservé dans les deux états parce qu'un
+     panneau peut être clair ou sombre et qu'un logo neutre disparaîtrait sur
+     l'un des deux ; c'est la forme, pas la couleur, qui dit l'état. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="Aparté">
+  <rect x="1" y="1" width="22" height="22" rx="6" fill="#b8245b"/>
+  <g fill="#ffffff">
+    <rect x="6.5" y="9" width="2.6" height="6" rx="1.3"/>
+    <rect x="10.7" y="6.4" width="2.6" height="11.2" rx="1.3"/>
+    <rect x="14.9" y="9" width="2.6" height="6" rx="1.3"/>
+  </g>
+</svg>

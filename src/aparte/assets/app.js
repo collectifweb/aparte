@@ -613,4 +613,7 @@ applyI18n();
   } catch (_) {}
   // Après le diagnostic : l'état vide affiche le raccourci qu'il vient d'y lire.
   loadRecent();
+  // Entrée « Réglages » du menu de la barre système : elle ouvre cette page
+  // avec le tiroir déjà déplié.
+  if (location.hash === "#settings") openOverlay("#settings-overlay");
 })();

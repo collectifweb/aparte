@@ -346,6 +346,25 @@ Polish backends:
 - `heuristic`: fully local, no model required, good enough for punctuation and capitalization cleanup.
 - `ollama`: local LLM rewrite through Ollama, much better for fillers, backtracking, tone, and context.
 
+### System tray icon
+
+Running the desktop app puts an Aparté icon in the system tray: three bars at
+rest, a filled disc while the microphone is open, and a menu to open the app,
+copy the last dictation, jump to Settings, or quit.
+
+It relies on PyGObject and the AppIndicator typelib, which are system packages
+rather than pip ones:
+
+```bash
+sudo apt install python3-gi gir1.2-ayatanaappindicator3-0.1
+```
+
+`./scripts/install-linux.sh --with-system-deps` installs them for you, and the
+script creates the virtualenv with `--system-site-packages` so it can see them.
+**A virtualenv created before this change cannot** — delete `.venv` and re-run
+the install script if you want the icon. Without the bindings, Aparté starts
+exactly as it did before, and `aparte doctor` tells you what is missing.
+
 ### Recent dictations
 
 The last five dictations sit under the action bar in the desktop app; click one

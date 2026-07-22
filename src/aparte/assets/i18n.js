@@ -94,6 +94,8 @@ window.APARTE_I18N = {
     "check.notify.detail": "popups début/fin d'enregistrement (optionnel)",
     "check.ollama.label": "Ollama (polish LLM)",
     "check.ollama.detail": "moteur de réécriture LLM local",
+    "check.tray.label": "Icône de barre système",
+    "check.tray.detail": "demande PyGObject ; un venv ne le voit qu'avec --system-site-packages",
 
     "hotkey.title": "Raccourci clavier",
     "hotkey.intro": "Appuie une fois pour lancer la dictée, encore une fois pour transcrire et insérer dans l'app au premier plan.",
@@ -246,6 +248,8 @@ window.APARTE_I18N = {
     "check.notify.detail": "recording start/stop popups (optional)",
     "check.ollama.label": "Ollama (LLM polish)",
     "check.ollama.detail": "local LLM rewrite backend",
+    "check.tray.label": "System tray icon",
+    "check.tray.detail": "needs PyGObject; a virtualenv only sees it with --system-site-packages",
 
     "hotkey.title": "Keyboard shortcut",
     "hotkey.intro": "Press once to start dictation, again to transcribe and insert into the focused app.",

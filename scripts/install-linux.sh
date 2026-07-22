@@ -26,7 +26,8 @@ if [[ "${1:-}" == "--with-system-deps" ]]; then
   if command -v apt >/dev/null 2>&1; then
     echo "Installing system packages (sudo)..."
     sudo apt update
-    sudo apt install -y alsa-utils ffmpeg wl-clipboard wtype xclip xdotool
+    sudo apt install -y alsa-utils ffmpeg wl-clipboard wtype xclip xdotool \
+      python3-gi gir1.2-ayatanaappindicator3-0.1
   else
     echo "apt not found; install recording/clipboard packages with your package manager." >&2
   fi
@@ -35,13 +36,17 @@ fi
 # Create the virtualenv. Some minimal Python builds ship without ensurepip,
 # which makes `python -m venv` produce a venv with no pip. Detect that and
 # bootstrap pip from the system interpreter.
+#
+# --system-site-packages is what lets the venv see PyGObject, which is a system
+# package and not installable from pip. Without it there is no tray icon. Aparté
+# still installs its own dependencies into the venv, where they take precedence.
 if [[ ! -x ".venv/bin/python" ]]; then
-  if "$PYTHON" -m venv .venv 2>/dev/null && [[ -x ".venv/bin/pip" ]]; then
+  if "$PYTHON" -m venv --system-site-packages .venv 2>/dev/null && [[ -x ".venv/bin/pip" ]]; then
     :
   else
     echo "Bootstrapping pip into the virtualenv (ensurepip unavailable)..."
     rm -rf .venv
-    "$PYTHON" -m venv --without-pip .venv
+    "$PYTHON" -m venv --system-site-packages --without-pip .venv
     "$PYTHON" -m pip --python .venv/bin/python install --upgrade pip setuptools wheel
   fi
 fi

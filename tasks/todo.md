@@ -176,11 +176,34 @@ elle-même au-delà de 30 % de la hauteur de fenêtre, donc cinq entrées tienne
 sur un portable ; sous 700 px de haut, la hauteur réservée est rendue plutôt que
 de pousser l'éditeur hors de l'écran.
 
-**Reste — l'icône de barre système**, seule partie qui demande une dépendance :
+**L'icône de barre système** (`src/aparte/tray.py`) :
 
-- [ ] Icône de barre système greffée sur le serveur desktop (pystray/AppIndicator)
-- [ ] Deux états visuels : au repos / en train d'enregistrer
-- [ ] Menu : Ouvrir Aparté · Copier la dernière dictée · Réglages · Quitter
+- [x] Icône de barre système greffée sur le serveur desktop — bindings système
+      PyGObject + AyatanaAppIndicator3, **aucune dépendance pip ajoutée**
+- [x] Deux états visuels : au repos / en train d'enregistrer
+- [x] Menu : Ouvrir Aparté · Copier la dernière dictée · Réglages · Quitter
+
+Choix : les bindings système plutôt que `pystray`, qui aurait ajouté deux
+dépendances pip et serait retombé sur XEmbed (X11 seulement, ancien) faute de
+`gi`. Conséquence assumée : `install-linux.sh` crée désormais le venv avec
+`--system-site-packages`, sans quoi le venv ne voit pas PyGObject. **Un venv déjà
+créé doit être supprimé et refait** pour que l'icône apparaisse.
+
+Les deux états se distinguent par la forme — trois barres au repos, un disque
+plein pendant l'enregistrement — et non par la couleur : la règle du daltonien de
+`DESIGN.md` s'applique à 22 px comme au reste. L'aplat carmin est gardé dans les
+deux états, parce qu'un panneau peut être clair ou sombre et qu'une icône neutre
+disparaîtrait sur l'un des deux.
+
+Sans les bindings, `build_tray()` renvoie `None` et le serveur démarre exactement
+comme avant ; le diagnostic gagne une ligne « Icône de barre système » qui dit
+quoi installer.
+
+À vérifier de visu, je n'ai pas pu le faire : la lisibilité des deux icônes dans
+le panneau Cinnamon, et le fait que l'état passe bien au disque plein pendant une
+dictée lancée au raccourci clavier. L'état d'enregistrement suit le fichier de
+session du raccourci global ; une dictée lancée depuis le bouton de la page web
+n'en crée pas, donc l'icône ne change pas dans ce cas.
 
 ## Lot 4 — Confort
 

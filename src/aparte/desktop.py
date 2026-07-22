@@ -16,6 +16,7 @@ from .config import Settings, load_config, update_config
 from .diagnostics import collect_diagnostics
 from .polish import PolishOptions, build_polisher
 from .transcription import build_transcriber
+from .tray import build_tray
 from .update import DONE_MARKER, apply_update, check_update, restart
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
@@ -61,8 +62,15 @@ def run_desktop(host: str, port: int, settings: Settings, open_browser: bool = T
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
     print(f"Aparté desktop running at {url}")
+    # The tray icon needs GTK on the main thread, so the server moves off it.
+    # Without the system bindings there is no tray, and nothing changes.
+    tray = build_tray(url, settings, server.shutdown)
     try:
-        server.serve_forever()
+        if tray is None:
+            server.serve_forever()
+        else:
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            tray.run()
     except KeyboardInterrupt:
         print("\nStopping desktop server.")
     finally:

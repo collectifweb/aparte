@@ -1,0 +1,7 @@
+<!-- Icône de barre système, micro ouvert. La silhouette change complètement —
+     un disque plein au lieu de trois barres — pour que l'état se lise sans la
+     couleur, et à 22 px du coin de l'œil. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="Aparté — enregistrement">
+  <rect x="1" y="1" width="22" height="22" rx="6" fill="#b8245b"/>
+  <circle cx="12" cy="12" r="5.2" fill="#ffffff"/>
+</svg>

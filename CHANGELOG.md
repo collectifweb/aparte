@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A system tray icon**, grafted onto the desktop server: two states that differ
+  by shape rather than colour (three bars at rest, a filled disc while the
+  microphone is open), and a menu — open Aparté, copy the last dictation, jump
+  straight to Settings, quit. It follows the desktop's language, not the
+  browser's. It needs PyGObject and the AppIndicator typelib, which are system
+  packages: `install-linux.sh` now installs them with `--with-system-deps` and
+  creates the virtualenv with `--system-site-packages`, and an existing venv has
+  to be recreated to see them. Without them the server starts exactly as before
+  and `aparte doctor` gained a line explaining how to get the icon.
 - **The last five dictations, kept in memory.** They appear under the action bar
   in the desktop app; click one to copy it. `aparte last` recalls the most recent
   one from the terminal (`--target paste` re-inserts it). A dictation can carry a

@@ -120,6 +120,14 @@ def collect_checks(settings: Settings) -> list[Check]:
             fix="aparte config init",
         ),
         Check(
+            "tray",
+            "System tray icon",
+            _has_module("gi"),
+            "System",
+            detail="needs PyGObject; a virtualenv only sees it with --system-site-packages",
+            fix="sudo apt install python3-gi gir1.2-ayatanaappindicator3-0.1",
+        ),
+        Check(
             "notify",
             "Desktop notifications",
             shutil.which("notify-send") is not None,
