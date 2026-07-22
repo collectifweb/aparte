@@ -91,8 +91,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The desktop server now refuses POSTs from pages it did not serve.** It only
   listens on 127.0.0.1, so nothing on the network could reach it, but any page
   open in the browser could post to it blindly — and `/api/paste` types text
-  into whatever window has focus. Requests carrying no `Origin` header, which is
-  every command-line client, are unaffected.
+  into whatever window has focus. The address the request arrived under has to
+  be one of ours as well, so a domain rebound to 127.0.0.1 is turned away even
+  though its Origin and Host agree with each other. Requests carrying no
+  `Origin` header, which is every command-line client, are unaffected.
 
 ### Added
 

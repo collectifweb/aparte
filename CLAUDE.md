@@ -119,10 +119,16 @@ configuré :
 - `EDITABLE_FIELDS` dans `desktop.py` filtre les clés acceptées par
   `/api/config`. Un nouveau réglage absent de cette liste est ignoré en
   silence, côté lecture comme côté écriture.
-- Les routes POST ne vérifient pas encore l'en-tête `Origin`. Le serveur
-  n'écoute que sur `127.0.0.1`, mais une page web ouverte dans le navigateur
-  peut y poster en aveugle. À corriger avant d'ajouter toute route qui exécute
-  une commande.
+- `_origin_is_ours()` garde toutes les routes POST : il faut que l'adresse par
+  laquelle on nous a joints soit une des nôtres (`LOOPBACK_HOSTS`, ou celle sur
+  laquelle le serveur écoute), **et** que l'`Origin` la nomme. Les deux
+  conditions comptent : comparer `Origin` et `Host` entre eux ne prouve que leur
+  accord, et une page dont le domaine a été réassocié à `127.0.0.1` arrive avec
+  les deux à son nom. Une requête sans `Origin` passe : aucun navigateur n'en
+  émet, c'est `curl` ou la ligne de commande — donc un processus local, qui
+  pourrait de toute façon appeler `wtype` lui-même.
+- `/api/update/apply` lance `git pull` puis `pip install`. Toute nouvelle route
+  qui exécute une commande passe par la même porte, sans exception.
 
 ## Git
 
