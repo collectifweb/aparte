@@ -322,6 +322,8 @@ $("#save-settings").addEventListener("click", async () => {
 const CATEGORY_ORDER = ["Transcription", "Microphone", "Insertion", "System"];
 
 async function loadHealth() {
+  // Un redessin en pleine mise à jour effacerait le journal en cours.
+  if (updateBusy) return;
   const body = $("#health-body");
   body.innerHTML = '<p class="muted">' + t("diag.loading") + "</p>";
   let data;
@@ -380,13 +382,119 @@ async function loadHealth() {
       </div></div></div>`;
   }
 
+  html += `<div class="diag-group"><h3>${escapeHtml(t("update.title"))}</h3>
+      <div id="update-body"><p class="diag-detail">${escapeHtml(t("diag.loading"))}</p></div>
+    </div>`;
+
   body.innerHTML = html;
+  loadUpdate(false);
   body.querySelectorAll("[data-copy]").forEach((b) =>
     b.addEventListener("click", async () => {
       try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = t("diag.copied"); setTimeout(() => (b.textContent = t("diag.copy")), 1500); }
       catch (_) {}
     })
   );
+}
+
+/* ---------- Mise à jour ---------- */
+// Ligne que le serveur écrit seule quand la mise à jour a réussi : elle distingue
+// « le journal s'est arrêté » de « c'est installé ».
+const UPDATE_DONE = "__APARTE_UPDATED__";
+let updateBusy = false;
+
+// Aucune vérification automatique : à l'ouverture du panneau on se contente de ce
+// que git sait déjà en local. Le réseau n'est joint que sur clic.
+async function loadUpdate(fromRemote) {
+  const box = $("#update-body");
+  if (!box) return;
+  box.innerHTML = `<p class="diag-detail">${escapeHtml(t(fromRemote ? "update.checking" : "diag.loading"))}</p>`;
+  try {
+    renderUpdate(await (await fetch("/api/update/check" + (fromRemote ? "?fetch=1" : ""))).json());
+  } catch (err) {
+    box.innerHTML = `<p class="diag-detail">${escapeHtml(String(err))}</p>`;
+  }
+}
+
+function renderUpdate(data) {
+  const box = $("#update-body");
+  if (!box) return;
+  const behind = data.behind || 0;
+  const fresh = data.state === "current";
+  const label = data.state !== "available"
+    ? t("update." + data.state, { branch: data.branch || "" })
+    : behind === 1 ? t("update.one") : t("update.many", { n: behind });
+
+  let html = `<div class="diag-item">
+      <span class="diag-icon ${fresh ? "ok" : "warn"}">${fresh ? "✓" : "!"}</span>
+      <div class="diag-main"><div class="diag-label">${escapeHtml(label)}</div>`;
+  if (data.head) html += `<div class="diag-detail">${escapeHtml(t("update.head", { head: data.head }))}</div>`;
+  if (data.detail) html += `<div class="diag-detail">${escapeHtml(data.detail)}</div>`;
+  if (data.commits && data.commits.length) {
+    html += `<ul class="update-commits">${data.commits.map((c) => `<li>${escapeHtml(c)}</li>`).join("")}</ul>`;
+  }
+  if (data.dirty) html += `<div class="diag-detail">${escapeHtml(t("update.dirty"))}</div>`;
+  html += `<div class="update-actions">
+        <button class="btn ghost" id="update-check">${escapeHtml(t("update.check"))}</button>
+        ${data.state === "available" && !data.dirty ? `<button class="btn primary" id="update-apply">${escapeHtml(t("update.apply"))}</button>` : ""}
+      </div>
+      <div class="diag-detail" id="update-note">${escapeHtml(t("update.local"))}</div>
+      <pre class="update-log" id="update-log" hidden></pre>
+    </div></div>`;
+
+  box.innerHTML = html;
+  $("#update-check").addEventListener("click", () => loadUpdate(true));
+  const apply = $("#update-apply");
+  if (apply) apply.addEventListener("click", runUpdate);
+}
+
+async function runUpdate() {
+  if (updateBusy) return;
+  updateBusy = true;
+  const log = $("#update-log");
+  const note = $("#update-note");
+  const buttons = [$("#update-check"), $("#update-apply")].filter(Boolean);
+  buttons.forEach((b) => (b.disabled = true));
+  note.textContent = t("update.applying");
+  log.hidden = false;
+  log.textContent = "";
+
+  let text = "";
+  try {
+    const reader = (await fetch("/api/update/apply", { method: "POST" })).body.getReader();
+    const decoder = new TextDecoder();
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.value) text += decoder.decode(chunk.value, { stream: true });
+      log.textContent = text.split("\n").filter((line) => line !== UPDATE_DONE).join("\n");
+      log.scrollTop = log.scrollHeight;
+      if (chunk.done) break;
+    }
+  } catch (err) {
+    text += "\n" + String(err);
+    log.textContent = text;
+  }
+
+  const installed = text.split("\n").includes(UPDATE_DONE);
+  note.textContent = t(installed ? "update.restarting" : "update.failed");
+  if (installed) return waitForRestart(note);
+  updateBusy = false;
+  buttons.forEach((b) => (b.disabled = false));
+}
+
+async function waitForRestart(note) {
+  // Le serveur ne se remplace qu'une seconde après avoir fini de répondre :
+  // interroger tout de suite tomberait sur l'ancien processus, et la page se
+  // rechargerait juste avant qu'il ne meure.
+  const wait = (ms) => new Promise((done) => setTimeout(done, ms));
+  await wait(3000);
+  for (let i = 0; i < 40; i++) {
+    try {
+      if ((await fetch("/api/config", { cache: "no-store" })).ok) return location.reload();
+    } catch (_) {}
+    await wait(800);
+  }
+  note.textContent = t("update.no_restart");
+  updateBusy = false;
 }
 
 let lastHealth = null;

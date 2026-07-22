@@ -15,6 +15,7 @@ from .config import Settings, load_config, update_config
 from .diagnostics import collect_diagnostics
 from .polish import PolishOptions, build_polisher
 from .transcription import build_transcriber
+from .update import DONE_MARKER, apply_update, check_update, restart
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 
@@ -64,6 +65,10 @@ def _available_port(host: str, preferred_port: int) -> int:
     for port in [preferred_port, 0]:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             try:
+                # Same option the real server binds with. Without it, the probe
+                # fails on connections still in TIME_WAIT and the app comes back
+                # from an update on a different port than the browser watches.
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 sock.bind((host, port))
                 return sock.getsockname()[1]
             except OSError:
@@ -115,6 +120,12 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
             if route == "/api/doctor":
                 self._send_json(collect_diagnostics(current_settings()))
                 return
+            if route == "/api/update/check":
+                # Only reach the network when the user asks for it: opening the
+                # panel must not phone home on its own.
+                fetch = (parse_qs(urlsplit(self.path).query).get("fetch") or [""])[0] == "1"
+                self._send_json(check_update(fetch=fetch))
+                return
             self.send_error(HTTPStatus.NOT_FOUND)
 
         def do_POST(self) -> None:
@@ -157,6 +168,9 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                     payload = self._read_json()
                     backend = paste_text(str(payload.get("text", "")))
                     self._send_json({"ok": True, "backend": backend})
+                    return
+                if self.path == "/api/update/apply":
+                    self._handle_update_apply()
                     return
                 self.send_error(HTTPStatus.NOT_FOUND)
             except Exception as exc:
@@ -201,6 +215,28 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                 self._send_json({"text": transcript})
             finally:
                 path.unlink(missing_ok=True)
+
+        def _handle_update_apply(self) -> None:
+            """Stream the update log line by line, then restart if it worked.
+
+            Sent without a Content-Length so the browser can read the log as it
+            arrives: `git pull` plus `pip install` can take a minute, and a
+            frozen panel looks like a crash.
+            """
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            updated = False
+            for line in apply_update():
+                updated = updated or line == DONE_MARKER
+                self.wfile.write(f"{line}\n".encode("utf-8"))
+                self.wfile.flush()
+            if updated:
+                # This process still has the old modules loaded, so it cannot
+                # serve what it just installed. Leave the response time to reach
+                # the browser before replacing ourselves.
+                threading.Timer(1.0, restart).start()
 
         def _requested_model(self, active: Settings) -> str:
             query = parse_qs(urlsplit(self.path).query)
