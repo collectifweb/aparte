@@ -5,6 +5,8 @@ from dataclasses import dataclass
 
 import requests
 
+from .numbers import convert as convert_numbers
+
 
 class PolishError(RuntimeError):
     pass
@@ -51,6 +53,9 @@ class PolishOptions:
     snippets: dict[str, str] | None = None
     nonbreaking_spaces: bool = True
     trailing_space: bool = False
+    # Seuil en dessous duquel un nombre dicté reste en toutes lettres, selon la
+    # règle typographique française. 0 désactive la conversion.
+    numbers_from: int = 10
     # Below this many words, leave the dictation alone: no leading capital, no
     # final period. That is what a search field or a chat box wants. 0 disables.
     short_text_words: int = 0
@@ -120,6 +125,10 @@ class HeuristicPolisher(Polisher):
         text = self._normalize_space(text)
         text = self._remove_fillers(text, language, options.cleanup_level)
         text = self._replace_spoken_punctuation(text)
+        if language == "fr":
+            # Avant l'espacement de la ponctuation : la règle qui protège
+            # « 14:30 » et « https:// » a besoin de voir les chiffres.
+            text = convert_numbers(text, options.numbers_from, space)
         # A handful of words is a search field or a chat box, not a sentence.
         sentence = options.short_text_words <= 0 or len(text.split()) >= options.short_text_words
         text = self._space_punctuation(text, language, space)

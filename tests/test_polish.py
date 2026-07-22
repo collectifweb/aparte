@@ -155,6 +155,34 @@ class ShortTextTest(unittest.TestCase):
         self.assertEqual(self.polisher.polish("pipe wire", options), "PipeWire")
 
 
+class NumbersInThePipelineTest(unittest.TestCase):
+    def setUp(self):
+        self.polisher = HeuristicPolisher()
+
+    def test_a_dictated_number_comes_out_in_digits(self):
+        self.assertEqual(
+            self.polisher.polish("il y a vingt-deux personnes", PolishOptions(language="fr")),
+            "Il y a 22 personnes.",
+        )
+
+    def test_an_hour_survives_the_punctuation_pass(self):
+        """Les nombres passent avant l'espacement : la règle qui protège
+        « 14:30 » a besoin de voir les chiffres."""
+        self.assertEqual(
+            self.polisher.polish(
+                "rendez-vous à quatorze heures trente virgule c'est noté",
+                PolishOptions(language="fr"),
+            ),
+            f"Rendez-vous à 14{NBSP}h{NBSP}30, c’est noté.",
+        )
+
+    def test_english_is_left_alone(self):
+        self.assertEqual(
+            self.polisher.polish("twenty two people", PolishOptions(language="en")),
+            "Twenty two people.",
+        )
+
+
 class TrailingSpaceTest(unittest.TestCase):
     def setUp(self):
         self.polisher = HeuristicPolisher()

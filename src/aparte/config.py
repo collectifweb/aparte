@@ -28,6 +28,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "cleanup_level": "medium",
     "nonbreaking_spaces": True,
     "trailing_space": False,
+    "numbers_from": 10,
     "short_text_words": 0,
     "paste_mode": "clipboard",
     "history_persist": False,
@@ -61,6 +62,7 @@ class Settings:
     cleanup_level: str = "medium"
     nonbreaking_spaces: bool = True
     trailing_space: bool = False
+    numbers_from: int = 10
     short_text_words: int = 0
     paste_mode: str = "clipboard"
     history_persist: bool = False
@@ -94,6 +96,7 @@ class Settings:
             cleanup_level=str(config.get("cleanup_level", "medium")),
             nonbreaking_spaces=bool(config.get("nonbreaking_spaces", True)),
             trailing_space=bool(config.get("trailing_space", False)),
+            numbers_from=positive_int(config.get("numbers_from", 10)),
             short_text_words=positive_int(config.get("short_text_words")),
             paste_mode=get_env("PASTE_MODE") or str(config.get("paste_mode", "clipboard")),
             history_persist=bool(config.get("history_persist", False)),

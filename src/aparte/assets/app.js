@@ -293,6 +293,7 @@ async function loadConfig() {
   $("#set-device").value = cfg.device || "auto";
   $("#set-polish").value = cfg.polish_backend || "heuristic";
   $("#set-nbsp").checked = cfg.nonbreaking_spaces !== false;
+  $("#set-numbers").value = String(cfg.numbers_from ?? 10);
   $("#set-short-text").value = String(cfg.short_text_words || 0);
   $("#set-trailing-space").checked = cfg.trailing_space === true;
   $("#set-beep").checked = cfg.beep === true;
@@ -349,6 +350,7 @@ $("#save-settings").addEventListener("click", async () => {
       device: $("#set-device").value,
       polish_backend: $("#set-polish").value,
       nonbreaking_spaces: $("#set-nbsp").checked,
+      numbers_from: Number($("#set-numbers").value),
       short_text_words: Number($("#set-short-text").value),
       trailing_space: $("#set-trailing-space").checked,
       microphone: $("#set-microphone").value,

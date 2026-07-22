@@ -434,6 +434,26 @@ it also stops Whisper from drifting to another language.
 Set `"nonbreaking_spaces": false` in the config to use ordinary spaces instead of
 non-breaking ones, for apps that handle them poorly.
 
+**Numbers dictated in words become digits** (`numbers_from`, French only). Whisper
+already writes digits about half the time; the point is that the same sentence
+dictated twice comes out the same way. The setting is the threshold below which a
+number stays in words — 10 by default, which is the French rule:
+
+- "vingt-deux personnes" → "22 personnes", "quatre-vingt-dix-sept" → "97",
+  "l'an deux mille vingt-six" → "l'an 2026" (a year keeps its four digits
+  together; the thousands separator starts at five)
+- times and percentages always become digits, whatever the threshold:
+  "quatorze heures trente" → "14 h 30", "vingt pour cent" → "20 %"
+- "deux millions" keeps its word — "2 millions", not "2000000"
+- septante, huitante, octante and nonante are understood too
+- an article is never a number: "un chien" stays put, "vingt et un chiens"
+  becomes "21 chiens", and "des mille et des cents" is left alone
+- anything that doesn't parse as a valid number is left exactly as dictated
+
+Out of scope for now: decimals (the spoken "virgule" is turned into a comma
+before numbers are read), ordinals ("premier" must not become "1er" in "premier
+ministre"), and English.
+
 Two settings decide how far the formatting goes:
 
 - **Short text** (`short_text_words`, off by default): below this many words the

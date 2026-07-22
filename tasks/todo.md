@@ -242,8 +242,55 @@ configuration divergents fusionnés (14 remplacements, sauvegarde dans
       final (utile pour dicter dans un champ de recherche) — `short_text_words`,
       désactivé par défaut. Le seuil est strict : « moins de 3 mots » laisse
       passer trois mots. Les remplacements et snippets s'appliquent quand même.
-- [ ] Nombres en toutes lettres → chiffres, au-delà d'un seuil réglable, en français
+- [x] Nombres en toutes lettres → chiffres, au-delà d'un seuil réglable, en français
+      — voir le plan ci-dessous, livré avec les heures et les pourcentages
 - [ ] États vides actionnables et infobulles explicatives dans l'interface
+
+### Plan — les nombres en français
+
+**Pourquoi.** Whisper écrit déjà des chiffres une fois sur deux. L'enjeu n'est pas
+de tout convertir, c'est de rendre le résultat prévisible : une dictée ne doit
+pas donner « vingt-deux » un jour et « 22 » le lendemain.
+
+**Où.** Un module à part, `numbers.py` — l'analyse d'un nombre français fait une
+centaine de lignes et n'a rien à faire dans `polish.py`, qui l'appelle.
+
+**Quand, dans le tuyau.** Juste après `_replace_spoken_punctuation` et **avant**
+`_space_punctuation`. Deux raisons : la règle qui protège `14:30` et `https://`
+doit voir les chiffres pour faire son travail, et les remplacements par mot
+n'ont pas encore tourné.
+
+**Français seulement**, comme les guillemets et l'apostrophe. L'anglais est un
+autre chantier, et « français d'abord » tranche.
+
+- [x] `numbers.py` : cardinaux de zéro à quelques milliards
+      - [x] unités, dizaines, la série 11-16, « soixante-dix », « quatre-vingts »,
+            « quatre-vingt-dix », les traits d'union et les « et » (« vingt et un »)
+      - [x] « cent », « cents », « mille », « million(s) », « milliard(s) »
+      - [x] le piège de l'article : « un chien » reste en lettres, « vingt et un
+            chiens » devient « 21 chiens ». Un « un » isolé ne se convertit jamais.
+      - [x] les faux amis : « pour cent », « cent pour cent », « des mille et des
+            cents », « un million de fois » — vérifiés par des tests dédiés
+- [x] Seuil `numbers_from` : en dessous, le nombre reste en lettres (la règle
+      typographique française écrit en toutes lettres jusqu'à dix)
+- [x] Câblage : `config.py`, `EDITABLE_FIELDS`, `PolishOptions`, le groupe
+      « Mise en forme » des Réglages, `i18n.js` en FR et EN
+- [x] `tests/test_numbers.py` : la table des cas ci-dessus, plus les non-régressions
+      (une dictée sans nombre doit ressortir identique)
+- [x] README + CHANGELOG
+
+**Décidé en cours de route.** Les heures et les pourcentages sont finalement
+inclus, et ils ignorent le seuil : une heure s'écrit toujours en chiffres.
+« deux millions » garde son mot — « 2 millions », pas « 2000000 ». Le séparateur
+de milliers ne commence qu'à cinq chiffres, sinon une année deviendrait
+« 2 026 ».
+
+**Restés hors périmètre :**
+
+- les décimales (« trois virgule cinq ») : « virgule » est déjà consommé par la
+  ponctuation dictée avant que les nombres passent
+- les ordinaux (« premier » → « 1er ») : trop risqué, « premier ministre »
+- l'anglais
 
 ## Lot 5 — Plus tard
 

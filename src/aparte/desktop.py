@@ -51,6 +51,7 @@ EDITABLE_FIELDS = (
     "polish_backend",
     "nonbreaking_spaces",
     "trailing_space",
+    "numbers_from",
     "short_text_words",
     "paste_mode",
     "history_persist",
@@ -207,6 +208,7 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                             snippets=active.snippets or {},
                             nonbreaking_spaces=active.nonbreaking_spaces,
                             trailing_space=active.trailing_space,
+                            numbers_from=active.numbers_from,
                             short_text_words=active.short_text_words,
                         ),
                     )
@@ -338,7 +340,7 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                         value = (str(value).strip() or None) if value is not None else None
                     elif key in {"nonbreaking_spaces", "history_persist", "trailing_space", "beep"}:
                         value = bool(value)
-                    elif key == "short_text_words":
+                    elif key in {"short_text_words", "numbers_from"}:
                         value = positive_int(value)
                     else:
                         value = str(value)

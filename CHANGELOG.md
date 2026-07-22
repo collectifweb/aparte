@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Numbers dictated in words come out as digits, in French** (`numbers_from`,
+  threshold 10 by default — the French rule keeps everything below ten in
+  words). Whisper already writes digits about half the time; this makes the
+  result the same twice in a row. "vingt-deux personnes" → "22 personnes",
+  "quatre-vingt-dix-sept" → "97", "l'an deux mille vingt-six" → "l'an 2026" —
+  a year keeps its four digits together, the thousands separator only starts at
+  five. Times and percentages ignore the threshold and always become digits:
+  "quatorze heures trente" → "14 h 30", "vingt pour cent" → "20 %". "deux
+  millions" keeps its word rather than becoming "2000000", and septante,
+  huitante, octante and nonante are understood. The rule throughout is that a
+  doubtful case is left exactly as dictated: an article ("un chien"), an idiom
+  ("des mille et des cents"), a hyphenated word that only looks like a number
+  ("porte-parole"), or a sequence that isn't valid French ("vingt douze").
+
 - **Pick which microphone to dictate into.** Settings lists the ALSA capture
   devices with their real names, and a **Refresh** button rebuilds the list
   without closing the panel. The choice reaches the global shortcut and the

@@ -136,6 +136,15 @@
             <span class="inline"><input id="set-nbsp" type="checkbox"> <span data-i18n="set.nbsp">Espaces insécables</span></span>
             <small data-i18n="set.nbsp_help">Typographie française : espace avant ? ! ; et : — décoche si une application les affiche mal</small>
           </label>
+          <label class="field"><span data-i18n="set.numbers">Nombres dictés</span>
+            <select id="set-numbers">
+              <option value="0" data-i18n="numbers.never">Toujours en lettres</option>
+              <option value="10" data-i18n="numbers.ten">En chiffres à partir de dix</option>
+              <option value="17" data-i18n="numbers.seventeen">En chiffres à partir de dix-sept</option>
+              <option value="1" data-i18n="numbers.always">Toujours en chiffres</option>
+            </select>
+            <small data-i18n="set.numbers_help">« vingt-deux personnes » devient « 22 personnes ». Les heures et les pourcentages passent toujours en chiffres : « quatorze heures trente » donne « 14 h 30 ».</small>
+          </label>
           <label class="field"><span data-i18n="set.short_text">Texte court</span>
             <select id="set-short-text">
               <option value="0" data-i18n="short.off">Toujours une phrase</option>

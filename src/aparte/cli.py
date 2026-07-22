@@ -238,6 +238,7 @@ def polish_text(text: str, args: argparse.Namespace, settings: Settings) -> str:
             snippets=settings.snippets or {},
             nonbreaking_spaces=settings.nonbreaking_spaces,
             trailing_space=settings.trailing_space,
+            numbers_from=settings.numbers_from,
             short_text_words=settings.short_text_words,
         ),
     )
