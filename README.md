@@ -361,9 +361,17 @@ sudo apt install python3-gi gir1.2-ayatanaappindicator3-0.1
 
 `./scripts/install-linux.sh --with-system-deps` installs them for you, and the
 script creates the virtualenv with `--system-site-packages` so it can see them.
-**A virtualenv created before this change cannot** — delete `.venv` and re-run
-the install script if you want the icon. Without the bindings, Aparté starts
-exactly as it did before, and `aparte doctor` tells you what is missing.
+
+A virtualenv created before this change cannot see them, but it does not need
+rebuilding — flip one line in `.venv/pyvenv.cfg`, which keeps the multi-gigabyte
+Whisper and CUDA packages already installed:
+
+```
+include-system-site-packages = true
+```
+
+Without the bindings, Aparté starts exactly as it did before, and `aparte doctor`
+tells you what is missing.
 
 ### Recent dictations
 
