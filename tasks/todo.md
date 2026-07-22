@@ -247,6 +247,35 @@ Passe de vérification demandée après le Lot 4, mesurée au navigateur sans t�
       donc le serveur lisait la vraie config, où `history_persist` est vrai.
       Invariant ajouté dans `CLAUDE.md` § Lancer les tests
 
+## Icône de barre système (22/07, hors lots)
+
+Signalée à l'usage : l'icône n'apparaissait que pendant la dictée et laissait un
+creux d'un millimètre au repos.
+
+- [x] **Cause racine : le commentaire en tête du fichier SVG.** `gdk-pixbuf`
+      reconnaît un format en reniflant les **256 premiers octets**. Dans
+      `aparte-tray.svg`, l'en-tête français poussait la balise racine à l'octet
+      **403** : le chargeur répondait « format non reconnu » et le panneau
+      n'avait rien à dessiner. `aparte-tray-recording.svg`, commentaire plus
+      court, tombait à l'octet 215 — dans la fenêtre — et s'affichait. D'où le
+      symptôme exact. Les deux fichiers portent maintenant leur commentaire à
+      l'intérieur de la balise racine (`0cef71a`)
+- [x] **Chaîne vérifiée maillon par maillon avant de toucher au code**, plutôt
+      que de deviner : l'indicateur publiait bien `aparte-tray` et le bon
+      dossier sur DBus, et le pont `xapp-sn-watcher` avait résolu le nom vers le
+      vrai fichier. La recherche marchait ; seul le rendu échouait. Deux fausses
+      pistes écartées au passage — le cache négatif de `GtkIconTheme` (il se
+      réinvalide) et une collision entre plusieurs indicateurs (un seul était
+      enregistré).
+- [x] **Garde-fou** : `test_every_svg_declares_its_format_within_the_sniff_window`
+      vérifie la règle sur tous les SVG du dossier `assets/`, pas seulement les
+      deux du moment. Invariant écrit dans `CLAUDE.md` § Icônes SVG.
+- [x] **Deux processus `python -m murmur desktop`** d'avant le renommage
+      tournaient encore (démarrés à 15:20 et 15:21), sur du code qui n'existe
+      plus sur le disque. Ils n'avaient pas le port mais occupaient la mémoire,
+      et `CLAUDE.md` prévient du risque de deux serveurs qui se le disputent à
+      l'ouverture de session. Arrêtés.
+
 ## Lot 4 — Confort
 
 - [x] Bip sonore au début et à la fin de l'enregistrement (réglable) — deux tons
