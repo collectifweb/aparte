@@ -28,6 +28,11 @@ STATIC_FILES = {
     "/logo.svg": ("logo.svg", "image/svg+xml"),
 }
 
+# Names a browser can legitimately reach us under. A request arriving under any
+# other name was aimed at someone else's address that now resolves here — the
+# shape of a DNS rebinding attack — even when its Origin agrees with its Host.
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
 # Models the desktop UI is allowed to switch to. Restricting this prevents the
 # browser from triggering an arbitrary (possibly huge) model download.
 ALLOWED_MODELS = ("small", "base", "tiny", "medium", "small.en", "base.en")
@@ -187,9 +192,24 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
             here blindly, and /api/paste types text into the focused window.
             Browsers send Origin on every POST, and the page we serve always
             names our own address; command-line clients send none at all.
+
+            Origin alone is not enough: a page whose domain has been rebound to
+            127.0.0.1 arrives with a matching Host and Origin, both its own. So
+            the address we were reached under has to be one of ours too.
             """
+            host = self.headers.get("Host", "")
+            try:
+                hostname = urlsplit(f"//{host}").hostname
+            except ValueError:
+                return False
+            server = getattr(self, "server", None)
+            bound = server.server_address[0] if server else ""
+            # `--host 0.0.0.0` serves every interface, so every name is ours and
+            # there is nothing left to compare against.
+            if bound not in {"0.0.0.0", "::"} and hostname not in LOOPBACK_HOSTS and hostname != bound:
+                return False
             origin = self.headers.get("Origin")
-            return origin is None or origin == f"http://{self.headers.get('Host', '')}"
+            return origin is None or origin == f"http://{host}"
 
         def _read_json(self) -> dict[str, object]:
             length = int(self.headers.get("Content-Length", "0"))

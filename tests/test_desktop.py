@@ -20,6 +20,8 @@ def make_request(method, path, body=b"", headers=None):
     msg = Message()
     for key, value in (headers or {}).items():
         msg[key] = value
+    if "Host" not in msg:
+        msg["Host"] = "127.0.0.1:8765"  # every real client sends one
     if body:
         msg["Content-Length"] = str(len(body))
 
@@ -83,6 +85,17 @@ class OriginCheckTest(unittest.TestCase):
             "/api/paste",
             b'{"text": "coucou"}',
             {"Host": "127.0.0.1:8765", "Origin": "https://exemple.invalid"},
+        )
+        self.assertEqual(res["status"], int(HTTPStatus.FORBIDDEN))
+
+    def test_a_rebound_hostname_is_refused(self):
+        """A domain rebound to 127.0.0.1 reaches us with a Host and Origin that
+        agree with each other — but name the attacker, not us."""
+        res = make_request(
+            "POST",
+            "/api/paste",
+            b'{"text": "coucou"}',
+            {"Host": "exemple.invalid:8765", "Origin": "http://exemple.invalid:8765"},
         )
         self.assertEqual(res["status"], int(HTTPStatus.FORBIDDEN))
 
