@@ -769,6 +769,103 @@ aller. La restructuration doit les garder, pas les réécrire.
 
 ---
 
+## Lot 6 — Compatibilité macOS (planifié le 23/07, pas commencé)
+
+**La décision qui précède le code.** « Linux d'abord, français d'abord » est la
+promesse identitaire du projet (PRODUCT.md). Ce lot n'y touche pas s'il est mené
+comme un **compagnon** — « Aparté tourne aussi sur Mac » — et jamais comme un
+pivot. Le vrai coût n'est pas technique, il est d'attention : chaque
+fonctionnalité système future coûtera le double, et le suivi d'incidents se
+remplira de questions de permissions macOS. À décider en connaissance de cause
+avant d'ouvrir le chantier.
+
+**Le plan complet et à jour vit dans
+[../docs/plan-portage-macos.md](../docs/plan-portage-macos.md).** Il a été passé
+au crible du skill `/confront-codex` (débat en 4 rounds, consensus bilatéral
+atteint le 23/07 ; archives dans
+`docs/archives/confront-codex-portage-macos-2026-07-23-1627/`). **Ce document
+renvoie, il ne recopie pas** : ne pas dupliquer le plan ici, sinon les deux
+copies divergeront.
+
+Repères pour décider sans ouvrir le plan :
+
+- **Effort v1 (lots M0–M8) : 17 à 23 jours de travail réel.** M3–M5 se déboguent
+  sur un vrai Mac (les permissions et la run loop ne se testent pas en CI).
+  whisper.cpp/Metal (M9) et la signature Apple (M10) sont **hors v1**.
+- **Baseline v1 = faster-whisper sur processeur** : zéro ligne de transcription
+  neuve, déjà éprouvé, « Mes mots » et les langues conservés. Metal viendra après.
+- **Deux permissions macOS incompressibles** : micro et Accessibilité (pour le
+  collage). Sans bundle signé, leur attribution reste **fragile** — assumé en v1
+  expérimentale.
+- **Le raccourci exige que l'app tourne** sur Mac (sur Linux il marche sans
+  démon) : recul de promesse à documenter.
+- **Sécurité** : aucune route web ne déclenche d'action système sur Mac.
+  L'insertion, la copie système et la mise à jour passent par le raccourci
+  in-process, le menu du tray ou la ligne de commande — jamais par le navigateur.
+- **`session.py` reste Linux** ; sur Mac l'enregistrement vit dans le serveur
+  résident (`RecordingController`, machine d'état + verrou séparé).
+
+### M0 — socle de dispatch + pas gratuit (branche `feat/portage-macos`, en cours)
+
+**Cadre.** Cette machine est sous Linux : le code macOS ne s'exécute pas ici. M0
+ne fait que **poser la couture** et le **packaging**, sans écrire un seul module
+`macos_*`. Contrainte de preuve à chaque pas :
+`PYTHONPATH=src python3 -m unittest discover -s tests -t tests` reste vert et le
+comportement Linux ne bouge pas. **Windows : hors périmètre, zéro ligne.**
+
+**Le pas gratuit — documenter la dictée navigateur sur Mac**
+
+- [ ] Section macOS dans le README : aujourd'hui, sur Mac, `pip install` +
+      `aparte desktop` sert la page ; enregistrement `getUserMedia` dans le
+      navigateur, transcription faster-whisper CPU, polissage, copie —
+      **fonctionnent déjà**. Ce qui **ne marche pas encore** : insertion dans
+      l'app active (c'est ça, le produit), raccourci global, tray, notifications
+      natives. Ton « aperçu / expérimental », cohérent avec « Linux d'abord ».
+      Renvoi vers `docs/plan-portage-macos.md`.
+
+**M0 — le socle**
+
+- [ ] `src/aparte/platform.py` (neuf) : `IS_MACOS`, `IS_LINUX`,
+      `current_platform()`, exception `UnsupportedPlatformError`. Détection par
+      `sys.platform`. Un seul point d'accroche réellement utilisé (pas de code
+      mort) : un sélecteur du backend `*_desktop.py` qui rend `linux_desktop` sur
+      Linux et **lève `UnsupportedPlatformError`** (message « macOS : M1+ ; la
+      dictée navigateur marche déjà via `aparte desktop` ») sur Darwin et tout
+      autre OS. Zéro branche `macos_*`, zéro changement de comportement Linux.
+- [ ] `cli.py` : router `install-desktop` / `install-autostart` par le sélecteur
+      au lieu de l'import direct de `linux_desktop`. Sur Linux, comportement
+      identique au bit près. C'est la seule couture posée en M0 ; les modules
+      mixtes (`clipboard`, `notify`, `audio`) et leurs branches `darwin` sont M1.
+- [ ] `pyproject.toml` : extra `[macos]` — frameworks PyObjC **exacts**
+      (`pyobjc-framework-Quartz`, `pyobjc-framework-Cocoa`,
+      `pyobjc-framework-AVFoundation`), `rumps`, `quickmachotkey`, **chacun avec
+      marqueur `; sys_platform == "darwin"`** (rien ne s'installe hors Mac).
+      Vérif des wheels arm64 déférée au vrai Mac. Pas le méta-paquet `pyobjc`.
+- [ ] `pyproject.toml` : classifieur `"Operating System :: MacOS :: MacOS X"`
+      ajouté ; **garder** le classifieur Linux (Linux d'abord).
+- [ ] Tests `unittest` (`tests/test_platform.py`) : `current_platform()` juste
+      sur cette machine ; sélecteur → `linux_desktop` quand `sys.platform` est
+      `linux` (monkeypatch), et lève `UnsupportedPlatformError` quand `darwin`.
+- [ ] Preuve : suite complète verte, Linux intact ; `pip install -e .` toujours
+      valide (parsing pyproject).
+- [ ] CHANGELOG : entrée « Non publié » — socle de dispatch macOS + doc dictée
+      navigateur. **Pas de release** (M0 ne livre aucune fonctionnalité Mac).
+
+**Question de conception laissée à Codex** (pas à Alexandre) : profondeur de la
+couture M0 — le sélecteur `*_desktop.py` est-il le bon (et unique) point
+d'accroche, ou M0 doit-il rester détection pure (module seul, sans toucher
+`cli.py`) ? Et : extra marqué `darwin` vs extra nu.
+
+### Windows, pour mémoire (étudié le 23/07, non planifié)
+
+Réécriture partielle, ~15–21 jours, ~le double de Mac. Aucun modèle Unix de
+processus (`session.py` entier à refaire), collage en ctypes Win32 « intestable
+hors Windows », `clip.exe` casse les accents français, et `Win+H` est une dictée
+intégrée concurrente. Mac construit au passage la couture de plateforme qui
+rendrait Windows moins cher plus tard. **Ordre : Mac d'abord, nettement.**
+
+---
+
 ## À ne pas reprendre
 
 - **La détection automatique de langue sans réglage.** C'est leur faiblesse
