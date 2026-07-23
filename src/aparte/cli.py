@@ -16,13 +16,7 @@ from .hotkey import (
     install_hotkey,
     remove_hotkey,
 )
-from .linux_desktop import (
-    build_autostart_entry,
-    build_desktop_entry,
-    install_autostart_entry,
-    install_desktop_entry,
-    uninstall_autostart_entry,
-)
+from .platform_dispatch import desktop_integration
 from .notify import _preview, notify
 from .polish import PolishOptions, build_polisher
 from .session import get_active_session, start_toggle_recording, stop_toggle_recording
@@ -428,22 +422,24 @@ def handle_config_command(args: argparse.Namespace) -> None:
 
 
 def handle_install_desktop(args: argparse.Namespace) -> None:
+    desktop = desktop_integration()
     if args.print:
-        print(build_desktop_entry(), end="")
+        print(desktop.build_desktop_entry(), end="")
         return
-    path = install_desktop_entry(force=args.force)
+    path = desktop.install_desktop_entry(force=args.force)
     print(path)
 
 
 def handle_install_autostart(args: argparse.Namespace) -> None:
+    desktop = desktop_integration()
     if args.remove:
-        removed = uninstall_autostart_entry()
+        removed = desktop.uninstall_autostart_entry()
         print(f"removed {removed}" if removed else "no autostart entry to remove")
         return
     if args.print:
-        print(build_autostart_entry(), end="")
+        print(desktop.build_autostart_entry(), end="")
         return
-    path = install_autostart_entry(force=args.force)
+    path = desktop.install_autostart_entry(force=args.force)
     print(path)
 
 

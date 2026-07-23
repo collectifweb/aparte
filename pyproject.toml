@@ -17,6 +17,7 @@ classifiers = [
   "Environment :: Console",
   "Intended Audience :: End Users/Desktop",
   "Operating System :: POSIX :: Linux",
+  "Operating System :: MacOS :: MacOS X",
   "Programming Language :: Python :: 3",
   "Topic :: Multimedia :: Sound/Audio :: Speech",
   "Topic :: Utilities",
@@ -42,6 +43,18 @@ recording = [
 cuda = [
   "nvidia-cublas-cu12",
   "nvidia-cudnn-cu12>=9,<10",
+]
+# macOS support is being built lot by lot (see docs/plan-portage-macos.md); these
+# are packaging plumbing, not proof the integrations work yet. Every dependency
+# is gated on `sys_platform == "darwin"` so the extra installs nothing off a Mac —
+# even a stray `pip install .[macos]` on Linux or Windows is a no-op. Exact PyObjC
+# frameworks only, never the `pyobjc` meta-package.
+macos = [
+  "pyobjc-framework-Quartz; sys_platform == 'darwin'",        # CGEvent — insertion (M3)
+  "pyobjc-framework-Cocoa; sys_platform == 'darwin'",         # AppKit / run loop (M5)
+  "pyobjc-framework-AVFoundation; sys_platform == 'darwin'",  # microphone permission (M2)
+  "rumps; sys_platform == 'darwin'",                          # menu-bar tray (M6)
+  "quickmachotkey; sys_platform == 'darwin'",                 # global-shortcut façade (M5)
 ]
 dev = [
   "pytest>=8.0",

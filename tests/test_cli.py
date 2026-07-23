@@ -1,11 +1,23 @@
 import argparse
+import contextlib
+import io
+import os
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from aparte import cli
+from aparte import cli, linux_desktop, platform_dispatch
 from aparte.cli import build_parser
 from aparte.config import Settings
+
+
+def _run_cli(*argv: str):
+    """Run ``cli.main`` capturing exit code, stdout and stderr."""
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        code = cli.main(list(argv))
+    return code, out.getvalue(), err.getvalue()
 
 
 def _toggle_args(target: str = "paste") -> argparse.Namespace:
@@ -120,6 +132,50 @@ class CliParserTest(unittest.TestCase):
         args = build_parser().parse_args(["install-hotkey", "--key", "<Control><Alt>d", "--remove"])
         self.assertEqual(args.key, "<Control><Alt>d")
         self.assertTrue(args.remove)
+
+
+class DesktopIntegrationCliTest(unittest.TestCase):
+    """M0 routes install-desktop/-autostart through the platform seam. On Linux
+    the observable behaviour must stay identical, and a non-Linux OS must fail
+    cleanly — proven at the ``cli.main`` boundary, not just at module level."""
+
+    def test_install_desktop_print_matches_linux_backend(self):
+        code, out, err = _run_cli("install-desktop", "--print")
+        self.assertEqual(code, 0)
+        self.assertEqual(out, linux_desktop.build_desktop_entry())
+        self.assertEqual(err, "")
+
+    def test_install_autostart_print_matches_linux_backend(self):
+        code, out, err = _run_cli("install-autostart", "--print")
+        self.assertEqual(code, 0)
+        self.assertEqual(out, linux_desktop.build_autostart_entry())
+        self.assertEqual(err, "")
+
+    def test_install_autostart_remove_when_absent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": directory}):
+                code, out, err = _run_cli("install-autostart", "--remove")
+        self.assertEqual(code, 0)
+        self.assertEqual(out, "no autostart entry to remove\n")
+        self.assertEqual(err, "")
+
+    def test_install_desktop_writes_the_same_file_as_before(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.dict(os.environ, {"XDG_DATA_HOME": directory}):
+                code, out, err = _run_cli("install-desktop")
+                expected = Path(directory) / "applications" / "aparte.desktop"
+                self.assertEqual(code, 0)
+                self.assertEqual(out.strip(), str(expected))
+                self.assertEqual(err, "")
+                self.assertEqual(expected.read_text(encoding="utf-8"), linux_desktop.build_desktop_entry())
+
+    def test_unsupported_os_fails_cleanly_without_traceback(self):
+        with mock.patch.object(platform_dispatch.sys, "platform", "darwin"):
+            code, out, err = _run_cli("install-desktop", "--print")
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "")
+        self.assertIn("error: Desktop integration", err)
+        self.assertNotIn("Traceback", err)
 
 
 if __name__ == "__main__":

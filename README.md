@@ -170,6 +170,36 @@ Pull and re-run the install script as above; the rename is handled for you:
   re-run `aparte install-desktop` / `aparte install-autostart`, so you don't end
   up with two menu entries or two servers competing at login.
 
+### Running on macOS (experimental, browser-only preview)
+
+Aparté is **Linux-first**. macOS is an experimental companion, not a supported
+target yet. What already works today, with no new code, is the **browser
+dictation** path through the local web app:
+
+```bash
+git clone https://github.com/collectifweb/aparte.git
+cd aparte
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[whisper]"   # transcription backend; a bare install can't transcribe
+aparte desktop                          # serves http://127.0.0.1:8765
+```
+
+On that page you can record (the **browser** captures the microphone via
+`getUserMedia` and sends the audio to the local server), transcribe locally,
+polish locally, and **copy** the result from the browser clipboard with a click.
+
+What does **not** work on macOS yet — and it is the part that *is* the product —
+is inserting the dictation straight into the app you're using, without going back
+to the page. Also missing: the global keyboard shortcut, a native launcher and
+login autostart, the menu-bar tray, and native notifications. These are being
+built lot by lot; see [docs/plan-portage-macos.md](docs/plan-portage-macos.md).
+
+One nuance to the "nothing leaves your machine" promise: the very first
+transcription downloads the Whisper model from Hugging Face if it isn't cached
+yet. Your audio and dictated text never leave the machine; only that one-time
+model fetch touches the network, after which everything runs offline.
+
 ### Extras, à la carte
 
 | Extra        | Adds                                                                  |

@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Experimental macOS groundwork (M0).** A platform-dispatch seam
+  (`platform_dispatch.py`) now selects the OS-specific launcher/autostart backend,
+  and a `[macos]` packaging extra pins the exact PyObjC frameworks, `rumps`, and
+  `quickmachotkey` — each gated to `sys_platform == "darwin"`, so the extra
+  installs nothing off a Mac. The README documents that the **browser dictation**
+  path already runs on macOS today. No macOS feature ships yet: insertion into the
+  active app, the global shortcut, the tray, and native notifications remain
+  Linux-only, and the macOS modules themselves are not written. Linux behaviour is
+  unchanged.
 
 ## [1.1.1] - 2026-07-23
 
