@@ -161,7 +161,10 @@ class DesktopIntegrationCliTest(unittest.TestCase):
 
     def test_install_desktop_writes_the_same_file_as_before(self):
         with tempfile.TemporaryDirectory() as directory:
-            with mock.patch.dict(os.environ, {"XDG_DATA_HOME": directory}):
+            # XDG_CONFIG_HOME too, not just XDG_DATA_HOME: install_desktop_entry
+            # calls remove_legacy_entries(), which reaches into ~/.config/autostart
+            # and would delete a real legacy murmur.desktop otherwise.
+            with mock.patch.dict(os.environ, {"XDG_DATA_HOME": directory, "XDG_CONFIG_HOME": directory}):
                 code, out, err = _run_cli("install-desktop")
                 expected = Path(directory) / "applications" / "aparte.desktop"
                 self.assertEqual(code, 0)

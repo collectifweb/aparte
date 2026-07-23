@@ -17,7 +17,9 @@
 Aparté is a local-first dictation app for Linux. It can run as a CLI, as a command bound to a global keyboard shortcut, or as a lightweight local desktop web app.
 
 Nothing leaves your machine: Whisper runs locally, formatting runs locally, and
-there is no account, no API key, and no network call. It is also the only
+there is no account, no API key, and — apart from a one-time Whisper model
+download the first time you transcribe, if it isn't already cached — no network
+call. Your audio and dictated text never leave the machine. It is also the only
 dictation app that takes **French typography** seriously — non-breaking spaces
 before `? ! ; :`, real `« »` quotes, curly apostrophes.
 
