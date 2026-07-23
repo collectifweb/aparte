@@ -283,7 +283,9 @@ lisible » n'est pas une vérification.
 Roboto, sans-serif`. Sous Cinnamon, Ubuntu ou Cantarell selon la distribution.
 
 **Police monospace :** `ui-monospace, SFMono-Regular, Menlo, monospace`, pour les
-commandes shell copiables et les tables `dit = écrit`.
+commandes shell copiables et les trois champs de « Mon dictionnaire » — la liste
+de « Mes mots » et les tables `entendu = écrit` des Corrections et des
+Raccourcis dictés.
 
 **Police d'affichage :** aucune, et c'est délibéré. Un outil dans lequel on passe
 la journée n'a pas de titre à déclamer.

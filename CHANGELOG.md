@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [1.0.0] - 2026-07-22
+
+The first release under the name **Aparté** — and the first one that is a
+finished app rather than a scaffold. It is in daily use: press a global
+shortcut, speak, and correctly typeset French lands in whichever app is
+focused, without anything leaving the machine.
+
+Coming from **Murmur**? Nothing breaks. Your config is migrated on first run,
+`MURMUR_*` variables are still read, and the old `murmur` command still
+launches Aparté, so a shortcut bound to it keeps working. See
+[Upgrading from Murmur](README.md#upgrading-from-murmur-the-previous-name).
+
 ### Added
 
 - **Teach Whisper your own words, before it transcribes.** New **My words**
@@ -129,6 +143,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **French prompt for the Ollama polisher**, with the French typography rules
   spelled out, used when the dictation is in French.
 
+
+- **One-command global hotkey setup**: `aparte install-hotkey` registers the
+  dictation shortcut automatically through `gsettings` on Cinnamon and GNOME
+  (default `Super+Space`, override with `--key`). It reuses the existing Aparté
+  binding instead of creating duplicates, preserves an already-chosen accelerator
+  unless `--key` is given, and supports `--print` and `--remove`. Other desktops
+  get printable manual instructions.
+- **In-app keyboard-shortcut guide**: the desktop **Setup & diagnostics** panel
+  now shows the current shortcut status (bound key or "not set"), the exact
+  command to bind, and the auto-bind command, each with a copy button. `aparte
+  doctor` gained a matching `hotkey` line.
+
 ### Changed
 
 - **The Settings panel is now ordered by how often you actually touch a
@@ -248,7 +274,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Numbers dictated in a sentence are left inline** instead of being reformatted
   into a numbered list (e.g. "il y a 1 chien et 2 chats" no longer became a list).
 
-### Fixed
 
 - **The recent-dictations panel lines up with the editor again.** The work area
   is centred, and the panel had no width of its own, so it shrank to fit its
@@ -280,19 +305,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   be one of ours as well, so a domain rebound to 127.0.0.1 is turned away even
   though its Origin and Host agree with each other. Requests carrying no
   `Origin` header, which is every command-line client, are unaffected.
-
-### Added
-
-- **One-command global hotkey setup**: `aparte install-hotkey` registers the
-  dictation shortcut automatically through `gsettings` on Cinnamon and GNOME
-  (default `Super+Space`, override with `--key`). It reuses the existing Aparté
-  binding instead of creating duplicates, preserves an already-chosen accelerator
-  unless `--key` is given, and supports `--print` and `--remove`. Other desktops
-  get printable manual instructions.
-- **In-app keyboard-shortcut guide**: the desktop **Setup & diagnostics** panel
-  now shows the current shortcut status (bound key or "not set"), the exact
-  command to bind, and the auto-bind command, each with a copy button. `aparte
-  doctor` gained a matching `hotkey` line.
 
 ## [0.1.0] - 2026-06-01
 
@@ -328,5 +340,6 @@ First public release — a local-first dictation app for Linux.
 - MIT license, contributing guide, and CI running the test suite on Python
   3.10–3.13.
 
-[Unreleased]: https://github.com/collectifweb/aparte/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/collectifweb/aparte/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/collectifweb/aparte/compare/v0.1.0...v1.0.0
 [0.1.0]: https://github.com/collectifweb/aparte/releases/tag/v0.1.0

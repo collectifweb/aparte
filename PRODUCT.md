@@ -129,10 +129,13 @@ sait la lire et qu'un contributeur en aura besoin. Le panneau de diagnostic fait
 déjà exactement ça ; c'est le modèle à suivre pour les écrans à venir.
 
 **5. « Rien ne sort de la machine » doit être visible, pas seulement vrai.**
-La confidentialité est le premier argument du produit et elle est aujourd'hui
-invisible dans l'interface : rien à l'écran ne dit que tout tourne en local. Une
-mention discrète et permanente vaut mieux qu'un badge tapageur, mais l'absence
-totale est une occasion manquée.
+La confidentialité est le premier argument du produit. L'écart est en partie
+refermé : l'état vide du panneau des dictées porte la mention « Tout se passe
+sur ta machine » (`recent.local`), et c'est l'état normal en début de session
+puisque l'historique vit en mémoire vive. Mais elle **disparaît à la première
+dictée**, c'est-à-dire dès qu'on se sert vraiment de l'application. Une mention
+discrète et permanente vaut mieux qu'un badge tapageur ; il en manque encore
+une qui survive au premier usage.
 
 ## Accessibility & Inclusion
 
@@ -145,14 +148,22 @@ Deuxième exigence, propre au produit : **l'état d'enregistrement ne doit jamai
 reposer sur la couleur seule.** Un utilisateur daltonien doit pouvoir répondre à
 « est-ce que ça enregistre ? » par la forme, le libellé et le mouvement. C'est
 déjà partiellement le cas (le pictogramme passe du micro au carré d'arrêt, le
-libellé change) et il faut le conserver. Même règle pour le point de santé de la
-barre supérieure, qui ne porte aujourd'hui son information que par sa couleur.
+libellé change) et il faut le conserver. La pastille de santé de la barre
+supérieure est doublée d'un texte masqué visuellement (`#health-dot-text`,
+rattaché par `aria-describedby`) : un lecteur d'écran l'annonce, mais **un
+utilisateur daltonien qui regarde l'écran n'a toujours que la couleur.** L'écart
+reste ouvert de ce côté-là.
 
 **Écarts refermés au Lot D** — gardés ici pour l'historique, plus rien à faire :
 le style de focus est global et unique, `prefers-reduced-motion` a son bloc en
 fin de `app.css`, les tiroirs se ferment avec Échap et retiennent le focus, et
 les `aria-label` passent par `i18n.js` comme le reste. Les règles qui en
 découlent sont dans `CLAUDE.md` § Interface — les rouvrir serait une régression.
+
+**Écart refermé le 22/07 :** le texte d'aide de chaque réglage était **dans** son
+`<label>`, donc dans le nom accessible du contrôle — un lecteur d'écran annonçait
+« Nombres dictés » suivi de ses trois phrases d'explication. Les aides sont
+désormais rattachées par `aria-describedby`, ce qui est leur rôle.
 
 **Inclusion linguistique.** L'interface est bilingue français/anglais via des
 attributs `data-i18n`, et bascule sur la langue du navigateur au premier

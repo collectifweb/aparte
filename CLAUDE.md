@@ -228,6 +228,9 @@ phrases voisines.
 - Un `git pull` peut se déclencher pendant une session, mettre le travail de
   côté automatiquement et échouer à le remettre. Commiter tôt.
 - Jamais de `Co-Authored-By: Claude` ni de mention d'IA dans les messages.
+- Messages en Conventional Commits, en minuscules, avec une portée quand elle est
+  évidente : `feat(transcription):`, `fix(ui):`, `docs:`. Le corps dit **pourquoi**,
+  pas seulement quoi. Même règle écrite dans `CONTRIBUTING.md`.
 
 ## Suivi
 

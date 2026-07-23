@@ -21,7 +21,7 @@ there is no account, no API key, and no network call. It is also the only
 dictation app that takes **French typography** seriously — non-breaking spaces
 before `? ! ; :`, real `« »` quotes, curly apostrophes.
 
-The first version focuses on the core Flow-like loop:
+The loop, in four steps:
 
 1. Capture speech or accept an audio file.
 2. Transcribe with a local Whisper backend.
@@ -55,14 +55,23 @@ get set up without the terminal. The interface is available in English and Frenc
 
 ## Current status
 
-This repo is a working MVP scaffold. It runs immediately for text polishing and desktop UI. Audio transcription activates when one of these local backends is available:
+Aparté is in daily use: dictate with a global shortcut, and the text lands
+formatted in whichever app is focused. Text polishing and the desktop UI work
+out of the box; audio transcription activates when one of these local backends
+is available:
 
-- `faster-whisper` Python package
+- `faster-whisper` Python package (recommended — the only one that supports the
+  **My words** vocabulary setting)
 - `openai-whisper` Python package
 - `whisper.cpp` CLI via `APARTE_WHISPER_CPP`
 
 For best formatting quality, run Ollama locally and set `APARTE_POLISH_BACKEND=ollama`.
-For consistent spelling of names, products, acronyms, and repeated phrases, use the built-in config file.
+For consistent spelling of names, products, and acronyms, use **My words** and
+**Corrections** in Settings — see [Teaching Aparté your vocabulary](#teaching-aparté-your-vocabulary).
+
+Still to come: a floating window so the live preview is visible when you dictate
+with the global shortcut rather than only inside the app, and capturing a
+correction straight from the editor instead of retyping it in Settings.
 
 ## Install
 
@@ -328,6 +337,7 @@ APARTE_COMPUTE_TYPE=auto
 APARTE_LANGUAGE=
 APARTE_POLISH_BACKEND=heuristic
 APARTE_PASTE_MODE=clipboard
+APARTE_MICROPHONE=
 APARTE_RUNTIME_DIR=
 APARTE_OLLAMA_URL=http://127.0.0.1:11434
 APARTE_OLLAMA_MODEL=llama3.1:8b
@@ -389,9 +399,10 @@ Every Aparté process shares that one store, so a dictation made through the
 global hotkey shows up in the app, and vice versa, without either one having to
 be running for the other.
 
-Insertion modes (`paste_mode` in the config, or the **Insertion** setting in the
-desktop app). Every mode copies the dictation to the clipboard first, so it is
-never lost when the insertion lands somewhere unexpected:
+Insertion modes (`paste_mode` in the config, or **How to insert** under
+**Hardware** in the desktop app). Every mode copies the dictation to the
+clipboard first, so it is never lost when the insertion lands somewhere
+unexpected:
 
 - `clipboard` (default): one atomic `Ctrl+V`. Right nearly everywhere.
 - `terminal`: `Ctrl+Shift+V` — terminals ignore `Ctrl+V` entirely.
@@ -401,9 +412,9 @@ never lost when the insertion lands somewhere unexpected:
 
 ### Choosing a microphone
 
-The **Microphone** setting lists what ALSA can capture from — pick one, or leave
-it on the system default. **Refresh** rebuilds the list without closing the
-panel, for a microphone plugged in after opening it. A device that has since been
+**Input device**, under **Hardware** in Settings, lists what ALSA can capture
+from — pick one, or leave it on the system default. **Refresh** rebuilds the
+list without closing the panel, for a microphone plugged in after opening it. A device that has since been
 unplugged stays in the list, marked as such, rather than being silently swapped
 for another one.
 
@@ -500,11 +511,15 @@ ministre"), and English.
 
 Two settings decide how far the formatting goes:
 
-- **Short text** (`short_text_words`, off by default): below this many words the
-  dictation comes out as spoken — no leading capital, no final period. A search
-  field and a one-word answer are not sentences.
+- **Very short dictations** (`short_text_words`, off by default): below this many
+  words the dictation comes out as spoken — no leading capital, no final period.
+  A search field and a one-word answer are not sentences.
 - **Trailing space** (`trailing_space`, off by default): ends every dictation
   with a space, so a second one does not land glued to the first.
+
+**Filler word removal** (`cleanup_level`) strips the hesitations: "euh" and
+"heu" at every level, plus verbal tics such as "ben", "genre" and "tsé" — or
+"like", "basically", "actually" in English — at the high level.
 
 Recorder backends:
 
@@ -535,19 +550,39 @@ Example:
 
 With that config, dictating `slash signature` expands the snippet, and dictated terms such as `pipe wire` are rewritten with the preferred spelling.
 
+### Teaching Aparté your vocabulary
+
+Three settings sit under **My dictionary**, and they act at three different
+moments:
+
+| Setting | Config key | When it acts |
+|---|---|---|
+| **My words** | `hotwords` | **before** transcription — biases Whisper itself |
+| **Corrections** | `replacements` | **after**, on the text |
+| **Spoken shortcuts** | `snippets` | after, expanding `slash <name>` into ready-made text |
+
 `hotwords` and `replacements` are two different tools, not two ways of doing the
-same thing. `hotwords` is handed to Whisper **before** it transcribes, so it
-leans toward those spellings when the audio is ambiguous — you do not need to
-have seen the mistake first. `replacements` runs **after**, on the text, and is
-the safety net for what slips through anyway. Measured on real speech: without
-the word list, `PipeWire` and `Mailpoet` came out as `pipe wire` and
-`mail poète`; with it, both were spelled correctly, casing included.
+same thing. **My words** is a plain list of names — clients, tools, colleagues —
+handed to Whisper up front, so it leans toward those spellings when the audio is
+ambiguous. You do not need to have seen the mistake first. **Corrections** is
+the safety net for what slips through anyway.
+
+Measured on real speech: without the word list, `PipeWire` and `Mailpoet` came
+out as `pipe wire` and `mail poète`; with it, both were spelled correctly,
+casing included. Three names in the same sentence (`Playwright`, `Wayland`,
+`Claude`) were already correct without any help — the list is for what actually
+fails, not for everything you own.
 
 Two caveats. `hotwords` only exists in `faster-whisper`; with `openai-whisper`
 or `whisper.cpp` the setting is quietly ignored rather than promising what the
 backend cannot deliver. And a word list makes Whisper *more* likely to hear
 those words — on silence, a list containing `PipeWire` produced `PipeWire.com`
 out of nothing. Keep the list to words you actually say.
+
+**Corrections** takes one entry per line, `heard = written`. A line without an
+`=` is refused, with its line number, rather than being dropped silently.
+**Spoken shortcuts** takes the same form, except the text may continue on the
+following lines — that is how a multi-line signature is written.
 
 ## Desktop app
 
