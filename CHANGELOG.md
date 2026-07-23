@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [1.0.1] - 2026-07-23
+
+A dictation that produced notifications and no text. Three separate causes, each
+enough on its own, found by tracing a report of "nothing comes out any more".
+
 ### Fixed
 
 - **A dictation that heard nothing no longer wipes your clipboard.** Every
@@ -415,7 +422,8 @@ First public release — a local-first dictation app for Linux.
 - MIT license, contributing guide, and CI running the test suite on Python
   3.10–3.13.
 
-[Unreleased]: https://github.com/collectifweb/aparte/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/collectifweb/aparte/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/collectifweb/aparte/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/collectifweb/aparte/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/collectifweb/aparte/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/collectifweb/aparte/releases/tag/v0.1.0
