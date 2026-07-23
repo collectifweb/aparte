@@ -805,56 +805,49 @@ Repères pour décider sans ouvrir le plan :
 - **`session.py` reste Linux** ; sur Mac l'enregistrement vit dans le serveur
   résident (`RecordingController`, machine d'état + verrou séparé).
 
-### M0 — socle de dispatch + pas gratuit (branche `feat/portage-macos`, en cours)
+### M0 — socle de dispatch + pas gratuit (branche `feat/portage-macos`, **livré**)
 
-**Cadre.** Cette machine est sous Linux : le code macOS ne s'exécute pas ici. M0
-ne fait que **poser la couture** et le **packaging**, sans écrire un seul module
-`macos_*`. Contrainte de preuve à chaque pas :
-`PYTHONPATH=src python3 -m unittest discover -s tests -t tests` reste vert et le
-comportement Linux ne bouge pas. **Windows : hors périmètre, zéro ligne.**
+Spec consolidée, autonome : **[../docs/plan-portage-macos-m0.md](../docs/plan-portage-macos-m0.md)**
+(confrontée à Codex, consensus le 23/07 ; archives
+`docs/archives/confront-codex-portage-macos-m0-2026-07-23-1725/`). Ce bloc
+renvoie et coche, il ne recopie pas.
 
-**Le pas gratuit — documenter la dictée navigateur sur Mac**
+- [x] **Pas gratuit** — section macOS du README : la dictée navigateur marche
+      déjà (install `.[whisper]`, `aparte desktop`, `getUserMedia`, transcription
+      et polissage locaux, copie navigateur), avec la liste explicite de ce qui
+      **ne marche pas encore** (insertion, raccourci, launcher/autostart, tray,
+      notifications) et la nuance « premier téléchargement du modèle ».
+- [x] `src/aparte/platform_dispatch.py` (neuf) : `is_macos()`, `is_linux()`
+      (lues à l'appel), `UnsupportedPlatformError`, sélecteur
+      `desktop_integration()` — rend `linux_desktop` sur Linux, lève partout
+      ailleurs sans importer de `macos_*`. Pas de `current_platform()` (aucun
+      appelant → naîtra en M2 avec `doctor`).
+- [x] `cli.py` : `install-desktop` / `install-autostart` routés par le sélecteur.
+      Linux inchangé. Modules mixtes (`clipboard`/`notify`/`audio`) = M1.
+- [x] `pyproject.toml` : extra `[macos]` (PyObjC Quartz/Cocoa/AVFoundation +
+      rumps + quickmachotkey, chacun `; sys_platform == 'darwin'`) + classifieur
+      MacOS, Linux gardé.
+- [x] Tests : `tests/test_platform_dispatch.py` (classification par patch de
+      `sys.platform` + sélecteur) ; non-régression CLI via `cli.main()` dans
+      `tests/test_cli.py` (oracles `linux_desktop.build_*`, chemin non supporté
+      → code 1 sans traceback) ; `tests/test_packaging.py` (marqueurs darwin +
+      double classifieur, skip-gardé 3.11+).
+- [x] CHANGELOG : entrée « Non publié ». **Pas de release.**
 
-- [ ] Section macOS dans le README : aujourd'hui, sur Mac, `pip install` +
-      `aparte desktop` sert la page ; enregistrement `getUserMedia` dans le
-      navigateur, transcription faster-whisper CPU, polissage, copie —
-      **fonctionnent déjà**. Ce qui **ne marche pas encore** : insertion dans
-      l'app active (c'est ça, le produit), raccourci global, tray, notifications
-      natives. Ton « aperçu / expérimental », cohérent avec « Linux d'abord ».
-      Renvoi vers `docs/plan-portage-macos.md`.
+**Décidé en cours de route (confront-codex, 2 rounds, consensus).** Option A
+retenue (couture réelle dans `cli.py`, pas de module de détection mort).
+Fonctions `is_*()` plutôt que constantes figées (testables par patch de
+`sys.platform`). Nom `platform_dispatch.py` (pas `platform.py`, qui masque la
+stdlib). `current_platform()` retiré (spéculatif sans appelant). Zéro mention de
+Windows dans le code (« non-Linux »).
 
-**M0 — le socle**
-
-- [ ] `src/aparte/platform.py` (neuf) : `IS_MACOS`, `IS_LINUX`,
-      `current_platform()`, exception `UnsupportedPlatformError`. Détection par
-      `sys.platform`. Un seul point d'accroche réellement utilisé (pas de code
-      mort) : un sélecteur du backend `*_desktop.py` qui rend `linux_desktop` sur
-      Linux et **lève `UnsupportedPlatformError`** (message « macOS : M1+ ; la
-      dictée navigateur marche déjà via `aparte desktop` ») sur Darwin et tout
-      autre OS. Zéro branche `macos_*`, zéro changement de comportement Linux.
-- [ ] `cli.py` : router `install-desktop` / `install-autostart` par le sélecteur
-      au lieu de l'import direct de `linux_desktop`. Sur Linux, comportement
-      identique au bit près. C'est la seule couture posée en M0 ; les modules
-      mixtes (`clipboard`, `notify`, `audio`) et leurs branches `darwin` sont M1.
-- [ ] `pyproject.toml` : extra `[macos]` — frameworks PyObjC **exacts**
-      (`pyobjc-framework-Quartz`, `pyobjc-framework-Cocoa`,
-      `pyobjc-framework-AVFoundation`), `rumps`, `quickmachotkey`, **chacun avec
-      marqueur `; sys_platform == "darwin"`** (rien ne s'installe hors Mac).
-      Vérif des wheels arm64 déférée au vrai Mac. Pas le méta-paquet `pyobjc`.
-- [ ] `pyproject.toml` : classifieur `"Operating System :: MacOS :: MacOS X"`
-      ajouté ; **garder** le classifieur Linux (Linux d'abord).
-- [ ] Tests `unittest` (`tests/test_platform.py`) : `current_platform()` juste
-      sur cette machine ; sélecteur → `linux_desktop` quand `sys.platform` est
-      `linux` (monkeypatch), et lève `UnsupportedPlatformError` quand `darwin`.
-- [ ] Preuve : suite complète verte, Linux intact ; `pip install -e .` toujours
-      valide (parsing pyproject).
-- [ ] CHANGELOG : entrée « Non publié » — socle de dispatch macOS + doc dictée
-      navigateur. **Pas de release** (M0 ne livre aucune fonctionnalité Mac).
-
-**Question de conception laissée à Codex** (pas à Alexandre) : profondeur de la
-couture M0 — le sélecteur `*_desktop.py` est-il le bon (et unique) point
-d'accroche, ou M0 doit-il rester détection pure (module seul, sans toucher
-`cli.py`) ? Et : extra marqué `darwin` vs extra nu.
+**Preuve.** 244 tests verts (`PYTHONPATH=src python3 -m unittest discover -s
+tests -t tests`), Linux intact. L'inertie de l'extra `[macos]` sur Linux est
+prouvée sémantiquement (les 5 marqueurs `darwin` évalués par `packaging` valent
+Faux ici) ; le smoke `pip install .[macos]` réel n'est pas jouable sur cette
+machine (environnement PEP 668 « externally-managed »), et la vérif des wheels
+arm64 reste de toute façon à faire sur un vrai Mac. Commits `624c585` (docs) et
+`356a0f6` (feat).
 
 ### Windows, pour mémoire (étudié le 23/07, non planifié)
 
