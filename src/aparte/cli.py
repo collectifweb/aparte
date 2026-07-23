@@ -281,22 +281,49 @@ def dictate_once(args: argparse.Namespace, settings: Settings) -> str:
             cleanup_level=args.cleanup_level or settings.cleanup_level,
         )
         output = transcribe_path(path, transcribe_args, settings)
-        _notify_inserted(output, args.target)
+        if not output.strip():
+            # Ni copie ni collage : `paste_text` passe d'abord par le
+            # presse-papiers, et une dictée vide y écraserait ce que
+            # l'utilisateur gardait.
+            _notify_nothing_heard()
+            return output
+        # L'historique avant l'insertion : si le collage casse, le texte reste
+        # rattrapable par `aparte last`.
         history.record(output, settings.history_persist)
-        if args.target == "paste":
-            paste_text(output, settings.paste_mode)
-        elif args.target == "copy":
-            copy_text(output)
+        _deliver(output, args.target, settings)
         return output
     finally:
         if not args.keep_audio:
             path.unlink(missing_ok=True)
 
 
+def _deliver(output: str, target: str, settings: Settings) -> None:
+    """Placer la dictée, puis seulement la signaler.
+
+    L'ordre compte. Notifier avant d'insérer annonce un succès que l'échec
+    suivant ne peut plus démentir : l'erreur part sur `stderr`, et un raccourci
+    clavier n'a personne pour la lire.
+    """
+    try:
+        if target == "paste":
+            paste_text(output, settings.paste_mode)
+        elif target == "copy":
+            copy_text(output)
+    except Exception as exc:
+        notify(
+            "⚠️ Dictée non insérée",
+            f"{exc} Aparté a tenté de la garder dans l'historique ; essaie « aparte last ».",
+            urgency="critical",
+        )
+        raise
+    _notify_inserted(output, target)
+
+
+def _notify_nothing_heard() -> None:
+    notify("🤫 Rien à transcrire", "Aucune parole détectée.", urgency="low")
+
+
 def _notify_inserted(output: str, target: str) -> None:
-    if not output.strip():
-        notify("🤫 Rien à transcrire", "Aucune parole détectée.", urgency="low")
-        return
     if target == "copy":
         title = "📋 Copié dans le presse-papier"
     elif target == "stdout":
@@ -315,7 +342,9 @@ def toggle_dictation(args: argparse.Namespace, settings: Settings) -> str:
     if not active:
         if settings.beep:
             play_beep("start")
-        session = start_toggle_recording(args.sample_rate, settings.microphone)
+        session = start_toggle_recording(
+            args.sample_rate, settings.microphone, settings.max_recording_seconds
+        )
         notify("🎙️ Dictée en cours", "Réappuie sur le raccourci pour arrêter et insérer.")
         return f"Recording started: {session.audio_path}"
 
@@ -330,12 +359,11 @@ def toggle_dictation(args: argparse.Namespace, settings: Settings) -> str:
             cleanup_level=args.cleanup_level or settings.cleanup_level,
         )
         output = transcribe_path(session.audio_path, transcribe_args, settings)
-        _notify_inserted(output, args.target)
+        if not output.strip():
+            _notify_nothing_heard()
+            return output
         history.record(output, settings.history_persist)
-        if args.target == "paste":
-            paste_text(output, settings.paste_mode)
-        elif args.target == "copy":
-            copy_text(output)
+        _deliver(output, args.target, settings)
         return output
     finally:
         if not args.keep_audio:

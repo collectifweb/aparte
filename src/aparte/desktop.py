@@ -181,7 +181,7 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
     # reuse it across requests instead of reloading the model every time. The
     # cache is keyed by model name so the UI can toggle between models (e.g.
     # small and base) without paying the load cost on every switch.
-    transcriber_cache: dict[str, object] = {}
+    transcriber_cache: dict[tuple, object] = {}
     transcriber_lock = threading.Lock()
     # A Whisper model is one object shared by every request, and this server is
     # threaded: the live preview and the final transcription of the same
@@ -198,8 +198,22 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
 
     def get_transcriber(active: Settings, model: str | None = None):
         model = model or active.model
+        # La clé porte tout ce qui construit le transcripteur, pas seulement le
+        # modèle. `_handle_save_config` vide bien le cache, mais une config
+        # modifiée ailleurs — édition à la main, appel externe à
+        # `update_config()`, synchronisation par un tiers — rendrait sinon un
+        # transcripteur périmé sans que rien ne le signale.
+        key = (
+            active.transcriber,
+            model,
+            active.language,
+            active.device,
+            active.compute_type,
+            active.whisper_cpp,
+            active.hotwords,
+        )
         with transcriber_lock:
-            transcriber = transcriber_cache.get(model)
+            transcriber = transcriber_cache.get(key)
             if transcriber is None:
                 transcriber = build_transcriber(
                     backend=active.transcriber,
@@ -210,7 +224,7 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                     compute_type=active.compute_type,
                     hotwords=active.hotwords,
                 )
-                transcriber_cache[model] = transcriber
+                transcriber_cache[key] = transcriber
             return transcriber
 
     class DesktopHandler(BaseHTTPRequestHandler):

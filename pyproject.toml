@@ -32,7 +32,8 @@ Issues = "https://github.com/collectifweb/aparte/issues"
 
 [project.optional-dependencies]
 whisper = [
-  "faster-whisper>=1.0",
+  # 1.0.2 est le plancher : `hotwords` (« Mes mots ») n'existe pas avant.
+  "faster-whisper>=1.0.2",
 ]
 recording = [
   "sounddevice>=0.4",

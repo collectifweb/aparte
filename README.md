@@ -444,6 +444,20 @@ so, without a GPU this keeps one core busy for as long as you speak — untick t
 setting if the machine struggles. As a side effect, the first preview loads the
 Whisper model while you are still talking, so the wait after you stop is shorter.
 
+### Recordings stop on their own after five minutes
+
+`max_recording_seconds` (config file only, 300 by default) is the longest a
+single shortcut recording can run. It exists because a microphone left open has
+no other reason to stop: one forgotten recording reached 31 minutes and 59 MB
+before anyone noticed.
+
+At the ceiling the recorder exits cleanly, and the next press of the shortcut
+transcribes what it captured — so hitting the limit truncates a dictation, it
+does not lose one. Any unreadable or non-positive value falls back to 300; there
+is deliberately no "unlimited" setting, because a typo would otherwise reopen
+exactly the problem this prevents. If you genuinely dictate for two hours, write
+`7200`.
+
 ### The shortcut reuses the running app's model
 
 Pressing the global shortcut used to start a fresh process that read the Whisper

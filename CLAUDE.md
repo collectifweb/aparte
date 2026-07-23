@@ -131,6 +131,49 @@ Le remplacement se fait par **une espace, pas par rien** : le motif mange
 l'espace des deux côtés, et retirer un générique au milieu recollerait les
 phrases voisines.
 
+### Dictée : livrer avant d'annoncer, et ne rien détruire
+
+- **Une sortie vide ne touche à rien.** `paste_text` copie avant de coller, dans
+  tous les modes — donc `paste_text("")` remplace par du vide ce que
+  l'utilisateur gardait en réserve. `toggle_dictation` et `dictate_once` sortent
+  sur `not output.strip()` avant toute copie, tout collage, tout historique.
+  `.strip()` est le seuil du **vide structurel**, pas un jugement sur l'utilité
+  du texte : ne pas y greffer de détecteur de charabia.
+- **La notification de succès vient après l'insertion**, jamais avant.
+  L'inverse annonçait « ✍️ Inséré » puis échouait, et l'erreur partait sur
+  `stderr` — que Cinnamon jette pour un raccourci personnalisé. Un échec émet sa
+  propre notification `critical`. L'historique s'écrit **avant** l'insertion :
+  c'est le seul filet si le collage casse.
+
+### Session d'enregistrement : la course qui laissait un micro ouvert
+
+- **`_claim_session()` publie par `os.link()`**, qui est atomique *et* échoue si
+  la cible existe. Ne jamais revenir à `write_text()` : il tronque puis écrit,
+  donc le tray — qui sonde chaque seconde — pouvait lire un JSON coupé, ne pas
+  le comprendre, et **supprimer la session d'un enregistrement bien vivant**.
+- **Le perdant de la course arrête son propre `arecord`.** Deux appuis à
+  quelques millisecondes passaient tous deux la vérification « déjà en cours »,
+  lançaient deux enregistreurs, et le second fichier de session écrasait le
+  premier : l'enregistreur oublié devenait inatteignable. Un fichier de 59 Mo,
+  31 minutes, a été trouvé comme ça.
+- **`_recorder_alive()` lit `/proc/<pid>/cmdline`, pas `os.kill(pid, 0)`.** Le
+  noyau réattribue les PID libérés : un test d'existence répond vrai pour le
+  processus de quelqu'un d'autre, et `killpg` enverrait un `SIGINT` à tout son
+  groupe. Deux signatures : `arecord`, et le chemin du fichier — unique par
+  session.
+- **Processus mort + audio ≥ 0,3 s = session à transcrire, pas session
+  périmée.** Supprimer ce `.wav` détruirait l'enregistrement à la seconde même
+  où l'utilisateur appuie pour le récupérer.
+- **`_captured_seconds()` calcule sur la taille du fichier, jamais sur
+  l'en-tête.** Sans durée imposée, `arecord` plafonne le WAV à 2 Gio et écrit un
+  en-tête bouche-trou de `0x40000000` trames, corrigé seulement en sortant
+  proprement. Mesuré sur la même capture de 2,88 s : `SIGINT` → en-tête juste ;
+  `SIGKILL` → en-tête annonçant **67 108 s**. `_ARECORD_WAV_HEADER_BYTES = 44`
+  n'est vrai que parce que `session.py` impose `-f S16_LE -c 1`.
+- **Ce qui reste ouvert, et qu'il ne faut pas prétendre fermé** : un lanceur tué
+  entre `Popen()` et son nettoyage peut encore laisser un `arecord` sans
+  session. Le plafond `-d` borne ce résidu, il ne le rend pas transcrivable.
+
 ### Typographie
 
 - La typographie française s'applique **après** les remplacements et les
@@ -188,7 +231,17 @@ phrases voisines.
 - `EDITABLE_FIELDS` dans `desktop.py` filtre les clés acceptées par
   `/api/config`. Un nouveau réglage absent de cette liste est ignoré en
   silence, côté lecture comme côté écriture. Il doit **aussi** figurer dans
-  `DEFAULT_CONFIG` : `update_config()` jette toute clé qui n'y est pas.
+  `DEFAULT_CONFIG` : `update_config()` jette toute clé qui n'y est pas. Et
+  l'inverse est vrai aussi : `EDITABLE_FIELDS` **ne crée aucun contrôle**.
+  `app.js` énumère chaque champ à la main, au chargement comme à la sauvegarde ;
+  un réglage ajouté à la liste sans passer par `index.html`, `app.js` et
+  `i18n.js` (français **et** anglais) n'est éditable nulle part.
+  `max_recording_seconds` est délibérément hors de la liste : réglage de fichier.
+- Le cache de transcripteurs de `handler_factory` est indexé sur **tout ce qui
+  construit le transcripteur**, pas sur le seul nom de modèle.
+  `_handle_save_config()` vide bien le cache, mais une configuration modifiée
+  ailleurs — édition à la main, appel externe à `update_config()` — rendrait
+  sinon un transcripteur périmé sans que rien ne le signale.
 - `hotwords` (« Mes mots ») n'existe que dans `faster-whisper`. `build_transcriber`
   ne le passe qu'à ce moteur ; `openai-whisper` et `whisper.cpp` n'ont pas
   d'équivalent, et le réglage doit s'y effacer sans bruit plutôt que de promettre

@@ -7,7 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **A dictation that heard nothing no longer wipes your clipboard.** Every
+  insertion mode copies to the clipboard first, so it can be pasted by hand if
+  the automatic paste lands somewhere it should not. But an empty transcript
+  went through that path too, and copying an empty string replaced whatever you
+  were keeping in reserve. Silence now stops before anything is copied, pasted
+  or recorded.
+
+- **A failed insertion is no longer silent.** The success notification was sent
+  *before* the text was inserted, so a failing `xdotool`, a missing clipboard
+  tool or a locked screen produced a cheerful "Inserted" and no text — the error
+  went to standard error, which a desktop keyboard shortcut throws away.
+  Insertion now happens first, and if it fails you get a notification saying so,
+  pointing at `aparte last` to recover the text.
+
+- **Two quick presses of the shortcut could leave a microphone recording
+  forever.** Starting a recording checked for an active session, *then* launched
+  `arecord`, *then* wrote the session file — so two presses a few milliseconds
+  apart both passed the check and both started recording. The second session
+  file overwrote the first, and the first recorder became unreachable: no press
+  could ever stop it. One 31-minute, 59 MB recording was found this way. The
+  session file is now published with a hard link, which is atomic and fails if
+  one already exists: a single press wins, and the loser stops its own recorder
+  instead of abandoning it. As a side effect, a microphone already held by
+  another application is now reported instead of failing silently.
+
+- **A half-written session file no longer cancels a live recording.** The file
+  was written in place, so any reader — the tray icon checks every second —
+  could catch it truncated, fail to parse it, and delete it, orphaning the
+  recorder it pointed at. Publishing by hard link makes the file appear complete
+  or not at all.
+
+- **A recording that ends on its own is transcribed, not thrown away.** When the
+  recorder stops without being asked — the new duration ceiling, or a crash —
+  the next press now transcribes what was captured instead of treating the
+  session as stale. Only genuinely empty captures are swept.
+
+- **Stopping a recording no longer risks signalling an unrelated process.** The
+  kernel reuses freed process IDs, so a plain "does this PID exist" check can be
+  true for somebody else's process — and the stop path sends a signal to the
+  whole process group. Aparté now confirms, through `/proc`, that the process is
+  still its own `arecord` for this recording.
+
+### Changed
+
+- **French is now the default language** (`language`). Left unset, Whisper runs
+  language detection on every dictation, gets it wrong on quiet audio, and
+  returns the transcript in another script entirely — Georgian, phonetic
+  alphabet, or an English translation of French speech. Existing configs keep
+  whatever they already have; set **Language** to `fr` if yours is empty.
+
+- **Recordings are capped at five minutes** by default
+  (`max_recording_seconds`, config file only). A forgotten microphone used to
+  record until the disk filled. The recorder now exits cleanly at the ceiling
+  and the next press transcribes what it captured — a truncation, not a
+  disappearance. Any unreadable or non-positive value falls back to 300 seconds:
+  there is deliberately no "unlimited", so a typo cannot reopen the problem.
+
+- **`faster-whisper>=1.0.2`** instead of `>=1.0`. The **My words** setting uses
+  `hotwords`, which does not exist before 1.0.2, so a fresh install resolving to
+  an older release would fail on every transcription.
+
+- **The desktop app's model cache is keyed on every setting that builds it** —
+  backend, model, language, device, compute type, `whisper.cpp` path and your
+  own words — instead of the model name alone. Saving from the Settings panel
+  already cleared the cache; a config file edited by hand, or by another tool,
+  did not.
 
 ## [1.0.0] - 2026-07-22
 

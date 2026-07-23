@@ -13,6 +13,34 @@ from aparte.config import (
 )
 
 
+class RecordingCeilingTest(unittest.TestCase):
+    """Le plafond qui empêche un micro oublié d'enregistrer sans fin."""
+
+    def _ceiling(self, value) -> int:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            write_default_config(path)
+            update_config({"max_recording_seconds": value}, path)
+            with mock.patch.dict(os.environ, {"APARTE_CONFIG": str(path)}):
+                return Settings.from_env().max_recording_seconds
+
+    def test_a_chosen_ceiling_is_kept(self):
+        self.assertEqual(self._ceiling(900), 900)
+
+    def test_zero_falls_back_instead_of_meaning_no_limit(self):
+        """`positive_int` rend 0 sur une valeur illisible : en faire « pas de
+        plafond » rendrait une faute de frappe indistinguable d'un choix."""
+        self.assertEqual(self._ceiling(0), 300)
+        self.assertEqual(self._ceiling("bientôt"), 300)
+        self.assertEqual(self._ceiling(-5), 300)
+
+    def test_french_is_the_default_language(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            write_default_config(path)
+            self.assertEqual(load_config(path)["language"], "fr")
+
+
 class ConfigTest(unittest.TestCase):
     def test_write_and_load_default_config(self):
         with tempfile.TemporaryDirectory() as directory:

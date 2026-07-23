@@ -22,7 +22,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "model": "small",
     "device": "auto",
     "compute_type": "auto",
-    "language": None,
+    # Français d'abord, et pas seulement par positionnement : sans langue
+    # imposée, Whisper lance une détection qui se trompe sur un audio pauvre et
+    # déroule la dictée dans une autre langue.
+    "language": "fr",
     "polish_backend": "heuristic",
     "default_style": "neutral",
     "cleanup_level": "medium",
@@ -35,6 +38,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "microphone": "",
     "beep": False,
     "live_preview": True,
+    "max_recording_seconds": 300,
     "ollama_url": "http://127.0.0.1:11434",
     "ollama_model": "llama3.1:8b",
     "whisper_cpp": None,
@@ -71,6 +75,7 @@ class Settings:
     microphone: str = ""
     beep: bool = False
     live_preview: bool = True
+    max_recording_seconds: int = 300
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.1:8b"
     whisper_cpp: str | None = None
@@ -107,6 +112,10 @@ class Settings:
             microphone=get_env("MICROPHONE") or str(config.get("microphone", "") or ""),
             beep=bool(config.get("beep", False)),
             live_preview=bool(config.get("live_preview", True)),
+            # Pas de « 0 = illimité » : `positive_int` rend 0 sur une valeur
+            # illisible, et une faute de frappe rouvrirait le micro sans fin.
+            # Qui veut deux heures écrit 7200.
+            max_recording_seconds=positive_int(config.get("max_recording_seconds", 300)) or 300,
             ollama_url=get_env("OLLAMA_URL") or str(config.get("ollama_url", DEFAULT_CONFIG["ollama_url"])),
             ollama_model=get_env("OLLAMA_MODEL") or str(config.get("ollama_model", DEFAULT_CONFIG["ollama_model"])),
             whisper_cpp=whisper_cpp if whisper_cpp is not None else _optional_str(config.get("whisper_cpp")),
