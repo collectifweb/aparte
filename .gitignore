@@ -9,3 +9,4 @@ build/
 .impeccable/live/
 
 .claude/session-state.md
+.claude/handoff
