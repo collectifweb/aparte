@@ -347,15 +347,43 @@ let allowedModels = ["small", "base"];
 function kvToText(obj) {
   return Object.entries(obj || {}).map(([k, v]) => `${k} = ${v}`).join("\n");
 }
-function textToKv(text) {
-  const out = {};
-  for (const line of (text || "").split("\n")) {
+function listToText(list) { return (list || []).join("\n"); }
+function textToList(text) {
+  return (text || "").split("\n").map((line) => line.trim()).filter(Boolean);
+}
+
+// Une ligne sans « = » était jetée en silence : on fermait le tiroir en croyant
+// avoir appris un mot à Aparté, et rien n'avait changé. Elle est maintenant
+// refusée en pointant son numéro. Exception, dans les raccourcis dictés
+// seulement : la suite d'un texte de plusieurs lignes n'a évidemment pas de
+// « = ». Ce cas-là se perdait lui aussi — la signature donnée en exemple sous
+// le champ ne survivait pas à un enregistrement.
+function parseKv(text, multiline) {
+  const entries = {};
+  const bad = [];
+  let last = null;
+  (text || "").split("\n").forEach((line, index) => {
+    if (!line.trim()) return;
     const i = line.indexOf("=");
-    if (i === -1) continue;
-    const k = line.slice(0, i).trim();
-    if (k) out[k] = line.slice(i + 1).trim();
-  }
-  return out;
+    if (i === -1) {
+      if (multiline && last) entries[last] += "\n" + line.trim();
+      else bad.push(index + 1);
+      return;
+    }
+    const key = line.slice(0, i).trim();
+    if (!key) { bad.push(index + 1); return; }
+    entries[key] = line.slice(i + 1).trim();
+    last = key;
+  });
+  return { entries, bad };
+}
+
+// Le message reste dans le tiroir. Écrit dans la ligne d'état de la page, il
+// tombait derrière le voile du tiroir ouvert.
+function settingsError(message) {
+  const box = $("#settings-error");
+  box.textContent = message || "";
+  box.hidden = !message;
 }
 
 function fillModelSelect(sel, models, value) {
@@ -388,6 +416,7 @@ async function loadConfig() {
   $("#set-paste-mode").value = cfg.paste_mode || "clipboard";
   historyPersist = cfg.history_persist === true;
   $("#set-history-persist").checked = historyPersist;
+  $("#set-hotwords").value = listToText(cfg.hotwords);
   $("#set-replacements").value = kvToText(cfg.replacements);
   $("#set-snippets").value = kvToText(cfg.snippets);
   await loadMicrophones(cfg.microphone || "");
@@ -428,10 +457,22 @@ $("#refresh-microphones").addEventListener("click", () => loadMicrophones());
 
 $("#open-settings").addEventListener("click", async () => {
   openOverlay("#settings-overlay");
-  try { await loadConfig(); } catch (err) { status(String(err), "error"); }
+  settingsError("");
+  try { await loadConfig(); } catch (err) { settingsError(String(err)); }
 });
 
 $("#save-settings").addEventListener("click", async () => {
+  const vocabulary = [
+    { selector: "#set-replacements", label: "set.replacements", parsed: parseKv($("#set-replacements").value, false) },
+    { selector: "#set-snippets", label: "set.snippets", parsed: parseKv($("#set-snippets").value, true) },
+  ];
+  const wrong = vocabulary.find((field) => field.parsed.bad.length);
+  if (wrong) {
+    settingsError(t("set.kv_error", { field: t(wrong.label), line: wrong.parsed.bad[0] }));
+    $(wrong.selector).focus();
+    return;
+  }
+  settingsError("");
   try {
     await postJson("/api/config", {
       model: $("#set-model").value,
@@ -449,13 +490,14 @@ $("#save-settings").addEventListener("click", async () => {
       beep: $("#set-beep").checked,
       paste_mode: $("#set-paste-mode").value,
       history_persist: $("#set-history-persist").checked,
-      replacements: textToKv($("#set-replacements").value),
-      snippets: textToKv($("#set-snippets").value),
+      hotwords: textToList($("#set-hotwords").value),
+      replacements: vocabulary[0].parsed.entries,
+      snippets: vocabulary[1].parsed.entries,
     });
     $("#model").value = $("#set-model").value;
     closeOverlay($("#settings-overlay"));
     status(t("st.settings_saved"));
-  } catch (err) { status(String(err), "error"); }
+  } catch (err) { settingsError(String(err)); }
 });
 
 /* ---------- Diagnostics ---------- */

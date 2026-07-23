@@ -72,126 +72,153 @@
         <h2 id="settings-title" data-i18n="set.title">Réglages</h2>
         <button class="icon-close" data-close data-i18n-aria="btn.close">✕</button>
       </header>
+      <!-- Classé par fréquence d'usage réelle, pas par architecture interne : on
+           enrichit son dictionnaire toutes les semaines, on choisit son micro une
+           fois. Ce qui ne se touche presque jamais part dans un <details> natif —
+           zéro JavaScript, clavier et lecteurs d'écran gratuits.
+           Chaque aide est reliée à son contrôle par aria-describedby, et posée
+           HORS du <label> : dans le label, elle entrait dans le nom accessible du
+           champ, qui s'annonçait alors en trois phrases. -->
       <div class="drawer-body">
         <div class="group">
-          <h3 data-i18n="set.audio">Micro</h3>
+          <h3 data-i18n="set.dictation">Dictée</h3>
           <div class="field">
-            <label for="set-microphone" data-i18n="set.microphone">Microphone</label>
-            <div class="field-row">
-              <select id="set-microphone"></select>
-              <button class="btn small" type="button" id="refresh-microphones" data-i18n="set.microphone_refresh">Actualiser</button>
-            </div>
-            <small id="microphone-empty" class="field-empty" data-i18n="set.microphone_none" hidden>Aucune entrée détectée. Le bouton Parler fonctionne quand même, le raccourci global non. Ouvre Configuration pour voir ce qui manque.</small>
-            <small data-i18n="set.microphone_help">S'applique au raccourci global et au terminal. Le bouton Parler passe par le micro choisi dans le navigateur.</small>
-          </div>
-          <label class="field">
-            <span class="inline"><input id="set-beep" type="checkbox"> <span data-i18n="set.beep">Bip au début et à la fin</span></span>
-            <small data-i18n="set.beep_help">Deux sons courts : un aigu quand le micro s'ouvre, un plus grave quand il se ferme. Pour dicter sans regarder l'écran.</small>
-          </label>
-        </div>
-        <div class="group">
-          <h3 data-i18n="set.transcription">Transcription</h3>
-          <label class="field"><span data-i18n="set.model">Modèle par défaut</span>
-            <select id="set-model"></select>
-            <small data-i18n="set.model_help">small = précis · base = rapide · medium = qualité max</small>
-          </label>
-          <label class="field"><span data-i18n="set.language">Langue de dictée</span>
+            <label for="set-language" data-i18n="set.language">Langue de dictée</label>
             <select id="set-language">
               <option value="" data-i18n="set.lang_auto">Auto (détection)</option>
               <option value="fr" data-i18n="set.lang_fr">Français</option>
               <option value="en" data-i18n="set.lang_en">English</option>
             </select>
-          </label>
-          <label class="field"><span data-i18n="set.compute">Calcul</span>
-            <select id="set-device">
-              <option value="auto" data-i18n="set.compute_auto">Auto (GPU si dispo, sinon CPU)</option>
-              <option value="cuda" data-i18n="set.compute_gpu">GPU (CUDA)</option>
-              <option value="cpu" data-i18n="set.compute_cpu">CPU</option>
-            </select>
-          </label>
-          <label class="field">
-            <span class="inline"><input id="set-live-preview" type="checkbox"> <span data-i18n="set.live_preview">Aperçu pendant la dictée</span></span>
-            <small data-i18n="set.live_preview_help">Le texte s'affiche au fil de la parole et se corrige jusqu'à l'arrêt. Sans carte graphique, ça occupe un cœur en permanence — décoche si la machine peine.</small>
-          </label>
-        </div>
-        <div class="group">
-          <h3 data-i18n="set.formatting">Mise en forme</h3>
-          <label class="field"><span data-i18n="set.style">Style</span>
+          </div>
+          <div class="field">
+            <label class="inline" for="set-live-preview"><input id="set-live-preview" type="checkbox" aria-describedby="set-live-preview-help"> <span data-i18n="set.live_preview">Aperçu pendant la dictée</span></label>
+            <small id="set-live-preview-help" data-i18n="set.live_preview_help">Le texte s'affiche au fil de la parole et se corrige jusqu'à l'arrêt. Sans carte graphique, ça occupe un cœur en permanence — décoche si la machine peine.</small>
+          </div>
+          <div class="field">
+            <label for="set-style" data-i18n="set.style">Style</label>
             <select id="set-style">
               <option value="neutral" data-i18n="style.neutral">Neutre</option>
               <option value="formal" data-i18n="style.formal">Formel</option>
               <option value="casual" data-i18n="style.casual">Décontracté</option>
               <option value="very-casual" data-i18n="style.very_casual">Très décontracté</option>
             </select>
-          </label>
-          <label class="field"><span data-i18n="set.cleanup">Nettoyage</span>
-            <select id="set-cleanup">
+          </div>
+          <div class="field">
+            <label for="set-cleanup" data-i18n="set.cleanup">Suppression des hésitations</label>
+            <select id="set-cleanup" aria-describedby="set-cleanup-help">
               <option value="light" data-i18n="clean.light">Léger</option>
               <option value="medium" data-i18n="clean.medium">Moyen</option>
               <option value="high" data-i18n="clean.high">Élevé</option>
             </select>
-          </label>
-          <label class="field"><span data-i18n="set.polish_engine">Moteur de polish</span>
-            <select id="set-polish">
-              <option value="heuristic" data-i18n="polish.heuristic">Heuristique (local, sans modèle)</option>
-              <option value="ollama" data-i18n="polish.ollama">Ollama (LLM local)</option>
-            </select>
-          </label>
-          <label class="field">
-            <span class="inline"><input id="set-nbsp" type="checkbox"> <span data-i18n="set.nbsp">Espaces insécables</span></span>
-            <small data-i18n="set.nbsp_help">Typographie française : espace avant ? ! ; et : — décoche si une application les affiche mal</small>
-          </label>
-          <label class="field"><span data-i18n="set.numbers">Nombres dictés</span>
-            <select id="set-numbers">
+            <small id="set-cleanup-help" data-i18n="set.cleanup_help">Retire les « euh » et les « heu » de la dictée. Au niveau élevé, aussi les tics de langage : « ben », « genre », « tsé ».</small>
+          </div>
+        </div>
+        <div class="group">
+          <h3 data-i18n="set.vocab">Mon dictionnaire</h3>
+          <div class="field">
+            <label for="set-hotwords" data-i18n="set.hotwords">Mes mots</label>
+            <textarea id="set-hotwords" class="kv" spellcheck="false" aria-describedby="set-hotwords-help" placeholder="Playwright&#10;Wayland&#10;Collectif WEB"></textarea>
+            <small id="set-hotwords-help" data-i18n="set.hotwords_help">Les noms que tu emploies et qu'un inconnu écrirait mal : clients, outils, collègues. Un par ligne. Aparté les donne à Whisper avant de transcrire, qui penche vers eux quand le son est ambigu. Rien à avoir observé.</small>
+          </div>
+          <div class="field">
+            <label for="set-replacements" data-i18n="set.replacements">Corrections</label>
+            <textarea id="set-replacements" class="kv" spellcheck="false" aria-describedby="set-replacements-help" placeholder="pipe wire = PipeWire"></textarea>
+            <small id="set-replacements-help" data-i18n="set.replacements_help">Le filet pour ce qui passe quand même. Une par ligne : ce qu'Aparté écrit, un signe =, puis ce qu'il fallait écrire.</small>
+          </div>
+          <div class="field">
+            <label for="set-snippets" data-i18n="set.snippets">Raccourcis dictés</label>
+            <textarea id="set-snippets" class="kv" spellcheck="false" aria-describedby="set-snippets-help" placeholder="signature = Cordialement,&#10;Alexandre"></textarea>
+            <small id="set-snippets-help" data-i18n="set.snippets_help">Un texte tout prêt, appelé à la voix. Une par ligne : le nom, un signe =, puis le texte — qui peut continuer sur les lignes suivantes. Dis « slash signature » pour insérer celle de l'exemple.</small>
+          </div>
+        </div>
+        <div class="group">
+          <h3 data-i18n="set.formatting">Typographie française</h3>
+          <div class="field">
+            <label class="inline" for="set-nbsp"><input id="set-nbsp" type="checkbox" aria-describedby="set-nbsp-help"> <span data-i18n="set.nbsp">Espaces insécables</span></label>
+            <small id="set-nbsp-help" data-i18n="set.nbsp_help">Typographie française : espace avant ? ! ; et : — décoche si une application les affiche mal</small>
+          </div>
+          <div class="field">
+            <label for="set-numbers" data-i18n="set.numbers">Nombres dictés</label>
+            <select id="set-numbers" aria-describedby="set-numbers-help">
               <option value="0" data-i18n="numbers.never">Toujours en lettres</option>
               <option value="10" data-i18n="numbers.ten">En chiffres à partir de dix</option>
               <option value="17" data-i18n="numbers.seventeen">En chiffres à partir de dix-sept</option>
               <option value="1" data-i18n="numbers.always">Toujours en chiffres</option>
             </select>
-            <small data-i18n="set.numbers_help">« vingt-deux personnes » devient « 22 personnes ». Les heures et les pourcentages passent toujours en chiffres : « quatorze heures trente » donne « 14 h 30 ».</small>
-          </label>
-          <label class="field"><span data-i18n="set.short_text">Texte court</span>
-            <select id="set-short-text">
+            <small id="set-numbers-help" data-i18n="set.numbers_help">« vingt-deux personnes » devient « 22 personnes ». Les heures et les pourcentages passent toujours en chiffres : « quatorze heures trente » donne « 14 h 30 ».</small>
+          </div>
+          <div class="field">
+            <label class="inline" for="set-trailing-space"><input id="set-trailing-space" type="checkbox" aria-describedby="set-trailing-space-help"> <span data-i18n="set.trailing_space">Espace à la fin</span></label>
+            <small id="set-trailing-space-help" data-i18n="set.trailing_space_help">Termine chaque dictée par une espace, pour en enchaîner une deuxième sans la coller à la première.</small>
+          </div>
+          <div class="field">
+            <label for="set-short-text" data-i18n="set.short_text">Dictées très courtes</label>
+            <select id="set-short-text" aria-describedby="set-short-text-help">
               <option value="0" data-i18n="short.off">Toujours une phrase</option>
               <option value="3" data-i18n="short.three">Moins de 3 mots</option>
               <option value="5" data-i18n="short.five">Moins de 5 mots</option>
             </select>
-            <small data-i18n="set.short_text_help">Sous ce nombre de mots, la dictée sort telle quelle : ni majuscule, ni point final. Pour les champs de recherche et les réponses d'un mot.</small>
-          </label>
-          <label class="field">
-            <span class="inline"><input id="set-trailing-space" type="checkbox"> <span data-i18n="set.trailing_space">Espace à la fin</span></span>
-            <small data-i18n="set.trailing_space_help">Termine chaque dictée par une espace, pour en enchaîner une deuxième sans la coller à la première.</small>
-          </label>
+            <small id="set-short-text-help" data-i18n="set.short_text_help">Sous ce nombre de mots, la dictée sort telle quelle : ni majuscule, ni point final. Pour les champs de recherche et les réponses d'un mot.</small>
+          </div>
         </div>
-        <div class="group">
-          <h3 data-i18n="set.insertion">Insertion</h3>
-          <label class="field"><span data-i18n="set.paste_mode">Manière d'insérer</span>
-            <select id="set-paste-mode">
+        <details class="group">
+          <summary data-i18n="set.hardware">Matériel</summary>
+          <div class="field">
+            <label for="set-microphone" data-i18n="set.microphone">Microphone</label>
+            <div class="field-row">
+              <select id="set-microphone" aria-describedby="set-microphone-help"></select>
+              <button class="btn small" type="button" id="refresh-microphones" data-i18n="set.microphone_refresh">Actualiser</button>
+            </div>
+            <small id="microphone-empty" class="field-empty" data-i18n="set.microphone_none" hidden>Aucune entrée détectée. Le bouton Parler fonctionne quand même, le raccourci global non. Ouvre Configuration pour voir ce qui manque.</small>
+            <small id="set-microphone-help" data-i18n="set.microphone_help">S'applique au raccourci global et au terminal. Le bouton Parler passe par le micro choisi dans le navigateur.</small>
+          </div>
+          <div class="field">
+            <label class="inline" for="set-beep"><input id="set-beep" type="checkbox" aria-describedby="set-beep-help"> <span data-i18n="set.beep">Bip au début et à la fin</span></label>
+            <small id="set-beep-help" data-i18n="set.beep_help">Deux sons courts : un aigu quand le micro s'ouvre, un plus grave quand il se ferme. Pour dicter sans regarder l'écran.</small>
+          </div>
+          <div class="field">
+            <label for="set-paste-mode" data-i18n="set.paste_mode">Manière d'insérer</label>
+            <select id="set-paste-mode" aria-describedby="set-paste-mode-help">
               <option value="clipboard" data-i18n="paste.clipboard">Presse-papiers (Ctrl+V)</option>
               <option value="terminal" data-i18n="paste.terminal">Terminal (Ctrl+Maj+V)</option>
               <option value="direct" data-i18n="paste.direct">Direct (frappe simulée)</option>
             </select>
-            <small data-i18n="set.paste_mode_help">Les terminaux ignorent Ctrl+V. Le mode Direct sert aux applications qui refusent le collage — c'est plus lent et plus fragile.</small>
-          </label>
-        </div>
-        <div class="group">
-          <h3 data-i18n="set.history">Historique</h3>
-          <label class="field">
-            <span class="inline"><input id="set-history-persist" type="checkbox"> <span data-i18n="set.history_persist">Garder l'historique entre les sessions</span></span>
-            <small data-i18n="set.history_persist_help">Par défaut les dictées vivent en mémoire et disparaissent à la déconnexion. Cochée, les cinq dernières sont écrites dans ~/.local/state/aparte.</small>
-          </label>
-        </div>
-        <div class="group">
-          <h3 data-i18n="set.vocab">Vocabulaire</h3>
-          <label class="field"><span data-i18n="set.replacements">Remplacements</span> <small data-i18n="set.replacements_help">un par ligne — dit = écrit</small>
-            <textarea id="set-replacements" class="kv" spellcheck="false" placeholder="pipe wire = PipeWire"></textarea>
-          </label>
-          <label class="field"><span data-i18n="set.snippets">Snippets</span> <small data-i18n="set.snippets_help">nom = texte, dit « slash nom »</small>
-            <textarea id="set-snippets" class="kv" spellcheck="false" placeholder="signature = Cordialement,&#10;Alexandre"></textarea>
-          </label>
-        </div>
+            <small id="set-paste-mode-help" data-i18n="set.paste_mode_help">Les terminaux ignorent Ctrl+V. Le mode Direct sert aux applications qui refusent le collage — c'est plus lent et plus fragile.</small>
+          </div>
+        </details>
+        <details class="group">
+          <summary data-i18n="set.advanced">Avancé</summary>
+          <div class="field">
+            <label for="set-model" data-i18n="set.model">Modèle par défaut</label>
+            <select id="set-model" aria-describedby="set-model-help"></select>
+            <small id="set-model-help" data-i18n="set.model_help">small = précis · base = rapide · medium = qualité max</small>
+          </div>
+          <div class="field">
+            <label for="set-device" data-i18n="set.compute">Calcul</label>
+            <select id="set-device">
+              <option value="auto" data-i18n="set.compute_auto">Auto (GPU si dispo, sinon CPU)</option>
+              <option value="cuda" data-i18n="set.compute_gpu">GPU (CUDA)</option>
+              <option value="cpu" data-i18n="set.compute_cpu">CPU</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="set-polish" data-i18n="set.polish_engine">Moteur de mise en forme</label>
+            <select id="set-polish">
+              <option value="heuristic" data-i18n="polish.heuristic">Heuristique (local, sans modèle)</option>
+              <option value="ollama" data-i18n="polish.ollama">Ollama (LLM local)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="inline" for="set-history-persist"><input id="set-history-persist" type="checkbox" aria-describedby="set-history-persist-help"> <span data-i18n="set.history_persist">Garder l'historique entre les sessions</span></label>
+            <small id="set-history-persist-help" data-i18n="set.history_persist_help">Par défaut les dictées vivent en mémoire et disparaissent à la déconnexion. Cochée, les cinq dernières sont écrites dans ~/.local/state/aparte.</small>
+          </div>
+        </details>
       </div>
       <footer class="drawer-foot">
+        <!-- L'échec d'enregistrement s'écrivait dans la ligne d'état de la page,
+             c'est-à-dire derrière le voile du tiroir : invisible au moment précis
+             où il compte. Il se pose maintenant à côté du bouton qui a échoué. -->
+        <p class="drawer-error" id="settings-error" role="alert" hidden></p>
         <button class="btn ghost" data-close data-i18n="btn.cancel">Annuler</button>
         <button class="btn primary" id="save-settings" data-i18n="btn.save">Enregistrer</button>
       </footer>

@@ -305,7 +305,12 @@ input[type="checkbox"] { accent-color: var(--brand); }
   display: flex; align-items: center; justify-content: space-between;
   padding: var(--sp-4) var(--sp-5); border-bottom: 1px solid var(--line);
 }
-.drawer-foot { border-bottom: none; border-top: 1px solid var(--line); gap: var(--sp-3); }
+.drawer-foot { border-bottom: none; border-top: 1px solid var(--line); gap: var(--sp-3); flex-wrap: wrap; }
+/* L'erreur prend toute la largeur et passe donc au-dessus des boutons, sans
+   changer leur disposition. Calculé : 6,76:1 en clair, 5,00:1 en sombre sur le
+   fond du tiroir — le seuil vaut aussi à 12 px. */
+.drawer-error { flex-basis: 100%; margin: 0; color: var(--danger); font-size: var(--fs-caption); }
+.drawer-error[hidden] { display: none; }
 .drawer-head h2 { margin: 0; font-size: var(--fs-title); }
 .icon-close {
   background: transparent; border: none; color: var(--ink-soft);
@@ -320,7 +325,27 @@ input[type="checkbox"] { accent-color: var(--brand); }
   margin: 0 0 var(--sp-3); font-size: var(--fs-label);
   text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft);
 }
+/* Ce qui ne se touche presque jamais se replie. <details> natif : Échap, Tab,
+   Entrée et les lecteurs d'écran fonctionnent sans une ligne de JavaScript, et
+   le marqueur reste celui du système — habiller un contrôle standard revient à
+   réinventer une affordance que l'utilisateur connaît déjà. Le résumé reprend
+   exactement la typographie d'un en-tête de groupe : replié ou non, c'est le
+   même niveau de titre. */
+details.group > summary {
+  font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--ink-soft); cursor: pointer;
+  /* Le texte du résumé fait 17 px de haut : trop peu pour viser confortablement
+     un contrôle qu'on ouvre et referme. La ligne entière est cliquable, on lui
+     donne de quoi l'être. */
+  padding: var(--sp-2) 0;
+}
+details.group > summary:hover { color: var(--ink); }
+details.group[open] > summary { margin-bottom: var(--sp-2); }
 .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: var(--sp-3); font-size: var(--fs-ui); }
+/* Un libellé de champ est un libellé de champ : celui d'une case à cocher pèse
+   autant que celui d'un menu déroulant. Ailleurs (.result-opts) `.inline` reste
+   atténué, parce que ces contrôles-là sont secondaires. */
+.field .inline { color: var(--ink); }
 .field small { color: var(--ink-soft); font-size: var(--fs-caption); }
 /* État vide d'un champ : c'est un constat, pas une aide, et il est posé juste
    au-dessus du texte d'aide permanent. L'encre pleine l'en détache. Pas de
