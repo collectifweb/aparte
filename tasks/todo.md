@@ -388,7 +388,9 @@ de milliers ne commence qu'à cinq chiffres, sinon une année deviendrait
       n'importe quelle sélection, sans voix.
 - [ ] Statistiques d'usage (temps gagné, mots par minute)
 - [ ] Import / export des réglages
-- [ ] Fenêtre flottante pendant l'enregistrement
+- [ ] Fenêtre flottante pendant l'enregistrement → **repris et planifié le 22/07,
+      voir Lot 5B.** Écartée en son temps comme faisant doublon avec l'icône de
+      barre système ; l'aperçu au fil de la parole lui donne un vrai travail.
 
 ## Lot 5A — Aperçu au fil de la parole (fait, 22/07)
 
@@ -481,6 +483,92 @@ un moment où personne n'attend.
 Le harnais Node est resté hors du dépôt : le projet n'a pas d'outillage de test
 JavaScript, et en installer un pour cette seule fonctionnalité aurait coûté plus
 cher que ce qu'il garde.
+
+### Suite immédiate, signalée à l'usage (22/07)
+
+**Le générique inventé.** Deux dictées sur cinq finissaient par « Sous-titres
+réalisés par la communauté d'Amara.org ». Corrigé le jour même, voir la section
+« Hallucinations de Whisper » de `CLAUDE.md` et `hallucinations.py`.
+
+**Rien ne s'affiche au raccourci clavier.** Attendu — l'aperçu vit dans la page.
+Planifié en **Lot 5B** ci-dessous.
+
+## Lot 5B — Fenêtre flottante au raccourci clavier (planifié le 22/07, pas commencé)
+
+**Le manque.** L'aperçu du Lot 5A ne se voit que dans la fenêtre d'Aparté. Au
+raccourci clavier, `aparte toggle` lance `arecord` en tâche de fond et rend la
+main : entre les deux appuis, **aucun processus Aparté ne tourne**. Il n'y a ni
+page, ni fenêtre, ni éditeur — rien sur quoi dessiner. Ce n'est pas un réglage à
+activer, il faut créer la surface.
+
+**Ce qui rend le chantier plus petit qu'il n'en a l'air.** Le serveur de bureau
+tourne déjà au démarrage de session, et il possède déjà tout ce qu'il faut :
+
+| Déjà là | Où |
+|---|---|
+| La boucle GTK sur le fil principal | `tray.run()` — c'est elle qui oblige le serveur HTTP à passer sur un fil de fond |
+| La détection de l'enregistrement au raccourci | `Tray._refresh`, qui interroge `get_active_session()` chaque seconde pour changer l'icône |
+| Le chemin du wav en cours et sa fréquence | le fichier de session, écrit par `start_toggle_recording()` |
+| Le modèle Whisper chargé et gardé en cache | `handler_factory`, `transcriber_cache` |
+
+Conséquence : **aucune nouvelle route HTTP, aucune modification de `toggle`,
+aucun nouveau processus.** La fenêtre se greffe sur le sondage qui existe déjà.
+
+**Mesuré le 22/07, et ça supprime une couche entière.** Un wav qu'`arecord` est
+en train d'écrire se lit tel quel : `decode_audio` rend **tout ce que le fichier
+contient réellement**, quoi qu'annonce l'en-tête. Un fichier dont l'en-tête
+déclare 10 s alors qu'il n'en contient que 5 décode exactement 5 s, complet, sans
+erreur ; un en-tête à `0xFFFFFFFF` passe aussi. Pas besoin de reconstruire
+l'en-tête ni de recopier le fichier : on pointe le transcripteur dessus.
+
+**Reste à vérifier quand on s'y mettra** (30 secondes, mais ça demande le micro,
+donc pas fait) : à quel moment `arecord` écrit réellement son en-tête et s'il
+tamponne ses écritures. Si un premier aperçu tombe sur un fichier encore vide, il
+n'aura rien à afficher — le même cas que le silence de début côté navigateur, qui
+est déjà traité en ne touchant pas à l'affichage.
+
+### Forme envisagée
+
+- Nouveau module `overlay.py`, **optionnel par construction comme `tray.py`** :
+  sans PyGObject, `build_overlay()` rend `None` et rien ne change.
+- Une `Gtk.Window` sans décoration, ancrée en bas au centre, au-dessus des autres.
+- Le sondage de `Tray._refresh` gagne un second effet : session apparue → montrer
+  la fenêtre et lancer la boucle d'aperçu ; session disparue → la cacher.
+- La boucle tourne sur un **fil de fond** — une transcription sur le fil principal
+  gèlerait GTK — et remonte le texte par `GLib.idle_add`, parce que GTK ne se
+  touche que depuis le fil principal.
+- Même auto-régulation que dans le navigateur : une seule passe en vol, la
+  suivante programmée au retour de la précédente.
+- Le style passe par `/impeccable` : c'est du GTK, pas du CSS de la page, donc il
+  faut un fournisseur de style GTK qui reprenne les jetons de `DESIGN.md`. Mêmes
+  règles : sérif pour le texte dicté, encre atténuée tant que c'est provisoire,
+  pas d'aplat saturé — le projecteur reste le bouton d'enregistrement.
+
+### Risques identifiés
+
+1. **Le vol de focus, et c'est le risque numéro un.** Une fenêtre qui prend le
+   focus fait perdre le curseur dans l'application cible, et le collage final
+   atterrit ailleurs — ça casserait la fonction principale du produit pour un
+   confort d'affichage. `set_accept_focus(False)` et `set_focus_on_map(False)`
+   dès la première ligne, et c'est la première chose à tester.
+2. **Wayland.** Positionner une fenêtre et la garder au-dessus n'y est pas
+   garanti : il n'y a pas d'équivalent fiable à `set_keep_above`. Alexandre est en
+   X11, donc ça marche chez lui ; ailleurs il faudra dégrader proprement.
+3. **Deux modèles Whisper en mémoire.** L'aperçu tournerait dans le serveur, avec
+   son modèle en cache ; la transcription finale, elle, tourne dans le processus
+   `aparte toggle`, qui charge le sien. Les deux tiennent sur 8 Go, mais ils se
+   disputent le GPU au moment précis où l'utilisateur arrête de parler.
+4. **Serveur éteint** = pas de fenêtre, comportement d'aujourd'hui. Acceptable,
+   mais à dire dans la documentation plutôt qu'à laisser deviner.
+
+### Question ouverte, à trancher avant de coder
+
+**Déléguer au serveur la transcription finale du raccourci ?** Aujourd'hui chaque
+dictée au raccourci charge son propre modèle dans un processus neuf — environ une
+seconde à chaque fois, mesurée à chaud. Si `toggle` postait son audio au serveur
+quand celui-ci est joignable, on gagnerait cette seconde **et** le risque n° 3
+disparaîtrait. Mais ça touche un chemin qui marche aujourd'hui, et il faudrait
+garder le repli hors ligne intact. À décider avec Alexandre, pas en silence.
 
 ---
 
