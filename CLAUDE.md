@@ -99,6 +99,23 @@ vécu ça — sa balise racine était à l'octet 403, donc l'icône de barre sys
 n'apparaissait que pendant l'enregistrement, qui utilise l'autre fichier.
 `test_every_svg_declares_its_format_within_the_sniff_window` monte la garde.
 
+### Hallucinations de Whisper
+
+`hallucinations.py` retire les génériques de sous-titrage que Whisper invente sur
+du silence — « Sous-titres réalisés par la communauté d'Amara.org » en tête. Le
+filtre est appelé depuis `transcription.py`, **pas** depuis `polish.py` : il doit
+couvrir `--no-polish`, le raccourci global et l'aperçu au fil de la parole.
+
+Deux listes, et la distinction est la sécurité du module : `SIGNED` porte un nom
+de domaine ou de diffuseur, donc se retire partout ; `GENERIC` est dictable
+(« merci d'avoir regardé cette vidéo »), donc ne se retire que si c'est la
+totalité du texte. Ne jamais mettre un fragment seul comme « Amara.org » dans
+`SIGNED` : « je cite Amara.org » est une dictée légitime.
+
+Le remplacement se fait par **une espace, pas par rien** : le motif mange
+l'espace des deux côtés, et retirer un générique au milieu recollerait les
+phrases voisines.
+
 ### Typographie
 
 - La typographie française s'applique **après** les remplacements et les

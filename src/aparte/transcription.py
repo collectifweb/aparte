@@ -9,6 +9,8 @@ import sysconfig
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import hallucinations
+
 
 class TranscriptionError(RuntimeError):
     pass
@@ -126,7 +128,10 @@ class FasterWhisperTranscriber(Transcriber):
             self.model = self._load_cpu_model()
             segments, _info = self.model.transcribe(str(audio_path), language=self.language)
             text = " ".join(segment.text.strip() for segment in segments if segment.text.strip())
-        return Transcript(text, "faster-whisper")
+        # Le filtre est ici, et pas dans polish.py, pour couvrir aussi les
+        # chemins qui ne polissent pas : `--no-polish`, le raccourci global,
+        # l'aperçu au fil de la parole.
+        return Transcript(hallucinations.strip(text), "faster-whisper")
 
 
 class OpenAIWhisperTranscriber(Transcriber):
@@ -139,7 +144,7 @@ class OpenAIWhisperTranscriber(Transcriber):
 
     def transcribe(self, audio_path: Path) -> Transcript:
         result = self.model.transcribe(str(audio_path), language=self.language)
-        return Transcript(str(result.get("text", "")).strip(), "openai-whisper")
+        return Transcript(hallucinations.strip(str(result.get("text", "")).strip()), "openai-whisper")
 
 
 class WhisperCppTranscriber(Transcriber):
@@ -155,7 +160,7 @@ class WhisperCppTranscriber(Transcriber):
         completed = subprocess.run(command, check=False, text=True, capture_output=True)
         if completed.returncode != 0:
             raise TranscriptionError(completed.stderr.strip() or "whisper.cpp failed")
-        return Transcript(completed.stdout.strip(), "whisper.cpp")
+        return Transcript(hallucinations.strip(completed.stdout.strip()), "whisper.cpp")
 
 
 def build_transcriber(

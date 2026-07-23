@@ -433,6 +433,20 @@ so, without a GPU this keeps one core busy for as long as you speak — untick t
 setting if the machine struggles. As a side effect, the first preview loads the
 Whisper model while you are still talking, so the wait after you stop is shorter.
 
+### Invented subtitle credits are removed
+
+Whisper was trained on subtitled video. On silence — the tail of a dictation, a
+pause, a microphone picking up nothing — it does not return an empty string: it
+fills the gap with a subtitling credit seen thousands of times during training.
+In French the usual one is `Sous-titres réalisés par la communauté d'Amara.org`.
+
+Aparté strips the known credits from every transcript, whichever path produced it.
+Credits carrying a domain or a broadcaster name are removed wherever they appear;
+generic video sign-offs such as `Merci d'avoir regardé cette vidéo`, which someone
+writing a video script may genuinely dictate, are only removed when they make up
+the whole transcript. When in doubt nothing moves — a normal dictation comes back
+unchanged, and `Amara.org` on its own is deliberately not in the list.
+
 ### French typography
 
 Aparté is built for dictating in French, so the formatting rules follow French

@@ -168,6 +168,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Dictations no longer end with "Sous-titres réalisés par la communauté
+  d'Amara.org".** Whisper was trained on subtitled video, so on silence — the
+  tail of a dictation, a pause, a microphone that picks up nothing — it fills the
+  gap with a subtitling credit it saw thousands of times rather than returning
+  nothing. Known credits are now stripped from every transcript, on every path
+  (`--no-polish`, the global shortcut and the live preview included, since the
+  filter sits in the transcriber rather than in the polisher). Two lists, because
+  the risk differs: signed credits carrying a domain or a broadcaster name are
+  removed wherever they appear, while generic video sign-offs — which someone
+  writing a video script may genuinely dictate — are only removed when they are
+  the entire transcript. A plain dictation comes back byte for byte, and
+  "Amara.org" on its own is deliberately absent from the list.
 - **The tray icon is now visible at rest, not only while recording.** Its SVG
   opened with a long comment above the root tag, which pushed `<svg` to byte 403
   — past the 256 bytes gdk-pixbuf reads to recognise a file format. The loader
