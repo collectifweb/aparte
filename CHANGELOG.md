@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [1.1.1] - 2026-07-23
+
+### Changed
+
+- **The default language is Auto again**, reverting the French default that 1.0.1
+  introduced. Automatic detection is what lets someone mix French and English
+  inside a single dictation — a real, daily use — and forcing French quietly
+  breaks it. The garbage transcripts that motivated the 1.0.1 change (Georgian,
+  phonetic script, "Thank you" on silence) came from a runaway recording, and
+  that root cause was fixed at its source in the same release; pinning the
+  language was treating a symptom that a fixed recorder no longer produces. The
+  subtitle-credit filter and the empty-output guard from 1.0.1 stay. If you want
+  a fixed language, set it under **Language** in Settings — the point was always
+  that the choice exists, not that it defaults one way.
+
 ## [1.1.0] - 2026-07-23
 
 ### Changed
@@ -443,7 +458,8 @@ First public release — a local-first dictation app for Linux.
 - MIT license, contributing guide, and CI running the test suite on Python
   3.10–3.13.
 
-[Unreleased]: https://github.com/collectifweb/aparte/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/collectifweb/aparte/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/collectifweb/aparte/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/collectifweb/aparte/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/collectifweb/aparte/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/collectifweb/aparte/compare/v0.2.0...v1.0.0

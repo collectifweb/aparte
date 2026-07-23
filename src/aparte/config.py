@@ -22,10 +22,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "model": "small",
     "device": "auto",
     "compute_type": "auto",
-    # Français d'abord, et pas seulement par positionnement : sans langue
-    # imposée, Whisper lance une détection qui se trompe sur un audio pauvre et
-    # déroule la dictée dans une autre langue.
-    "language": "fr",
+    # « Auto » par défaut, et c'est un choix : la détection gère celui qui mêle
+    # français et anglais dans une même dictée, ce que forcer une langue casse.
+    # Qui veut une langue fixe la pose dans les Réglages.
+    "language": None,
     "polish_backend": "heuristic",
     "default_style": "neutral",
     "cleanup_level": "medium",

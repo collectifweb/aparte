@@ -34,11 +34,13 @@ class RecordingCeilingTest(unittest.TestCase):
         self.assertEqual(self._ceiling("bientôt"), 300)
         self.assertEqual(self._ceiling(-5), 300)
 
-    def test_french_is_the_default_language(self):
+    def test_language_defaults_to_auto_detection(self):
+        """« Auto » par défaut : la détection gère le mélange français/anglais
+        d'une même dictée, que forcer une langue casserait."""
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"
             write_default_config(path)
-            self.assertEqual(load_config(path)["language"], "fr")
+            self.assertIsNone(load_config(path)["language"])
 
 
 class ConfigTest(unittest.TestCase):
