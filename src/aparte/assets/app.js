@@ -15,6 +15,10 @@ if (!I18N[lang]) lang = "en";
 let recordState = "idle";
 let setupIncomplete = false;
 let historyPersist = false;
+let livePreview = true;
+// Vrai dès qu'un aperçu s'affiche, faux quand la transcription finale a pris sa
+// place : tant qu'il est vrai, le texte de l'éditeur est provisoire.
+let previewing = false;
 
 function t(key, vars) {
   let s = (I18N[lang] && I18N[lang][key]) || (I18N.en && I18N.en[key]) || key;
@@ -62,7 +66,9 @@ async function postJson(path, payload) {
 const TEXT_ACTIONS = ["#polish", "#copy", "#paste"];
 
 function syncActionState() {
-  const busy = recordState === "processing";
+  // Un aperçu compte comme un traitement en cours : polir, copier ou insérer un
+  // texte que la passe suivante va réécrire donnerait une version périmée.
+  const busy = recordState === "processing" || previewing;
   const empty = !editor.value.trim();
   TEXT_ACTIONS.forEach((sel) => { $(sel).disabled = busy || empty; });
   $("#pick-file").disabled = busy;
@@ -108,6 +114,7 @@ async function transcribeBlob(blob) {
     }
     if (editor.value.trim()) recordRecent(editor.value);
   } finally {
+    clearPreview();
     setRecordState("idle");
   }
 }
@@ -134,6 +141,11 @@ async function startWavRecording() {
   processor.connect(audioContext.destination);
   const sampleRate = audioContext.sampleRate;
   return {
+    // Une photo de ce qui a été capté jusqu'ici, sans rien interrompre :
+    // l'enregistrement continue de remplir `chunks` derrière.
+    snapshot() {
+      return encodeWav(chunks, sampleRate);
+    },
     async stop() {
       processor.disconnect();
       source.disconnect();
@@ -174,20 +186,80 @@ function encodeWav(chunks, sampleRate) {
   return new Blob([view], { type: "audio/wav" });
 }
 
+/* ---------- Aperçu au fil de la parole ---------- */
+// Chaque passe re-transcrit tout l'audio depuis le début. Whisper n'a pas d'état
+// à reprendre là où il s'était arrêté, et c'est ce qui lui permet de corriger ses
+// propres erreurs une fois qu'il a entendu la suite de la phrase.
+//
+// Une seule passe en vol à la fois, et la suivante n'est programmée qu'au retour
+// de la précédente : sur une machine lente il y a simplement moins d'aperçus,
+// jamais une file qui s'allonge. Le serveur applique la même règle de son côté.
+const PREVIEW_GAP_MS = 1200;
+let previewTimer = null;
+
+function startPreviewLoop(session) {
+  if (!livePreview) return;
+  const tick = async () => {
+    previewTimer = null;
+    // L'enregistrement s'est arrêté pendant qu'on attendait : plus rien à faire.
+    if (recordingSession !== session) return;
+    try {
+      const res = await fetch("/api/transcribe?preview=1&model=" + encodeURIComponent($("#model").value), {
+        method: "POST",
+        headers: { "Content-Type": "audio/wav" },
+        body: session.snapshot(),
+      });
+      if (res.ok && recordingSession === session) {
+        const data = await res.json();
+        // `text` est nul quand le serveur transcrivait déjà : la passe a
+        // simplement laissé son tour.
+        if (typeof data.text === "string") showPreview(data.text);
+      }
+    } catch (_) {
+      // Un aperçu raté ne dit rien sur la dictée en cours, qui continue. Se
+      // plaindre ici couvrirait l'écran de messages pour rien.
+    }
+    if (recordingSession === session) previewTimer = setTimeout(tick, PREVIEW_GAP_MS);
+  };
+  previewTimer = setTimeout(tick, PREVIEW_GAP_MS);
+}
+
+function stopPreviewLoop() {
+  clearTimeout(previewTimer);
+  previewTimer = null;
+}
+
+function showPreview(text) {
+  // Un silence en début de dictée ne doit pas vider l'éditeur.
+  if (!text.trim()) return;
+  if (!previewing) status(t("st.preview"));
+  previewing = true;
+  editor.classList.add("previewing");
+  editor.value = text;
+  syncActionState();
+}
+
+function clearPreview() {
+  previewing = false;
+  editor.classList.remove("previewing");
+}
+
 /* ---------- Record button ---------- */
 recordBtn.addEventListener("click", async () => {
   if (recordState === "processing") return;
   if (recordingSession) {
     const session = recordingSession;
     recordingSession = null;
+    stopPreviewLoop();
     const blob = await session.stop();
-    try { await transcribeBlob(blob); } catch (err) { status(String(err), "error"); setRecordState("idle"); }
+    try { await transcribeBlob(blob); } catch (err) { status(String(err), "error"); clearPreview(); setRecordState("idle"); }
     return;
   }
   try {
     recordingSession = await startWavRecording();
     setRecordState("recording");
     status(t("st.recording"));
+    startPreviewLoop(recordingSession);
   } catch (err) {
     recordingSession = null;
     status(t("st.mic_error") + err, "error");
@@ -305,6 +377,8 @@ async function loadConfig() {
   $("#set-cleanup").value = cfg.cleanup_level || "medium";
   $("#set-language").value = cfg.language || "";
   $("#set-device").value = cfg.device || "auto";
+  livePreview = cfg.live_preview !== false;
+  $("#set-live-preview").checked = livePreview;
   $("#set-polish").value = cfg.polish_backend || "heuristic";
   $("#set-nbsp").checked = cfg.nonbreaking_spaces !== false;
   $("#set-numbers").value = String(cfg.numbers_from ?? 10);
@@ -365,6 +439,7 @@ $("#save-settings").addEventListener("click", async () => {
       cleanup_level: $("#set-cleanup").value,
       language: $("#set-language").value,
       device: $("#set-device").value,
+      live_preview: $("#set-live-preview").checked,
       polish_backend: $("#set-polish").value,
       nonbreaking_spaces: $("#set-nbsp").checked,
       numbers_from: Number($("#set-numbers").value),

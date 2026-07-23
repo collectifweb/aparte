@@ -9,15 +9,20 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from aparte.config import Settings
 from aparte.desktop import ASSETS_DIR, STATIC_FILES, already_running, handler_factory
 
 
-def make_request(method, path, body=b"", headers=None):
-    """Drive a handler instance directly and capture the response it writes."""
-    Handler = handler_factory(Settings())
+def make_request(method, path, body=b"", headers=None, handler_class=None):
+    """Drive a handler instance directly and capture the response it writes.
+
+    ``handler_class`` lets several requests share one handler class, and with it
+    the state the factory closes over — the transcription lock, in particular.
+    """
+    Handler = handler_class or handler_factory(Settings())
     handler = Handler.__new__(Handler)
 
     msg = Message()
@@ -226,6 +231,80 @@ class ConfigEndpointTest(unittest.TestCase):
                 self.assertIs(json.loads(res["body"])["config"]["nonbreaking_spaces"], False)
                 self.assertIs(json.loads(path.read_text(encoding="utf-8"))["nonbreaking_spaces"], False)
                 self.assertIs(json.loads(make_request("GET", "/api/config")["body"])["nonbreaking_spaces"], False)
+
+
+class LivePreviewTest(unittest.TestCase):
+    """L'aperçu au fil de la parole re-transcrit l'enregistrement en cours toutes
+    les secondes environ. Le serveur est multi-fils et le modèle Whisper est un
+    seul objet partagé : au moment où l'utilisateur arrête de parler, un aperçu
+    et la transcription finale se croisent forcément. L'aperçu doit céder son
+    tour ; la finale, elle, doit attendre le sien et rendre son texte."""
+
+    def setUp(self):
+        self.started = threading.Event()
+        self.release = threading.Event()
+        test = self
+
+        class BlockingTranscriber:
+            def transcribe(self, path):
+                test.started.set()
+                test.release.wait(5)
+                return SimpleNamespace(text="la dictée")
+
+        self.transcriber = BlockingTranscriber()
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        # Sans APARTE_CONFIG, current_settings() lit la vraie configuration de
+        # l'utilisateur au lieu d'un fichier jetable.
+        environment = {
+            "APARTE_CONFIG": str(Path(self.directory.name) / "config.json"),
+            "MURMUR_CONFIG": "",
+        }
+        patcher = mock.patch.dict(os.environ, environment)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_a_preview_gives_up_its_turn_while_a_transcription_runs(self):
+        Handler = handler_factory(Settings())
+        with mock.patch("aparte.desktop.build_transcriber", return_value=self.transcriber):
+            final = {}
+            thread = threading.Thread(
+                target=lambda: final.update(
+                    res=make_request("POST", "/api/transcribe", b"RIFF", handler_class=Handler)
+                )
+            )
+            thread.start()
+            self.addCleanup(thread.join, 5)
+            self.addCleanup(self.release.set)
+            self.assertTrue(self.started.wait(5), "la transcription finale n'a jamais démarré")
+
+            preview = make_request("POST", "/api/transcribe?preview=1", b"RIFF", handler_class=Handler)
+            self.assertEqual(preview["status"], int(HTTPStatus.OK))
+            payload = json.loads(preview["body"])
+            self.assertIsNone(payload["text"])
+            self.assertTrue(payload["busy"])
+
+            self.release.set()
+            thread.join(5)
+            self.assertEqual(json.loads(final["res"]["body"])["text"], "la dictée")
+
+    def test_a_preview_transcribes_when_nothing_else_is_running(self):
+        self.release.set()
+        Handler = handler_factory(Settings())
+        with mock.patch("aparte.desktop.build_transcriber", return_value=self.transcriber):
+            preview = make_request("POST", "/api/transcribe?preview=1", b"RIFF", handler_class=Handler)
+        self.assertEqual(preview["status"], int(HTTPStatus.OK))
+        self.assertEqual(json.loads(preview["body"])["text"], "la dictée")
+
+    def test_the_setting_round_trips(self):
+        """Un réglage absent d'EDITABLE_FIELDS est ignoré en silence, des deux côtés."""
+        path = Path(self.directory.name) / "config.json"
+        body = json.dumps({"live_preview": False}).encode("utf-8")
+        res = make_request("POST", "/api/config", body)
+
+        self.assertEqual(res["status"], int(HTTPStatus.OK))
+        self.assertIs(json.loads(path.read_text(encoding="utf-8"))["live_preview"], False)
+        self.assertIs(json.loads(make_request("GET", "/api/config")["body"])["live_preview"], False)
 
 
 if __name__ == "__main__":

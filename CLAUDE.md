@@ -152,6 +152,13 @@ n'apparaissait que pendant l'enregistrement, qui utilise l'autre fichier.
   les deux à son nom. Une requête sans `Origin` passe : aucun navigateur n'en
   émet, c'est `curl` ou la ligne de commande — donc un processus local, qui
   pourrait de toute façon appeler `wtype` lui-même.
+- `inference_lock` dans `desktop.py` sérialise les transcriptions. Le serveur est
+  un `ThreadingHTTPServer` et le modèle Whisper est **un seul objet** gardé en
+  cache : sans ce verrou, l'aperçu au fil de la parole et la transcription finale
+  entrent dedans en même temps à la seconde où l'utilisateur arrête de parler.
+  L'aperçu (`?preview=1`) prend le verrou **sans attendre** et rend
+  `{"text": null, "busy": true}` s'il est occupé — le passer en bloquant ferait
+  patienter la finale derrière une passe devenue inutile.
 - `/api/update/apply` lance `git pull` puis `pip install`. Toute nouvelle route
   qui exécute une commande passe par la même porte, sans exception.
 

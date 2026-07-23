@@ -370,14 +370,117 @@ de milliers ne commence qu'à cinq chiffres, sinon une année deviendrait
 
 ## Lot 5 — Plus tard
 
-- [ ] Aperçu au fil de la parole (re-transcription périodique d'une fenêtre
+- [x] Aperçu au fil de la parole (re-transcription périodique d'une fenêtre
       glissante — la même technique qu'eux, mais nous avons le GPU et pas eux)
+      → fait le 22/07, détail en **Lot 5A** ci-dessous
 - [ ] Modes de reformulation multiples (traduction, courriel, notes) avec prompt
-      par mode et raccourci dédié
+      par mode et raccourci dédié → **même mur qu'en dessous** : traduire ou
+      retourner un texte en courriel demande Ollama. Sans lui, seul le mode
+      « notes » (mise en liste à puces) serait faisable, et c'est trop peu.
 - [ ] Mode Commande : transformer par la voix le texte actuellement sélectionné
+      → **écarté le 22/07, pas abandonné.** Comprendre une consigne libre
+      (« traduis en anglais », « raccourcis ça ») demande un modèle de langage :
+      Ollama n'est pas installé sur la machine et `polish_backend` vaut
+      `heuristic`. La plomberie, elle, est vérifiée : en X11, `xclip -o
+      -selection primary` lit la sélection courante et `xdotool` colle par-dessus.
+      À reprendre le jour où Ollama entre dans la boucle. Une variante sans
+      modèle reste possible — appliquer la mise en forme française d'Aparté à
+      n'importe quelle sélection, sans voix.
 - [ ] Statistiques d'usage (temps gagné, mots par minute)
 - [ ] Import / export des réglages
 - [ ] Fenêtre flottante pendant l'enregistrement
+
+## Lot 5A — Aperçu au fil de la parole (fait, 22/07)
+
+**Le manque.** Dans l'interface, on parle dans le vide : rien ne s'affiche tant
+que l'enregistrement n'est pas arrêté. Sur une dictée d'une minute, c'est long.
+
+**La technique.** Le navigateur accumule déjà l'audio en mémoire — le tableau
+`chunks` de `startWavRecording()`. On lui ajoute un `snapshot()` qui encode en
+WAV **ce qui a été capté jusqu'ici**, sans interrompre l'enregistrement. Toutes
+les ~1,2 s, cet instantané part vers `/api/transcribe?preview=1` et le résultat
+s'écrit dans l'éditeur, en provisoire. À l'arrêt, la transcription finale
+l'écrase. On re-transcrit tout depuis le début à chaque passe : Whisper n'a pas
+d'état à reprendre, et c'est ce qui lui permet de corriger ses propres erreurs.
+
+**Le budget, mesuré le 22/07 sur la machine d'Alexandre** (GTX 1070, modèle
+`small`, `int8`, en passant par `build_transcriber` donc avec le préchargement
+CUDA de `transcription.py`) : 10 s d'audio se transcrivent en **0,24 s**. Une
+dictée de deux minutes coûterait environ 3 s par passe. Sur processeur seul, la
+même seconde d'audio coûte six fois plus (1,56 s pour 10 s) — d'où les deux
+garde-fous ci-dessous.
+
+**L'auto-régulation.** Jamais deux aperçus en vol. Le suivant n'est programmé
+qu'au retour du précédent, plus un délai minimum. Sur une machine lente il y a
+simplement moins d'aperçus ; rien ne s'empile, et aucun réglage de cadence n'est
+à inventer.
+
+**Le serveur est multi-fils.** `ThreadingHTTPServer` : un aperçu et la
+transcription finale peuvent tomber en même temps sur le **même** modèle Whisper
+gardé en cache. Un verrou les sépare. L'aperçu tente de le prendre **sans
+attendre** et passe son tour s'il est occupé ; la finale, elle, attend son tour.
+Sans ça, arrêter l'enregistrement fait entrer deux inférences concurrentes dans
+un objet qui n'est pas prévu pour.
+
+**Ce qui ne bouge pas :** l'historique ne s'écrit toujours qu'à la fin (il est
+déjà côté navigateur, dans `transcribeBlob`) ; « Polir auto » ne s'applique qu'à
+la fin, l'aperçu reste brut ; le bouton d'enregistrement garde son rôle de
+projecteur, l'aperçu ne doit rien allumer d'autre.
+
+- [x] `snapshot()` dans `startWavRecording()` — encode `chunks` sans fermer le flux
+- [x] Boucle d'aperçu auto-régulée dans `app.js`, annulée à l'arrêt
+- [x] Verrou de transcription dans `desktop.py` + `?preview=1` qui passe son tour
+- [x] Réglage `live_preview` (vrai par défaut) : `config.py`, `EDITABLE_FIELDS`,
+      groupe **Transcription** des Réglages, `i18n.js` FR et EN. Ce n'est pas du
+      spéculatif : sans GPU, l'aperçu occupe un cœur en permanence, et le repli
+      processeur est un chemin que le projet documente déjà.
+- [x] Style du texte provisoire — passe `/impeccable`, encre atténuée, jamais
+      d'opacité (voir l'invariant du 22/07 dans `CLAUDE.md`)
+- [x] `i18n.js` : `st.preview` + le libellé du réglage, FR et EN
+- [x] `tests/test_desktop.py` : un aperçu passe son tour pendant qu'une
+      transcription tourne ; la finale attend et rend bien son texte
+- [x] CHANGELOG, README, `DESIGN.md`, `CLAUDE.md`, `.impeccable/design.json`
+
+**Risques assumés.** Le texte bouge pendant qu'on parle : Whisper révise sa
+propre transcription d'une passe à l'autre, c'est inhérent à la technique. La
+cadence de 1,2 s est un premier choix, à ajuster à l'usage.
+
+### Décidé en cours de route
+
+**Le réglage est allé dans le groupe Transcription, pas Mise en forme.** Il est
+voisin de « Calcul », qui est exactement l'arbitrage dont il dépend.
+
+**Les puces d'action s'éteignent pendant l'aperçu.** `syncActionState()` compte
+désormais l'aperçu comme un traitement en cours. Sans ça, « Copier » pendant la
+dictée rendait une version que la passe suivante allait réécrire — le même piège
+que l'éditeur vide corrigé plus tôt dans la journée.
+
+**Le provisoire ne repose pas sur la couleur seule.** Trois signaux simultanés :
+l'encre recule à `ink-soft`, la ligne d'état (`role="status"`, donc annoncée)
+dit « Aperçu — le texte se corrige jusqu'à l'arrêt », et les puces sont éteintes.
+
+**Aucun nouveau jeton.** `ink-soft` existait et convient : 6,96:1 en clair,
+7,26:1 en sombre sur le fond de l'éditeur, calculés. En ajouter un dont la valeur
+double un jeton existant aurait été du bruit.
+
+### Gain masqué
+
+La première passe d'aperçu charge le modèle Whisper **pendant** que l'utilisateur
+parle, au lieu de le faire attendre à l'arrêt. Mesuré à froid : 9,87 s pour la
+première requête, 0,24 s ensuite. Le temps total ne change pas, mais il se paie à
+un moment où personne n'attend.
+
+### Vérifications passées
+
+| Niveau | Ce qui a été prouvé |
+|---|---|
+| 175 tests unitaires | dont 3 neufs : l'aperçu cède son tour pendant une transcription, transcrit quand la voie est libre, et `live_preview` fait l'aller-retour par `/api/config` |
+| Serveur réel sur le port 8799 | la page sert la case à cocher, `/api/config` expose `live_preview`, un aperçu lancé pendant la finale reçoit bien `{"text": null, "busy": true}` et la finale rend son texte |
+| `app.js` chargé dans Node avec un faux DOM | 12 vérifications sur la boucle : une seule passe en vol, une réponse « occupé » ne touche pas à l'éditeur, un aperçu vide ne le vide pas, plus aucune passe après l'arrêt, l'encre et les puces reviennent à la fin |
+
+Le harnais Node est resté hors du dépôt : le projet n'a pas d'outillage de test
+JavaScript, et en installer un pour cette seule fonctionnalité aurait coûté plus
+cher que ce qu'il garde.
 
 ---
 

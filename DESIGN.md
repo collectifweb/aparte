@@ -220,8 +220,10 @@ couleur de marque, trois couleurs d'état. Aucun dégradé nulle part.
   16,2:1 en sombre.
 - **Encre atténuée** (`ink-soft`, clair `oklch(0.455 0.016 15)` / sombre
   `oklch(0.742 0.014 15)`) : textes d'aide, légendes, en-têtes de groupe,
-  placeholder, boutons fantômes au repos. Jamais sous 6,3:1, y compris à 12 px
-  sur les blocs en creux.
+  placeholder, boutons fantômes au repos, **et le texte encore provisoire de
+  l'éditeur pendant l'aperçu au fil de la parole**. Jamais sous 6,3:1, y compris
+  à 12 px sur les blocs en creux ; 6,96:1 en clair et 7,26:1 en sombre sur le
+  fond de l'éditeur.
 - **Encre désactivée** (`ink-disabled`, clair `oklch(0.550 0.014 15)` / sombre
   `oklch(0.620 0.014 15)`) : le libellé d'un contrôle inactif, et rien d'autre.
   4,63:1 en clair, 4,56:1 en sombre — au-dessus du seuil, donc lisible, et
@@ -405,6 +407,14 @@ Le seul élément mémorable du système, et le seul autorisé à l'être.
   interligne 1,65, hauteur `min(38vh, 300px)`, redimensionnable verticalement,
   sans ombre. Le placeholder est explicitement en encre atténuée, jamais laissé
   au gris par défaut du navigateur.
+- **Éditeur en aperçu (`#editor.previewing`) :** pendant que l'utilisateur parle,
+  le texte affiché sera réécrit à la passe suivante. L'encre recule à `ink-soft`
+  et revient à `ink` en 180 ms quand la transcription finale s'installe — une
+  teinte, jamais une opacité, qui mélangerait la dictée au fond de la page. La
+  sérif ne bouge pas : c'est toujours la voix du texte dicté. Le provisoire n'est
+  pas porté par la seule couleur — la ligne d'état l'annonce et les puces
+  d'action restent éteintes tant qu'il dure. Rien d'autre ne s'allume : le
+  projecteur reste sur le bouton d'enregistrement.
 - **Zones de correspondance (`.kv`) :** monospace 13 px, 96 px de haut minimum.
 - **Sélecteurs et cases à cocher :** natifs, avec `accent-color` en carmin. La
   flèche reste celle du système — habiller un contrôle standard serait réinventer

@@ -57,6 +57,7 @@ EDITABLE_FIELDS = (
     "history_persist",
     "microphone",
     "beep",
+    "live_preview",
     "replacements",
     "snippets",
 )
@@ -131,6 +132,13 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
     # small and base) without paying the load cost on every switch.
     transcriber_cache: dict[str, object] = {}
     transcriber_lock = threading.Lock()
+    # A Whisper model is one object shared by every request, and this server is
+    # threaded: the live preview and the final transcription of the same
+    # recording overlap by design at the moment the user stops talking. Run one
+    # inference at a time. A preview takes this lock without waiting and gives
+    # up its turn when it is busy, so previews can never queue up behind each
+    # other or delay the transcription that actually matters.
+    inference_lock = threading.Lock()
 
     def current_settings() -> Settings:
         # Reload from disk/env each request so changes saved from the Settings
@@ -278,7 +286,13 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
         def _handle_transcribe(self) -> None:
             content_type = self.headers.get("Content-Type", "")
             length = int(self.headers.get("Content-Length", "0"))
+            # Always drain the body, even for a preview we are about to drop:
+            # leaving it unread would desynchronise the connection.
             body = self.rfile.read(length)
+            preview = self._flag("preview")
+            if not inference_lock.acquire(blocking=not preview):
+                self._send_json({"text": None, "busy": True})
+                return
             suffix = ".webm"
             if "audio/wav" in content_type or "audio/wave" in content_type:
                 suffix = ".wav"
@@ -294,6 +308,7 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                 self._send_json({"text": transcript})
             finally:
                 path.unlink(missing_ok=True)
+                inference_lock.release()
 
         def _handle_update_apply(self) -> None:
             """Stream the update log line by line, then restart if it worked.
@@ -322,6 +337,9 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
             requested = (query.get("model") or [""])[0]
             return requested if requested in ALLOWED_MODELS else active.model
 
+        def _flag(self, name: str) -> bool:
+            return (parse_qs(urlsplit(self.path).query).get(name) or [""])[0] == "1"
+
         def _read_config(self) -> dict[str, object]:
             config = load_config()
             data = {key: config.get(key) for key in EDITABLE_FIELDS}
@@ -338,7 +356,7 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                         value = {str(k): str(v) for k, v in dict(value).items()} if value else {}
                     elif key == "language":
                         value = (str(value).strip() or None) if value is not None else None
-                    elif key in {"nonbreaking_spaces", "history_persist", "trailing_space", "beep"}:
+                    elif key in {"nonbreaking_spaces", "history_persist", "trailing_space", "beep", "live_preview"}:
                         value = bool(value)
                     elif key in {"short_text_words", "numbers_from"}:
                         value = positive_int(value)

@@ -416,6 +416,23 @@ Tick **Beep on start and stop** (`beep`) for two short tones — a high one when
 the microphone opens, a lower one when it closes. It is off by default; turn it
 on if you dictate with the global shortcut without watching the screen.
 
+### Preview while you speak
+
+**Preview while dictating** (`live_preview`, on by default) shows the transcript
+building up in the editor instead of leaving you talking into the void. Roughly
+once a second, whatever has been recorded so far is transcribed again from the
+start and the result replaces the previous pass — which is also why the text
+corrects itself as you go: Whisper revises its own guesses once it has heard the
+end of the sentence. Preview text is shown in lighter ink and the action buttons
+stay off, because it is not the final version yet; auto-polish only runs at the
+end, on the final transcript.
+
+Never more than one pass at a time: the next one is scheduled when the previous
+one comes back. On a slow machine that means fewer previews, never a queue. Even
+so, without a GPU this keeps one core busy for as long as you speak — untick the
+setting if the machine struggles. As a side effect, the first preview loads the
+Whisper model while you are still talking, so the wait after you stop is shorter.
+
 ### French typography
 
 Aparté is built for dictating in French, so the formatting rules follow French
@@ -497,11 +514,13 @@ interface is a focused, single-screen app:
 
 - a large **Talk** button (browser microphone recording as WAV PCM, so no hard
   dependency on `ffmpeg`) that records, transcribes, and auto-polishes
-- a transcript editor with **Polish**, **Copy**, **Paste**, and audio import
+- a transcript editor with **Polish**, **Copy**, **Insert**, and audio import
+- a live preview: the text appears as you speak and keeps correcting itself
+  until you stop
 - a model toggle (`small` = accurate, `base` = fast); each model loads once and
   is cached, so switching is instant after first use
 - a **Settings** panel (gear icon) grouped into Microphone (input device, beep),
-  Transcription (model, language, compute device), Formatting (style, cleanup,
+  Transcription (model, language, compute device, live preview), Formatting (style, cleanup,
   polish backend, typography), Insertion, History, and Vocabulary (replacements,
   snippets) — saved to the config file and applied immediately, including to the
   global-hotkey dictation flow

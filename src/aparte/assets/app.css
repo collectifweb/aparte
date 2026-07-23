@@ -247,8 +247,18 @@ body {
   border-radius: var(--r-lg);
   padding: var(--sp-4) var(--sp-5);
   font: var(--fs-title)/1.65 var(--font-text);
+  transition: color var(--dur) var(--ease);
 }
 #editor::placeholder { color: var(--ink-soft); opacity: 1; }
+/* Aperçu au fil de la parole : ce texte sera réécrit à la passe suivante, il
+   n'est pas encore le produit fini. L'encre recule d'un cran — une teinte,
+   jamais l'opacité, qui mélangerait la dictée au fond de la page — et revient à
+   pleine encre quand la transcription finale s'installe. Calculé sur le fond de
+   l'éditeur : 6,96:1 en clair, 7,26:1 en sombre. Le provisoire n'est pas porté
+   par la seule couleur — la ligne d'état l'annonce et les puces d'action restent
+   éteintes tant qu'il dure. Le mouvement réduit est déjà couvert par la règle
+   générale en fin de fichier, et l'état reste lisible sans la transition. */
+#editor.previewing { color: var(--ink-soft); }
 .result-bar {
   display: flex; flex-wrap: wrap; gap: var(--sp-3);
   align-items: center; justify-content: space-between;

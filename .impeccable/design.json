@@ -100,9 +100,9 @@
       "name": "Éditeur",
       "kind": "input",
       "refersTo": "editor",
-      "description": "Le programme imprimé : le texte dicté, en sérif, sans ombre, avec un placeholder au contraste défini.",
-      "html": "<textarea class=\"ds-editor\" placeholder=\"Ta dictée apparaîtra ici. Tu peux aussi coller ou taper du texte à polir.\">« Bonjour Sarah, merci pour l’envoi. Est-ce que ça te va ? »</textarea>",
-      "css": ".ds-editor { width: 100%; min-height: 180px; resize: vertical; border: 1px solid var(--line, oklch(0.902 0.007 15)); background: var(--surface, oklch(0.982 0.004 15)); color: var(--ink, oklch(0.235 0.014 15)); border-radius: 14px; padding: 16px 20px; font: 18px/1.65 Georgia, 'Liberation Serif', 'DejaVu Serif', serif; } .ds-editor::placeholder { color: var(--ink-soft, oklch(0.455 0.016 15)); opacity: 1; } .ds-editor:focus-visible { outline: 2px solid var(--brand, oklch(0.520 0.185 5)); outline-offset: 2px; }"
+      "description": "Le programme imprimé : le texte dicté, en sérif, sans ombre, avec un placeholder au contraste défini. Pendant l'aperçu au fil de la parole, l'encre recule d'un cran (.previewing) : ce texte sera réécrit à la passe suivante.",
+      "html": "<textarea class=\"ds-editor\" placeholder=\"Ta dictée apparaîtra ici. Tu peux aussi coller ou taper du texte à polir.\">« Bonjour Sarah, merci pour l’envoi. Est-ce que ça te va ? »</textarea>\n<textarea class=\"ds-editor ds-editor--previewing\">Bonjour Sarah, merci pour l’envoi. Est-ce que ça te</textarea>",
+      "css": ".ds-editor { width: 100%; min-height: 180px; resize: vertical; border: 1px solid var(--line, oklch(0.902 0.007 15)); background: var(--surface, oklch(0.982 0.004 15)); color: var(--ink, oklch(0.235 0.014 15)); border-radius: 14px; padding: 16px 20px; font: 18px/1.65 Georgia, 'Liberation Serif', 'DejaVu Serif', serif; } .ds-editor::placeholder { color: var(--ink-soft, oklch(0.455 0.016 15)); opacity: 1; } .ds-editor:focus-visible { outline: 2px solid var(--brand, oklch(0.520 0.185 5)); outline-offset: 2px; } .ds-editor { transition: color 180ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-editor--previewing { color: var(--ink-soft, oklch(0.455 0.016 15)); }"
     },
     {
       "name": "Puce d'action",

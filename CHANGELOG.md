@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The transcript appears while you speak.** Roughly once a second the
+  recording so far is transcribed again from the start and shown in the editor,
+  so a long dictation is no longer spoken into the void — and the text corrects
+  itself as it goes, because Whisper revises its own guesses once it has heard
+  the end of the sentence. Preview text sits in lighter ink and the action
+  buttons stay off: it is not the final version yet. Auto-polish still runs only
+  at the end. Never more than one pass in flight, and the next is scheduled only
+  when the previous one returns, so a slow machine gets fewer previews rather
+  than a growing queue. New **Preview while dictating** setting (`live_preview`,
+  on by default) — without a GPU it keeps one core busy for as long as you
+  speak. Side effect worth having: the first preview loads the Whisper model
+  while you are still talking, which shortens the wait after you stop.
+
 - **The action buttons explain themselves, and switch off when they have
   nothing to work on.** Polish, Copy and Insert are disabled while the editor
   is empty; each button, the model picker and Auto-polish carry a translated

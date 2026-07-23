@@ -34,6 +34,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "history_persist": False,
     "microphone": "",
     "beep": False,
+    "live_preview": True,
     "ollama_url": "http://127.0.0.1:11434",
     "ollama_model": "llama3.1:8b",
     "whisper_cpp": None,
@@ -68,6 +69,7 @@ class Settings:
     history_persist: bool = False
     microphone: str = ""
     beep: bool = False
+    live_preview: bool = True
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.1:8b"
     whisper_cpp: str | None = None
@@ -102,6 +104,7 @@ class Settings:
             history_persist=bool(config.get("history_persist", False)),
             microphone=get_env("MICROPHONE") or str(config.get("microphone", "") or ""),
             beep=bool(config.get("beep", False)),
+            live_preview=bool(config.get("live_preview", True)),
             ollama_url=get_env("OLLAMA_URL") or str(config.get("ollama_url", DEFAULT_CONFIG["ollama_url"])),
             ollama_model=get_env("OLLAMA_MODEL") or str(config.get("ollama_model", DEFAULT_CONFIG["ollama_model"])),
             whisper_cpp=whisper_cpp if whisper_cpp is not None else _optional_str(config.get("whisper_cpp")),
