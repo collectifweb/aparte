@@ -8,3 +8,4 @@ build/
 .vscode/
 .impeccable/live/
 
+.claude/session-state.md

@@ -25,6 +25,13 @@ inséré dans l'application qu'il a sous les yeux, sans quitter cette
 application.** Le raccourci clavier global est le chemin principal ; l'interface
 web sert à régler, diagnostiquer et relire.
 
+Cette phrase est un arbitrage, pas une description : **ce qui n'existe que dans
+la page web ne sert pas le public principal.** L'aperçu au fil de la parole est
+dans ce cas depuis le 22/07 — il ne s'affiche qu'en regardant la page, donc
+jamais pendant l'usage normal. C'est ce déséquilibre que le Lot 5B (fenêtre
+flottante) doit corriger, et c'est le test à passer avant de poser quoi que ce
+soit de nouveau dans la page seule.
+
 Deuxième public, plus rare mais décisif pour le projet : le contributeur qui
 ouvre `src/aparte/assets/` pour la première fois. Il n'y a ni compilation ni
 bibliothèque, donc il peut modifier un fichier et rafraîchir la page. Cette
@@ -141,17 +148,11 @@ déjà partiellement le cas (le pictogramme passe du micro au carré d'arrêt, l
 libellé change) et il faut le conserver. Même règle pour le point de santé de la
 barre supérieure, qui ne porte aujourd'hui son information que par sa couleur.
 
-**Écarts connus, non engagés dans cette passe** (documentés pour ne pas les
-perdre, à traiter quand ils remonteront en priorité) :
-
-- Aucun style de focus visible sauf sur l'éditeur : au clavier, on ne sait pas
-  où on est.
-- Aucune règle `prefers-reduced-motion` alors que trois animations tournent.
-- Les tiroirs ne se ferment pas avec Échap et ne retiennent pas le focus.
-- Les `aria-label` sont écrits en anglais en dur (`"Talk"`, `"Settings"`,
-  `"Setup and diagnostics"`) et ne suivent pas le sélecteur de langue : un
-  lecteur d'écran configuré en français annonce l'interface en anglais. Le reste
-  de l'application est pourtant entièrement bilingue.
+**Écarts refermés au Lot D** — gardés ici pour l'historique, plus rien à faire :
+le style de focus est global et unique, `prefers-reduced-motion` a son bloc en
+fin de `app.css`, les tiroirs se ferment avec Échap et retiennent le focus, et
+les `aria-label` passent par `i18n.js` comme le reste. Les règles qui en
+découlent sont dans `CLAUDE.md` § Interface — les rouvrir serait une régression.
 
 **Inclusion linguistique.** L'interface est bilingue français/anglais via des
 attributs `data-i18n`, et bascule sur la langue du navigateur au premier

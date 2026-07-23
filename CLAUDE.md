@@ -51,6 +51,21 @@ Les trois règles qui tranchent le plus souvent :
   contre les fonds où elle sera posée. Seuil 4,5:1, y compris à 12 px et sur un
   aplat.
 
+## Mesurer une transcription
+
+**Fixer la langue des deux côtés, sinon on mesure la détection de langue.** Sur
+le même fichier, dans le même processus : **0,26 s avec `language="fr"`, 7,42 s
+avec `language=None`.** Sans langue imposée, Whisper lance une détection, se
+trompe sur un audio pauvre et déroule du texte dans une autre langue.
+
+Ça a produit une conclusion fausse le 22/07 : une comparaison où le processus de
+contrôle forçait le français et le serveur non donnait la délégation « cinq fois
+plus lente », alors qu'elle est six fois plus rapide.
+
+Deuxième piège de la même famille : **la première requête paie le chargement du
+modèle** (environ 8 à 10 s à froid, 0,24 s ensuite). Toujours chauffer avant de
+chronométrer.
+
 ## Lancer les tests
 
 Il n'y a **pas de `.venv` ni de `pytest`** sur cette machine. Les tests sont
