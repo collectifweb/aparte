@@ -11,8 +11,16 @@ def git(repo, *args):
     subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True)
 
 
-def make_checkout(root: Path) -> Path:
-    """A clone whose remote is called "Murmur", one commit behind its upstream."""
+INSTALLED = "1.0.0"
+
+
+def make_checkout(root: Path, release: str | None = "v1.0.1") -> Path:
+    """A clone sitting on v1.0.0, whose remote is called "Murmur".
+
+    The source then gains an unreleased commit and, unless `release` is None, a
+    newer tag — so a test can tell "somebody pushed a commit" apart from
+    "somebody cut a release".
+    """
     source = root / "source"
     source.mkdir()
     git(source, "init", "--initial-branch=main")
@@ -21,6 +29,7 @@ def make_checkout(root: Path) -> Path:
     (source / "README.md").write_text("un\n", encoding="utf-8")
     git(source, "add", "-A")
     git(source, "commit", "-m", "premier commit")
+    git(source, "tag", "-a", "v1.0.0", "-m", "1.0.0")
 
     clone = root / "clone"
     subprocess.run(
@@ -30,8 +39,21 @@ def make_checkout(root: Path) -> Path:
     )
 
     (source / "README.md").write_text("deux\n", encoding="utf-8")
-    git(source, "commit", "-am", "deuxième commit")
+    git(source, "commit", "-am", "docs: une virgule en trop")
+    if release:
+        (source / "README.md").write_text("trois\n", encoding="utf-8")
+        git(source, "commit", "-am", "fix: quelque chose d'important")
+        git(source, "tag", "-a", release, "-m", release)
     return clone
+
+
+class VersionTagTest(unittest.TestCase):
+    def test_versions_compare_as_numbers_not_as_text(self):
+        self.assertGreater(update._version_key("v1.10.0"), update._version_key("v1.9.0"))
+
+    def test_anything_that_is_not_a_plain_release_is_not_a_candidate(self):
+        for tag in ("v2.0.0-rc1", "nightly", "v1.0", "1.0.0"):
+            self.assertIsNone(update._version_key(tag), tag)
 
 
 class CheckUpdateTest(unittest.TestCase):
@@ -39,22 +61,47 @@ class CheckUpdateTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             clone = make_checkout(Path(directory))
             with mock.patch.object(update, "find_repo", return_value=clone):
-                status = update.check_update(fetch=True)
+                with mock.patch.object(update, "__version__", INSTALLED):
+                    status = update.check_update(fetch=True)
 
             self.assertEqual(status["state"], "available")
             self.assertEqual(status["upstream"], "Murmur/main")
-            self.assertEqual(status["behind"], 1)
-            self.assertIn("deuxième commit", status["commits"][0])
+            self.assertEqual(status["release"], "v1.0.1")
+            self.assertEqual(status["version"], INSTALLED)
             self.assertFalse(status["dirty"])
+
+    def test_a_commit_without_a_release_is_not_an_update(self):
+        """Le cœur du choix : un `docs:` poussé sur main n'est pas une version.
+
+        Avant, il déclenchait une notification de mise à jour et un
+        réinstallation complète pour une virgule.
+        """
+        with tempfile.TemporaryDirectory() as directory:
+            clone = make_checkout(Path(directory), release=None)
+            with mock.patch.object(update, "find_repo", return_value=clone):
+                with mock.patch.object(update, "__version__", INSTALLED):
+                    status = update.check_update(fetch=True)
+
+            self.assertEqual(status["state"], "current")
+            self.assertEqual(status["release"], "v1.0.0")
+
+    def test_the_release_contents_are_listed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            clone = make_checkout(Path(directory))
+            with mock.patch.object(update, "find_repo", return_value=clone):
+                with mock.patch.object(update, "__version__", INSTALLED):
+                    status = update.check_update(fetch=True)
+
+            self.assertTrue(any("important" in line for line in status["commits"]))
 
     def test_stays_offline_until_asked_to_fetch(self):
         with tempfile.TemporaryDirectory() as directory:
             clone = make_checkout(Path(directory))
             with mock.patch.object(update, "find_repo", return_value=clone):
-                status = update.check_update()
+                with mock.patch.object(update, "__version__", INSTALLED):
+                    status = update.check_update()
 
             self.assertEqual(status["state"], "current")
-            self.assertEqual(status["behind"], 0)
 
     def test_local_changes_are_reported(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -83,9 +130,11 @@ class ApplyUpdateTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             clone = make_checkout(Path(directory))
             (clone / "README.md").write_text("modifié\n", encoding="utf-8")
+            git(clone, "fetch", "--tags", "Murmur")
             with mock.patch.object(update, "find_repo", return_value=clone):
-                with mock.patch.object(update, "_stream") as stream:
-                    log = list(update.apply_update())
+                with mock.patch.object(update, "__version__", INSTALLED):
+                    with mock.patch.object(update, "_stream") as stream:
+                        log = list(update.apply_update())
 
             stream.assert_not_called()
             self.assertIn("uncommitted", log[0])
@@ -110,7 +159,18 @@ class ApplyUpdateTest(unittest.TestCase):
         stream.assert_not_called()
         self.assertIn("git checkout", log[0])
 
-    def test_pulls_then_reinstalls_the_extras_already_present(self):
+    def test_refuses_when_already_on_the_newest_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            clone = make_checkout(Path(directory), release=None)
+            with mock.patch.object(update, "find_repo", return_value=clone):
+                with mock.patch.object(update, "__version__", INSTALLED):
+                    with mock.patch.object(update, "_stream") as stream:
+                        log = list(update.apply_update())
+
+            stream.assert_not_called()
+            self.assertIn("newest release", log[0])
+
+    def test_moves_to_the_tag_then_reinstalls_the_extras_already_present(self):
         commands = []
 
         def fake_stream(command, cwd):
@@ -120,26 +180,36 @@ class ApplyUpdateTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             clone = make_checkout(Path(directory))
+            git(clone, "fetch", "--tags", "Murmur")
             with mock.patch.object(update, "find_repo", return_value=clone):
-                with mock.patch.object(update, "_stream", fake_stream):
-                    with mock.patch.object(update, "_installed_extras", return_value=["whisper", "cuda"]):
-                        log = list(update.apply_update())
+                with mock.patch.object(update, "__version__", INSTALLED):
+                    with mock.patch.object(update, "_stream", fake_stream):
+                        with mock.patch.object(
+                            update, "_installed_extras", return_value=["whisper", "cuda"]
+                        ):
+                            log = list(update.apply_update())
 
         self.assertEqual(log[-1], update.DONE_MARKER)
         self.assertEqual(commands[0][:2], ["git", "-C"])
-        self.assertIn("pull", commands[0])
+        # Jusqu'au tag, pas jusqu'à la pointe de la branche : le commit non
+        # publié qui suit v1.0.1 ne doit pas arriver chez un utilisateur.
+        self.assertEqual(commands[0][-3:], ["merge", "--ff-only", "v1.0.1"])
+        self.assertNotIn("pull", commands[0])
+        self.assertIn("-e", commands[1])
         self.assertEqual(commands[1][-3:], ["install", "-e", ".[whisper,cuda]"])
 
-    def test_a_failed_pull_installs_nothing(self):
+    def test_a_failed_move_installs_nothing(self):
         def failing_stream(command, cwd):
             yield "fatal: could not read from remote"
             return 1
 
         with tempfile.TemporaryDirectory() as directory:
             clone = make_checkout(Path(directory))
+            git(clone, "fetch", "--tags", "Murmur")
             with mock.patch.object(update, "find_repo", return_value=clone):
-                with mock.patch.object(update, "_stream", failing_stream):
-                    log = list(update.apply_update())
+                with mock.patch.object(update, "__version__", INSTALLED):
+                    with mock.patch.object(update, "_stream", failing_stream):
+                        log = list(update.apply_update())
 
         self.assertIn("Nothing was installed", log[-1])
         self.assertNotIn(update.DONE_MARKER, log)

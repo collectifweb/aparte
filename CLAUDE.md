@@ -272,8 +272,24 @@ phrases voisines.
   n'existe que dans ce processus et que l'application relit le fichier de
   configuration ; **le repli local doit rester intact et testé**, c'est le chemin
   que personne n'exerce à la main et qui pourrirait sans qu'on le voie.
-- `/api/update/apply` lance `git pull` puis `pip install`. Toute nouvelle route
-  qui exécute une commande passe par la même porte, sans exception.
+- `/api/update/apply` lance un `git merge --ff-only` puis `pip install`. Toute
+  nouvelle route qui exécute une commande passe par la même porte, sans
+  exception.
+- **L'unité de mise à jour est un tag de version, jamais la pointe de la
+  branche.** `update.py` compare `__version__` au plus haut tag `vX.Y.Z`
+  accessible depuis la branche suivie, et avance jusqu'à **ce tag**. Compter les
+  commits notifiait une mise à jour pour un `docs:` et faisait réinstaller
+  l'application pour une virgule ; pire, ça pouvait livrer une fonctionnalité à
+  moitié écrite. Être en avance sur le dernier tag se lit « à jour » : c'est
+  voulu, du travail non publié n'est pas une mise à jour.
+- Les tags se lisent avec **git, pas avec l'API d'un hébergeur**. L'installation
+  est déjà un clone, les notes de version sont déjà dans `CHANGELOG.md` :
+  interroger un service web ajouterait une dépendance réseau et un mode de panne
+  pour une information que le dépôt porte déjà. Le `fetch` prend `--tags`, sinon
+  les versions n'arrivent pas.
+- **La version se déclare à deux endroits** : `src/aparte/__init__.py` et
+  `pyproject.toml`. Les désynchroniser fait mentir le panneau de mise à jour,
+  qui lit `__version__`.
 
 ## Git
 

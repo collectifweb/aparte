@@ -681,16 +681,17 @@ async function loadUpdate(fromRemote) {
 function renderUpdate(data) {
   const box = $("#update-body");
   if (!box) return;
-  const behind = data.behind || 0;
   const fresh = data.state === "current";
+  // Une version, pas un nombre de commits : ce qui n'a pas été publié n'est pas
+  // une mise à jour.
   const label = data.state !== "available"
     ? t("update." + data.state, { branch: data.branch || "" })
-    : behind === 1 ? t("update.one") : t("update.many", { n: behind });
+    : t("update.available", { release: (data.release || "").replace(/^v/, "") });
 
   let html = `<div class="diag-item">
       <span class="diag-icon ${fresh ? "ok" : "warn"}">${fresh ? "✓" : "!"}</span>
       <div class="diag-main"><div class="diag-label">${escapeHtml(label)}</div>`;
-  if (data.head) html += `<div class="diag-detail">${escapeHtml(t("update.head", { head: data.head }))}</div>`;
+  if (data.version) html += `<div class="diag-detail">${escapeHtml(t("update.version", { version: data.version }))}</div>`;
   if (data.detail) html += `<div class="diag-detail">${escapeHtml(data.detail)}</div>`;
   if (data.commits && data.commits.length) {
     html += `<ul class="update-commits">${data.commits.map((c) => `<li>${escapeHtml(c)}</li>`).join("")}</ul>`;

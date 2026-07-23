@@ -1,9 +1,17 @@
 """Update Aparté in place, from the git checkout it runs from.
 
 There is no release binary to download and no update server: an install is a
-clone plus `pip install -e .`, so an update is `git pull` plus the same install
-command. What needs care is refusing the situations where pulling would lose
-work or silently do nothing.
+clone plus `pip install -e .`, so an update is a fast-forward plus the same
+install command. What needs care is refusing the situations where moving would
+lose work or silently do nothing.
+
+**Releases, not commits.** The unit of update is a version tag, never the tip of
+the tracked branch. A `docs:` typo pushed to `main` is not something to notify
+anyone about, and landing on an arbitrary commit hands out a half-finished
+feature. Tags are read with git, not from a hosting API: the install is already
+a clone, the release notes already live in `CHANGELOG.md`, and asking a web
+service would add a network dependency and a failure mode for information the
+repository already carries.
 
 Nothing here touches the network unless it is asked to: `check_update()` only
 fetches when told to, so opening the diagnostics panel stays offline.
@@ -12,11 +20,13 @@ fetches when told to, so opening the diagnostics panel stays offline.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from collections.abc import Iterator
 from pathlib import Path
 
+from . import __version__
 from .diagnostics import _has_module
 
 # Written on its own line at the end of a successful update, so the browser can
@@ -44,54 +54,97 @@ def _git(repo: Path, *args: str, timeout: int = GIT_TIMEOUT) -> subprocess.Compl
     )
 
 
+_VERSION_TAG = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+
+
+def _version_key(tag: str) -> tuple[int, int, int] | None:
+    """A `vX.Y.Z` tag as something comparable, or None when it is not one.
+
+    Sorting the strings would put `v1.10.0` before `v1.9.0`, and anything that
+    is not a plain release — `v2.0.0-rc1`, a topic tag — is simply not a
+    candidate rather than a special case to handle.
+    """
+    match = _VERSION_TAG.match(tag.strip())
+    return tuple(int(part) for part in match.groups()) if match else None
+
+
+def _latest_release(repo: Path, upstream_ref: str) -> str | None:
+    """The newest version tag reachable from the tracked branch.
+
+    `--merged` matters: a tag pointing at a branch nobody follows is not a
+    release this checkout can fast-forward to.
+    """
+    listed = _git(repo, "tag", "--list", "v*", "--merged", upstream_ref)
+    if listed.returncode != 0:
+        return None
+    tags = [(key, tag) for tag in listed.stdout.split() if (key := _version_key(tag))]
+    return max(tags)[1] if tags else None
+
+
 def check_update(fetch: bool = False) -> dict:
     """Describe what an update would do right now, without doing any of it.
 
     States: manual (not a checkout), no_upstream, offline, error, current,
     available. `dirty` is reported alongside rather than as a state — the user
-    still wants to see that four commits are waiting, even when the checkout is
-    too dirty to pull them.
+    still wants to see that a release is waiting, even when the checkout is too
+    dirty to move to it.
+
+    Being ahead of the newest tag reads as `current`, and that is deliberate:
+    unreleased commits are work in progress, not an update.
     """
     repo = find_repo()
     if repo is None:
-        return {"state": "manual"}
+        return {"state": "manual", "version": __version__}
 
     try:
         upstream = _git(repo, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
         if upstream.returncode != 0:
             branch = _git(repo, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
-            return {"state": "no_upstream", "repo": str(repo), "branch": branch}
+            return {
+                "state": "no_upstream",
+                "repo": str(repo),
+                "branch": branch,
+                "version": __version__,
+            }
 
         # The remote is whatever this branch actually tracks. Do not assume
         # "origin": on the author's machine it is called "Murmur".
         upstream_ref = upstream.stdout.strip()
         remote = upstream_ref.split("/", 1)[0]
-        head = _git(repo, "log", "-1", "--format=%h %s").stdout.strip()
         dirty = bool(_git(repo, "status", "--porcelain").stdout.strip())
 
         if fetch:
-            fetched = _git(repo, "fetch", "--quiet", remote, timeout=FETCH_TIMEOUT)
+            # `--tags`: a plain branch fetch does not bring every tag along, and
+            # tags are what a release is.
+            fetched = _git(repo, "fetch", "--quiet", "--tags", remote, timeout=FETCH_TIMEOUT)
             if fetched.returncode != 0:
                 detail = fetched.stderr.strip().splitlines()
                 return {
                     "state": "offline",
                     "repo": str(repo),
-                    "head": head,
+                    "version": __version__,
                     "dirty": dirty,
                     "detail": detail[-1] if detail else "",
                 }
 
-        commits = _git(repo, "log", "--format=%h %s", f"HEAD..{upstream_ref}").stdout.splitlines()
+        release = _latest_release(repo, upstream_ref)
+        installed = _version_key(f"v{__version__}")
+        newer = bool(release and installed and _version_key(release) > installed)
+        commits = (
+            _git(repo, "log", "--format=%h %s", f"HEAD..{release}").stdout.splitlines()
+            if newer
+            else []
+        )
     except (OSError, subprocess.SubprocessError) as exc:
-        return {"state": "error", "detail": str(exc)}
+        return {"state": "error", "detail": str(exc), "version": __version__}
 
     return {
-        "state": "available" if commits else "current",
+        "state": "available" if newer else "current",
         "repo": str(repo),
         "upstream": upstream_ref,
-        "head": head,
+        "version": __version__,
+        "release": release,
         "dirty": dirty,
-        "behind": len(commits),
         "commits": commits[:20],
     }
 
@@ -150,14 +203,23 @@ def apply_update() -> Iterator[str]:
     if status["state"] == "error":
         yield f"Cannot read the checkout: {status.get('detail', '')}"
         return
+    if status["state"] == "current":
+        yield f"Aparté {status.get('version', '')} is already the newest release."
+        return
     if status.get("dirty"):
         yield "The checkout has uncommitted changes — commit or stash them first."
-        yield "Pulling now would set them aside, and git does not always put them back."
+        yield "Moving now would set them aside, and git does not always put them back."
         return
 
     repo = Path(status["repo"])
-    if (yield from _stream(["git", "-C", str(repo), "pull", "--ff-only"], repo)) != 0:
-        yield "Stopped: git pull failed. Nothing was installed."
+    release = status.get("release")
+    if not release:
+        yield "No release tag on the tracked branch — nothing to update to."
+        return
+    # Fast-forward to the tag, not to the tip of the branch: what has not been
+    # released has no business landing on somebody's machine.
+    if (yield from _stream(["git", "-C", str(repo), "merge", "--ff-only", release], repo)) != 0:
+        yield f"Stopped: could not fast-forward to {release}. Nothing was installed."
         return
 
     extras = _installed_extras()

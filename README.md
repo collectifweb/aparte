@@ -115,10 +115,18 @@ aparte install-desktop   # add the app icon + menu entry (use --print to preview
 ### Updating an existing install
 
 Open the desktop app, click **Setup**, and use the **Update** section at the
-bottom: it checks the remote when you press Check, shows what is waiting, pulls
-it, reinstalls, and restarts Aparté. It refuses — and says why — when the folder
-has uncommitted changes, when the branch tracks no remote, or when Aparté wasn't
-installed from a clone.
+bottom: it checks the remote when you press Check, tells you which version is
+waiting, moves to it, reinstalls, and restarts Aparté. It refuses — and says why
+— when the folder has uncommitted changes, when the branch tracks no remote, or
+when Aparté wasn't installed from a clone.
+
+**It follows releases, not commits.** The panel only offers you a published
+version — a `vX.Y.Z` tag — and updating fast-forwards to that tag rather than to
+whatever happens to be at the tip of `main`. A typo fix pushed between two
+releases will not prompt you to reinstall, and you will never land mid-way
+through a feature that is still being written. If you are running a checkout
+that sits ahead of the newest tag, the panel says you are up to date, because
+unreleased commits are work in progress rather than an update.
 
 To do it by hand instead, pull the latest code **in the folder you already
 cloned** and re-run the script — don't clone a second copy:

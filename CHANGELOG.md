@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [1.1.0] - 2026-07-23
+
+### Changed
+
+- **Updates follow releases, not commits.** The Update panel used to count the
+  commits between your copy and the remote, so a `docs:` typo pushed to `main`
+  announced "1 new commit available" and offered a full `git pull` plus
+  `pip install` for a comma — and accepting it could land you mid-way through a
+  feature still being written. It now compares your installed version against
+  the newest `vX.Y.Z` tag on the tracked branch, tells you *which version* is
+  waiting, and fast-forwards to that tag rather than to the tip of the branch.
+
+  Tags are read with git, not through a hosting API: the install is already a
+  clone and the release notes already live in this file, so asking a web service
+  would add a network dependency and a failure mode for information the
+  repository already carries. The check is still offline until you press
+  **Check**.
+
+  If your checkout sits ahead of the newest tag, the panel now says you are up
+  to date — unreleased commits are work in progress, not an update.
+
 ## [1.0.1] - 2026-07-23
 
 A dictation that produced notifications and no text. Three separate causes, each
@@ -422,7 +443,8 @@ First public release — a local-first dictation app for Linux.
 - MIT license, contributing guide, and CI running the test suite on Python
   3.10–3.13.
 
-[Unreleased]: https://github.com/collectifweb/aparte/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/collectifweb/aparte/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/collectifweb/aparte/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/collectifweb/aparte/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/collectifweb/aparte/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/collectifweb/aparte/compare/v0.1.0...v0.2.0
