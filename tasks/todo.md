@@ -561,14 +561,33 @@ est déjà traité en ne touchant pas à l'affichage.
 4. **Serveur éteint** = pas de fenêtre, comportement d'aujourd'hui. Acceptable,
    mais à dire dans la documentation plutôt qu'à laisser deviner.
 
-### Question ouverte, à trancher avant de coder
+### Question tranchée le 22/07 : oui, et faite tout de suite
 
-**Déléguer au serveur la transcription finale du raccourci ?** Aujourd'hui chaque
-dictée au raccourci charge son propre modèle dans un processus neuf — environ une
-seconde à chaque fois, mesurée à chaud. Si `toggle` postait son audio au serveur
-quand celui-ci est joignable, on gagnerait cette seconde **et** le risque n° 3
-disparaîtrait. Mais ça touche un chemin qui marche aujourd'hui, et il faudrait
-garder le repli hors ligne intact. À décider avec Alexandre, pas en silence.
+Le raccourci passe désormais par l'application déjà lancée quand elle répond.
+**0,26 s contre 1,53 s** sur dix secondes d'audio, trois essais chacun. Le risque
+n° 3 ci-dessus (deux modèles sur le GPU) disparaît donc avant même qu'on
+construise la fenêtre. Fait dans `transcribe_via_running_app()`, câblé au point
+d'entrée unique `transcribe_path()` de `cli.py`. Le repli local est intact et
+couvert par `DelegationFallbackTest` — c'est le chemin que personne n'exerce à la
+main, donc celui qui pourrirait en silence.
+
+**Mesure ratée, et pourquoi la noter.** La première comparaison donnait la
+délégation cinq fois **plus lente** (8 s contre 1,5 s). L'erreur était dans le
+protocole, pas dans le code : le processus de contrôle forçait `language="fr"`
+tandis que le serveur, sur une configuration par défaut, avait `language: null`.
+Sans langue imposée, Whisper part en détection, se trompe sur du bruit de
+synthèse et déroule du texte dans une autre langue. Le même fichier, dans le même
+processus : **0,26 s en français imposé, 7,42 s sans**. À conditions égales, la
+délégation gagne. Toute mesure de transcription doit fixer la langue des deux
+côtés, sinon elle mesure la détection de langue.
+
+**À creuser, séparément.** La configuration d'Alexandre porte `language: null`.
+Les 7,42 s ci-dessus sont un pire cas sur du bruit — sur de la vraie parole
+française, la détection trouve juste et coûte peu. Mais c'est exactement le
+réglage que `À ne pas reprendre` désigne comme la faiblesse principale du
+concurrent : « un seul modèle multilingue, aucun moyen de forcer une langue,
+bascule vers l'anglais quand l'audio est moyen ». Lui proposer de mettre
+« Français » dans les Réglages.
 
 ---
 

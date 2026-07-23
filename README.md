@@ -433,6 +433,19 @@ so, without a GPU this keeps one core busy for as long as you speak — untick t
 setting if the machine struggles. As a side effect, the first preview loads the
 Whisper model while you are still talking, so the wait after you stop is shorter.
 
+### The shortcut reuses the running app's model
+
+Pressing the global shortcut used to start a fresh process that read the Whisper
+model off disk on every dictation, while the desktop app already held it in
+memory. The shortcut now hands its audio to that running app when one answers on
+the loopback address: 0.26 s instead of 1.53 s for the same ten seconds of audio.
+
+Nothing leaves the machine — it is the same local address the browser talks to.
+When the desktop app is not running, the shortcut loads its own model exactly as
+before, so dictation never depends on it. Delegation is also skipped when an
+`APARTE_*` transcription override is set in the environment, since the running
+app reads the config file and would ignore it.
+
 ### Invented subtitle credits are removed
 
 Whisper was trained on subtitled video. On silence — the tail of a dictation, a

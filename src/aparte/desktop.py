@@ -9,12 +9,12 @@ import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 
 from . import history
 from .audio import list_microphones
 from .clipboard import copy_text, paste_text
-from .config import Settings, load_config, positive_int, update_config
+from .config import Settings, get_env, load_config, positive_int, update_config
 from .diagnostics import collect_diagnostics
 from .polish import PolishOptions, build_polisher
 from .transcription import build_transcriber
@@ -108,6 +108,56 @@ def already_running(host: str, port: int, timeout: float = 2.0) -> str | None:
     except (OSError, ValueError):
         return None
     return url if isinstance(payload, dict) and "allowed_models" in payload else None
+
+
+# Réglages qui, posés dans l'environnement, n'existent que dans le processus qui
+# les a reçus. L'application déjà lancée, elle, relit le fichier de configuration :
+# lui confier l'audio ferait passer ces surcharges à la trappe, en silence.
+_ENV_OVERRIDES = ("TRANSCRIBER", "MODEL", "LANGUAGE", "DEVICE", "COMPUTE_TYPE", "WHISPER_CPP")
+
+# Une longue dictée peut prendre du temps ; attendre reste préférable à repartir
+# de zéro, puisque le repli rechargerait le modèle pour refaire le même travail.
+DELEGATE_TIMEOUT = 300.0
+
+
+def transcribe_via_running_app(
+    audio_path: Path,
+    model: str,
+    host: str = "127.0.0.1",
+    port: int = 8765,
+) -> str | None:
+    """Faire transcrire par l'application déjà lancée. None si c'est impossible.
+
+    Une dictée au raccourci démarre sinon un processus neuf qui recharge Whisper
+    depuis le disque à chaque fois — environ 1,3 s mesurées à chaud — alors que
+    le serveur de bureau, juste à côté, garde le modèle en mémoire. Quand il n'est
+    pas là, l'appelant charge le sien comme avant.
+
+    Une chaîne vide est une réponse valide : elle veut dire « aucune parole ». Le
+    None est réservé à « je n'ai pas pu demander ».
+    """
+    if any(get_env(name) for name in _ENV_OVERRIDES):
+        return None
+    url = already_running(host, port)
+    if url is None:
+        return None
+    try:
+        body = audio_path.read_bytes()
+    except OSError:
+        return None
+    request = urllib.request.Request(
+        f"{url}/api/transcribe?model={quote(model)}",
+        data=body,
+        method="POST",
+        headers={"Content-Type": "audio/wav"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=DELEGATE_TIMEOUT) as response:
+            payload = json.loads(response.read())
+    except (OSError, ValueError):
+        return None
+    text = payload.get("text") if isinstance(payload, dict) else None
+    return text if isinstance(text, str) else None
 
 
 def _available_port(host: str, preferred_port: int) -> int:

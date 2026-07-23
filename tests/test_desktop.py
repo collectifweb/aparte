@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import socket
@@ -12,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from aparte import cli, desktop
 from aparte.config import Settings
 from aparte.desktop import ASSETS_DIR, STATIC_FILES, already_running, handler_factory
 
@@ -231,6 +233,105 @@ class ConfigEndpointTest(unittest.TestCase):
                 self.assertIs(json.loads(res["body"])["config"]["nonbreaking_spaces"], False)
                 self.assertIs(json.loads(path.read_text(encoding="utf-8"))["nonbreaking_spaces"], False)
                 self.assertIs(json.loads(make_request("GET", "/api/config")["body"])["nonbreaking_spaces"], False)
+
+
+class DelegationTest(unittest.TestCase):
+    """Une dictée au raccourci démarre un processus neuf qui recharge Whisper —
+    1,3 s à chaque fois, mesurées le 22/07 — pendant que l'application de bureau,
+    à côté, garde le modèle en mémoire. Elle lui passe donc l'audio quand elle
+    répond, et charge le sien quand elle ne répond pas."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.audio = Path(self.directory.name) / "dictee.wav"
+        self.audio.write_bytes(b"RIFF....WAVEfake")
+        environment = {
+            "APARTE_CONFIG": str(Path(self.directory.name) / "config.json"),
+            "MURMUR_CONFIG": "",
+        }
+        # Les surcharges d'environnement doivent partir : plusieurs d'entre elles
+        # désactivent volontairement la délégation, et celles de la vraie session
+        # feraient échouer les tests pour la mauvaise raison.
+        environment.update({f"APARTE_{name}": "" for name in desktop._ENV_OVERRIDES})
+        environment.update({f"MURMUR_{name}": "" for name in desktop._ENV_OVERRIDES})
+        patcher = mock.patch.dict(os.environ, environment)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _serve(self, text):
+        transcriber = SimpleNamespace(transcribe=lambda path: SimpleNamespace(text=text))
+        patcher = mock.patch("aparte.desktop.build_transcriber", return_value=transcriber)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler_factory(Settings()))
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return server.server_port
+
+    def test_the_running_app_does_the_work(self):
+        port = self._serve("la dictée transcrite ailleurs")
+        got = desktop.transcribe_via_running_app(self.audio, "small", port=port)
+        self.assertEqual(got, "la dictée transcrite ailleurs")
+
+    def test_silence_comes_back_as_an_empty_string_not_as_a_failure(self):
+        """Sans cette distinction, une dictée muette serait refaite en local pour
+        rien — le modèle rechargé pour reproduire le même vide."""
+        port = self._serve("")
+        got = desktop.transcribe_via_running_app(self.audio, "small", port=port)
+        self.assertEqual(got, "")
+        self.assertIsNotNone(got)
+
+    def test_nothing_listening_means_the_caller_loads_its_own(self):
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            free_port = probe.getsockname()[1]
+        self.assertIsNone(desktop.transcribe_via_running_app(self.audio, "small", port=free_port))
+
+    def test_an_environment_override_keeps_the_work_local(self):
+        """APARTE_LANGUAGE n'existe que dans ce processus ; l'application lancée
+        relit le fichier de configuration et ignorerait la surcharge."""
+        port = self._serve("ne devrait pas servir")
+        with mock.patch.dict(os.environ, {"APARTE_LANGUAGE": "en"}):
+            self.assertIsNone(desktop.transcribe_via_running_app(self.audio, "small", port=port))
+
+    def test_a_missing_audio_file_is_not_a_crash(self):
+        port = self._serve("peu importe")
+        missing = Path(self.directory.name) / "disparu.wav"
+        self.assertIsNone(desktop.transcribe_via_running_app(missing, "small", port=port))
+
+
+class DelegationFallbackTest(unittest.TestCase):
+    """Le chemin de secours ne sert presque jamais, donc personne ne le verrait
+    se casser. C'est exactement pour ça qu'il est testé."""
+
+    def _transcribe(self, delegated):
+        settings = Settings()
+        local = SimpleNamespace(transcribe=lambda path: SimpleNamespace(text="transcrit en local"))
+        with mock.patch("aparte.cli.transcribe_via_running_app", return_value=delegated):
+            with mock.patch("aparte.cli.build_transcriber", return_value=local) as build:
+                got = cli.transcribe_path(Path("dictee.wav"), argparse.Namespace(polish=False), settings)
+        return got, build
+
+    def test_it_falls_back_when_the_app_is_not_running(self):
+        got, build = self._transcribe(None)
+        self.assertEqual(got, "transcrit en local")
+        build.assert_called_once()
+
+    def test_it_does_not_load_a_second_model_when_the_app_answered(self):
+        got, build = self._transcribe("transcrit par l'application")
+        self.assertEqual(got, "transcrit par l'application")
+        build.assert_not_called()
+
+    def test_a_text_file_never_goes_through_the_app(self):
+        """Importer un .txt n'est pas une transcription : rien à déléguer."""
+        local = SimpleNamespace(transcribe=lambda path: SimpleNamespace(text="collé depuis un fichier"))
+        with mock.patch("aparte.cli.transcribe_via_running_app") as delegate:
+            with mock.patch("aparte.cli.build_transcriber", return_value=local):
+                got = cli.transcribe_path(Path("notes.txt"), argparse.Namespace(polish=False), Settings())
+        self.assertEqual(got, "collé depuis un fichier")
+        delegate.assert_not_called()
 
 
 class LivePreviewTest(unittest.TestCase):

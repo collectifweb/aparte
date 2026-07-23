@@ -121,6 +121,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A shortcut dictation reuses the running app's Whisper model instead of
+  loading its own.** Pressing the global shortcut used to start a fresh process
+  that read the model off disk every single time, while the desktop app sitting
+  next to it already held that model in memory. It now hands the audio to the
+  running app when one answers on the loopback address: **0.26 s instead of
+  1.53 s** on the same ten seconds of audio, measured three times each. Nothing
+  leaves the machine, and nothing changes when the app is not running — the
+  shortcut loads its own model exactly as before, and that fallback is covered by
+  tests precisely because it is the path nobody exercises by hand. Delegation is
+  also skipped whenever an `APARTE_*` transcription override is set in the
+  environment, since those exist only in the process that received them and the
+  running app would silently ignore them.
 - **"Paste" is now called "Insert".** The button never pasted into the editor —
   it types the text into whichever application was in front, which is what
   Settings already called "Insertion". Status messages follow.

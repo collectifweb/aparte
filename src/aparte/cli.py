@@ -8,7 +8,7 @@ from . import history
 from .audio import play_beep, record_wav
 from .clipboard import copy_text, paste_text
 from .config import Settings, load_config, write_default_config
-from .desktop import run_desktop
+from .desktop import run_desktop, transcribe_via_running_app
 from .hotkey import (
     DEFAULT_KEY,
     DEFAULT_NAME,
@@ -246,15 +246,20 @@ def polish_text(text: str, args: argparse.Namespace, settings: Settings) -> str:
 
 def transcribe_path(path: Path, args: argparse.Namespace, settings: Settings) -> str:
     backend = "text" if path.suffix.lower() in {".txt", ".md"} else settings.transcriber
-    transcriber = build_transcriber(
-        backend=backend,
-        model=settings.model,
-        language=settings.language,
-        whisper_cpp=settings.whisper_cpp,
-        device=settings.device,
-        compute_type=settings.compute_type,
-    )
-    transcript = transcriber.transcribe(path).text
+    # L'application de bureau garde le modèle en mémoire ; ce processus-ci le
+    # rechargerait. Quand elle répond, on lui passe l'audio — sinon rien ne
+    # change et on charge le nôtre, exactement comme avant.
+    transcript = None if backend == "text" else transcribe_via_running_app(path, settings.model)
+    if transcript is None:
+        transcriber = build_transcriber(
+            backend=backend,
+            model=settings.model,
+            language=settings.language,
+            whisper_cpp=settings.whisper_cpp,
+            device=settings.device,
+            compute_type=settings.compute_type,
+        )
+        transcript = transcriber.transcribe(path).text
     if getattr(args, "polish", False):
         return polish_text(transcript, args, settings)
     return transcript

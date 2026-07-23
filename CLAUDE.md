@@ -176,6 +176,16 @@ phrases voisines.
   L'aperçu (`?preview=1`) prend le verrou **sans attendre** et rend
   `{"text": null, "busy": true}` s'il est occupé — le passer en bloquant ferait
   patienter la finale derrière une passe devenue inutile.
+- `transcribe_via_running_app()` fait transcrire par l'application de bureau déjà
+  lancée quand elle répond, au lieu de recharger un modèle dans un processus neuf
+  (0,26 s contre 1,53 s, mesuré le 22/07). Trois règles à ne pas casser :
+  **une chaîne vide est une réponse valide** (« aucune parole ») et seul `None`
+  veut dire « je n'ai pas pu demander » — les confondre referait le travail pour
+  rien ; **la délégation est désactivée dès qu'une surcharge `APARTE_*` de
+  transcription est dans l'environnement** (`_ENV_OVERRIDES`), parce qu'elle
+  n'existe que dans ce processus et que l'application relit le fichier de
+  configuration ; **le repli local doit rester intact et testé**, c'est le chemin
+  que personne n'exerce à la main et qui pourrirait sans qu'on le voie.
 - `/api/update/apply` lance `git pull` puis `pip install`. Toute nouvelle route
   qui exécute une commande passe par la même porte, sans exception.
 
