@@ -646,12 +646,42 @@ l'application la connaît — elle est à l'écran, dans l'éditeur, au moment o
 se produit. La capture se fait donc **depuis l'éditeur**, quand l'utilisateur
 corrige le mot. Les Réglages ne servent plus qu'à relire et à supprimer.
 
-**Expérience à faire avant de construire « Mes mots », et c'est Alexandre qui
-l'a en main.** Le paramètre est vérifié, le gain ne l'est pas : le mesurer demande
-de la vraie parole avec son vrai vocabulaire. Dicter deux fois « je travaille
-avec Playwright et Wayland », avec et sans la liste. **Si le gain n'est pas net,
-on ne construit pas « Mes mots »** et on garde uniquement la capture depuis
-l'éditeur.
+**Expérience faite le 22/07 : le gain est net, « Mes mots » se construit.** Une
+seule dictée réelle, transcrite six fois (sans liste / `hotwords` /
+`initial_prompt`, chaque fois en Auto et en français imposé). Phrase bâtie sur
+les erreurs déjà présentes dans la table de corrections d'Alexandre, donc des
+échecs observés et non choisis pour l'occasion.
+
+| Sans liste | Avec `hotwords` |
+|---|---|
+| réglis **pipe wire** pour **mail poète** | réglis **PipeWire** pour **Mailpoet** |
+| Sur le projet de **collectif web** | Sur le projet de **Collectif WEB** |
+
+Trois erreurs, trois corrigées, la casse d'un nom propre comprise.
+
+**`hotwords` retenu plutôt qu'`initial_prompt`.** Les deux donnent le vocabulaire
+juste, mais l'amorce a introduit une faute ailleurs — « et **demander** à Claude »
+au lieu de « demandé », dans les deux réglages de langue. Elle est préfixée au
+décodage et influence toute la phrase ; `hotwords` ne touche qu'au vocabulaire.
+Sa consigne se raconte aussi en une phrase : « écris les mots que tu emploies ».
+
+**Trois surprises à ne pas perdre :**
+
+1. **Whisper écrit déjà « Playwright », « Wayland » et « Claude » sans aide.**
+   Les lignes `play right`, `way land` et `cloud` de la table n'ont pas servi sur
+   cet enregistrement. Elles restent utiles ailleurs, mais la table est plus
+   grande que nécessaire — ne pas la présenter comme le premier outil.
+2. **`hotwords` fait halluciner sur du silence** : une liste passée sur un wav
+   muet a produit « PipeWire.com ». `hallucinations.py` ne l'attrapera pas, il
+   connaît les génériques de sous-titrage, pas le vocabulaire de l'utilisateur.
+   À traiter à la construction.
+3. **`hotwords` n'existe que dans `faster-whisper`.** `openai-whisper` et
+   `whisper.cpp` ne l'ont pas : le réglage doit s'effacer sans bruit sur les
+   autres moteurs, pas promettre ce qu'il ne peut pas tenir.
+
+La table de corrections ne disparaît pas : `hotwords` aide quand le son est
+ambigu, pas contre une erreur commise avec assurance. Les deux réglages du plan
+restent justifiés.
 
 ### La restructuration proposée
 
@@ -673,14 +703,62 @@ projet de garder les contrôles natifs natifs. Pas d'onglets maison.
 
 ### Ordre de bataille quand on s'y mettra
 
-- [ ] L'expérience `hotwords` d'Alexandre — elle décide si « Mes mots » existe
-- [ ] La perte silencieuse d'`app.js:354` : refuser en pointant la ligne, ou passer à une saisie par entrée
+- [x] L'expérience `hotwords` d'Alexandre — faite le 22/07, gain net, « Mes mots »
+      se construit avec `hotwords` (voir ci-dessus)
+- [x] « Mes mots » branché de bout en bout : `config.py`, `EDITABLE_FIELDS`,
+      `build_transcriber`, les deux points d'appel, 4 tests
+- [x] La perte silencieuse d'`app.js:354` : refusée en pointant le numéro de ligne
 - [ ] Capture d'une correction **depuis l'éditeur**, pas depuis les Réglages
-- [ ] Les six renommages, `i18n.js` en FR **et** en EN, `aria` compris
-- [ ] Le reclassement des groupes et les deux `<details>`
-- [ ] L'erreur d'enregistrement ramenée dans le pied du tiroir
-- [ ] `aria-describedby` sur les champs de vocabulaire — leur aide est aujourd'hui dans un `<small>` voisin, non rattaché
+- [x] Les six renommages, `i18n.js` en FR **et** en EN, `aria` compris
+- [x] Le reclassement des groupes et les deux `<details>`
+- [x] L'erreur d'enregistrement ramenée dans le pied du tiroir
+- [x] `aria-describedby` sur les champs de vocabulaire — et sur tous les autres :
+      l'aide était **dans** le `<label>`, donc dans le nom accessible du champ
 - [ ] Passe `/impeccable` sur le rendu, puis re-critique pour voir bouger le 20/40
+
+### Livré le 22/07 — le tiroir refondu
+
+Vérifié au navigateur sans tête (brave + CDP, script en scratchpad), dans les
+deux thèmes :
+
+| Mesure | Avant | Après |
+|---|---|---|
+| Champs à affronter à l'ouverture | 18 | **11** |
+| Hauteur du panneau | 2261 px | **1591 px** |
+| Nom accessible de « Nombres dictés » | le libellé **+ ses trois phrases d'aide** | « Nombres dictés » |
+
+Plus : 204 tests Python au vert, 11 vérifications de l'analyse des lignes de
+vocabulaire dans Node, et l'aller-retour de `hotwords` par `/api/config` sur un
+vrai serveur.
+
+**Trois choses décidées en cours de route, non prévues au plan.**
+
+1. **L'aide était dans le `<label>`, pas à côté.** Le nom accessible de chaque
+   menu déroulant contenait donc tout son texte d'aide — un lecteur d'écran
+   annonçait « Nombres dictés, "vingt-deux personnes" devient "22 personnes",
+   les heures et les pourcentages… ». Les champs sont passés de
+   `<label class="field">` enveloppant tout à `<div class="field">` + `<label
+   for>` + aide rattachée par `aria-describedby`. Le champ Microphone suivait
+   déjà ce patron : c'est lui qu'on a généralisé, pas un patron inventé.
+2. **Les raccourcis dictés de plusieurs lignes étaient cassés depuis toujours.**
+   Le même `if (i === -1) continue` : la signature donnée en exemple sous le
+   champ perdait toutes ses lignes après la première. D'où deux règles au lieu
+   d'une — dans **Corrections**, toute ligne sans `=` est refusée ; dans
+   **Raccourcis dictés**, une ligne sans `=` continue l'entrée précédente, et
+   n'est refusée que si aucune entrée n'a commencé. Les deux champs ne portent
+   pas la même donnée : une correction tient toujours sur une ligne.
+3. **`hotwords` fait pencher Whisper, y compris à tort.** Vu à l'essai à blanc :
+   sur un wav muet, une liste contenant « PipeWire » a produit « PipeWire.com ».
+   Noté dans le README ; à surveiller à l'usage.
+
+**Constat à trancher séparément : l'interface n'applique pas sa propre
+typographie.** Le bloc français d'`i18n.js` contient **zéro espace insécable** —
+46 occurrences de `« `, ` »` et ` :` avec une espace ordinaire — et des
+apostrophes droites partout. C'est l'argument n° 1 du produit démenti par sa
+vitrine (PRODUCT.md, principe 1). Seules les chaînes écrites dans ce lot ont été
+corrigées ; le reste est un chantier mécanique à part, avec un piège connu — la
+règle « pas d'espace avant un `:` suivi d'un chiffre ou d'un `/` » vaut ici
+aussi, sinon les URL et `~/.config` affichés dans les aides sont cassés.
 
 ### Ne pas perdre en route
 

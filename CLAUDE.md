@@ -152,6 +152,18 @@ phrases voisines.
   compris les `aria-label` et les `title` (via `data-i18n-aria` /
   `data-i18n-title`). Un libellé écrit en dur dans `index.html` est un bogue :
   un lecteur d'écran configuré en français annoncerait de l'anglais.
+- Le texte d'aide d'un champ se pose **hors** de son `<label>`, et se rattache
+  par `aria-describedby`. Dans le label, il entre dans le **nom accessible** du
+  contrôle : « Nombres dictés » s'annonçait suivi de ses trois phrases d'aide.
+  Le patron est `<div class="field">` + `<label for>` + contrôle + `<small id>`.
+- Une ligne de vocabulaire sans `=` n'est **jamais** avalée en silence. Dans
+  « Corrections » elle est refusée en pointant son numéro ; dans « Raccourcis
+  dictés » elle continue l'entrée précédente, parce qu'une signature tient sur
+  plusieurs lignes — et n'est refusée que si aucune entrée n'a commencé. Les
+  deux champs ne portent pas la même donnée, d'où deux règles.
+- Une erreur qui survient dans un tiroir s'affiche **dans le pied du tiroir**
+  (`#settings-error`), jamais par `status()` : la ligne d'état de la page est
+  sous le voile modal, donc invisible au moment précis où elle compte.
 - Un contrôle désactivé change de **teinte** (`--ink-disabled`), jamais
   d'opacité. `opacity` mélange le libellé au fond de la page et non à celui du
   contrôle : en thème clair, l'encre à 0,45 tombait à 1,69:1. Ça se voyait
@@ -175,7 +187,13 @@ phrases voisines.
 
 - `EDITABLE_FIELDS` dans `desktop.py` filtre les clés acceptées par
   `/api/config`. Un nouveau réglage absent de cette liste est ignoré en
-  silence, côté lecture comme côté écriture.
+  silence, côté lecture comme côté écriture. Il doit **aussi** figurer dans
+  `DEFAULT_CONFIG` : `update_config()` jette toute clé qui n'y est pas.
+- `hotwords` (« Mes mots ») n'existe que dans `faster-whisper`. `build_transcriber`
+  ne le passe qu'à ce moteur ; `openai-whisper` et `whisper.cpp` n'ont pas
+  d'équivalent, et le réglage doit s'y effacer sans bruit plutôt que de promettre
+  ce que le moteur ne peut pas tenir. Une liste vide se passe en `None`, pas en
+  chaîne vide : une amorce vide entre quand même dans le décodeur.
 - `_origin_is_ours()` garde toutes les routes POST : il faut que l'adresse par
   laquelle on nous a joints soit une des nôtres (`LOOPBACK_HOSTS`, ou celle sur
   laquelle le serveur écoute), **et** que l'`Origin` la nomme. Les deux

@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Teach Whisper your own words, before it transcribes.** New **My words**
+  setting (`hotwords`): one name per line — clients, tools, colleagues. Aparté
+  hands the list to Whisper up front, so it leans toward those spellings when
+  the audio is ambiguous. Unlike **Corrections**, you do not need to have seen
+  the mistake first. Measured on real speech: without the list, `PipeWire` and
+  `Mailpoet` came out as `pipe wire` and `mail poète`; with it, both were
+  spelled correctly, casing included. Only `faster-whisper` supports it — with
+  the other backends the setting is quietly ignored rather than promising what
+  they cannot deliver.
+
 - **The transcript appears while you speak.** Roughly once a second the
   recording so far is transcribed again from the start and shown in the editor,
   so a long dictation is no longer spoken into the void — and the text corrects
@@ -121,6 +131,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The Settings panel is now ordered by how often you actually touch a
+  setting.** Dictation, My dictionary and French typography are open on
+  arrival; Hardware and Advanced are folded into native `<details>` — no
+  JavaScript, so keyboard and screen readers work for free. Eleven controls to
+  face on opening instead of eighteen. Six labels now name the intent rather
+  than the mechanism: Cleanup → **Filler word removal** (with the help text it
+  never had), Replacements → **Corrections**, Snippets → **Spoken shortcuts**
+  (an English word in a French interface), Formatting → **French typography**,
+  Polish engine → **Formatting engine**, Short text → **Very short dictations**.
+
 - **A shortcut dictation reuses the running app's Whisper model instead of
   loading its own.** Pressing the global shortcut used to start a fresh process
   that read the model off disk every single time, while the desktop app sitting
@@ -179,6 +199,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   interleave with the text or scatter it. In a terminal, paste with Ctrl+Shift+V.
 
 ### Fixed
+
+- **A vocabulary line without an `=` is no longer thrown away in silence.**
+  Typing `cloud : Claude` used to save nothing, report nothing, and leave you to
+  discover three dictations later that the entry was never there. Saving now
+  stops and names the offending line. The same bug quietly broke multi-line
+  spoken shortcuts: the signature offered as an example under the field lost
+  every line after the first. Continuation lines are now kept.
+
+- **A failed save is no longer displayed behind the drawer that failed.** The
+  message went to the main page's status line — under the modal overlay, hidden
+  at the exact moment it mattered. It now appears in the drawer footer, next to
+  the button that failed.
+
+- **Field help text no longer pollutes the field's accessible name.** Each help
+  line sat *inside* its `<label>`, so a screen reader announced "Dictated
+  numbers, «vingt-deux personnes» becomes «22 personnes», times and percentages
+  always become digits…" as the name of the control. Help is now attached with
+  `aria-describedby`, which is what it is for.
 
 - **Dictations no longer end with "Sous-titres réalisés par la communauté
   d'Amara.org".** Whisper was trained on subtitled video, so on silence — the

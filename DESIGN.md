@@ -434,6 +434,24 @@ Le seul élément mémorable du système, et le seul autorisé à l'être.
   ouvert, le focus entre sur le premier contrôle et revient au bouton déclencheur
   à la fermeture. `aria-modal="true"` et `aria-labelledby` sur le titre traduit.
 - **Groupes :** séparés par un filet, en-tête en majuscules 13 px atténuées.
+- **Groupe replié (`details.group`) :** ce qui ne se touche presque jamais se
+  range dans un `<details>` **natif**. Le `<summary>` reprend exactement la
+  typographie d'un en-tête de groupe — replié ou non, c'est le même niveau de
+  titre — avec le marqueur du système et 8 px de rembourrage vertical, parce que
+  17 px de texte ne se visent pas confortablement. Au survol, l'encre passe de
+  atténuée à pleine. Pas d'onglets maison, pas de JavaScript : `Tab`, `Entrée` et
+  les lecteurs d'écran fonctionnent gratuitement, et le tiroir reste modal au
+  clavier sans qu'on ait rien à ajouter.
+- **Erreur de tiroir (`.drawer-error`) :** une ligne en `danger` de 12 px dans le
+  pied, sur toute la largeur, donc au-dessus des boutons sans déranger leur
+  disposition. `role="alert"`, et le focus repart sur le champ fautif. Calculé :
+  6,76:1 en clair, 5,00:1 en sombre sur le fond du tiroir. **Une erreur née dans
+  un tiroir ne s'écrit jamais dans la ligne d'état de la page** — elle tomberait
+  sous le voile modal, invisible au moment où elle compte.
+- **Ordre des réglages :** par fréquence d'usage réelle, pas par architecture
+  interne. On enrichit son dictionnaire toutes les semaines, on choisit son micro
+  une fois. Quatre champs par groupe au maximum ; au-delà, le groupe se coupe ou
+  se replie.
 
 ### Liste de diagnostic
 

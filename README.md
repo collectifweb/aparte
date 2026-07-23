@@ -521,6 +521,7 @@ Example:
   "default_style": "neutral",
   "cleanup_level": "medium",
   "language": "en",
+  "hotwords": ["Playwright", "Wayland", "PipeWire"],
   "replacements": {
     "whisper flow": "Wispr Flow",
     "pipe wire": "PipeWire",
@@ -534,6 +535,20 @@ Example:
 
 With that config, dictating `slash signature` expands the snippet, and dictated terms such as `pipe wire` are rewritten with the preferred spelling.
 
+`hotwords` and `replacements` are two different tools, not two ways of doing the
+same thing. `hotwords` is handed to Whisper **before** it transcribes, so it
+leans toward those spellings when the audio is ambiguous — you do not need to
+have seen the mistake first. `replacements` runs **after**, on the text, and is
+the safety net for what slips through anyway. Measured on real speech: without
+the word list, `PipeWire` and `Mailpoet` came out as `pipe wire` and
+`mail poète`; with it, both were spelled correctly, casing included.
+
+Two caveats. `hotwords` only exists in `faster-whisper`; with `openai-whisper`
+or `whisper.cpp` the setting is quietly ignored rather than promising what the
+backend cannot deliver. And a word list makes Whisper *more* likely to hear
+those words — on silence, a list containing `PipeWire` produced `PipeWire.com`
+out of nothing. Keep the list to words you actually say.
+
 ## Desktop app
 
 `aparte desktop` starts a local server on `127.0.0.1` and opens the browser. The
@@ -546,11 +561,13 @@ interface is a focused, single-screen app:
   until you stop
 - a model toggle (`small` = accurate, `base` = fast); each model loads once and
   is cached, so switching is instant after first use
-- a **Settings** panel (gear icon) grouped into Microphone (input device, beep),
-  Transcription (model, language, compute device, live preview), Formatting (style, cleanup,
-  polish backend, typography), Insertion, History, and Vocabulary (replacements,
-  snippets) — saved to the config file and applied immediately, including to the
-  global-hotkey dictation flow
+- a **Settings** panel (gear icon) ordered by how often a setting is actually
+  touched: Dictation (language, live preview, style, filler-word removal),
+  My dictionary (my words, corrections, spoken shortcuts) and French typography
+  are open on arrival; Hardware (input device, beep, how to insert) and Advanced
+  (default model, compute device, formatting engine, history) are folded into
+  native `<details>`. Saved to the config file and applied immediately,
+  including to the global-hotkey dictation flow
 - a **Configuration & diagnostics** panel that shows, with green/red status, what
   is installed vs missing (Whisper backend, GPU, microphone, paste/clipboard,
   notifications) and the exact command to fix each gap — copy-paste onboarding
