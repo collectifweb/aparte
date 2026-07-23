@@ -589,6 +589,106 @@ concurrent : « un seul modèle multilingue, aucun moyen de forcer une langue,
 bascule vers l'anglais quand l'audio est moyen ». Lui proposer de mettre
 « Français » dans les Réglages.
 
+## Lot 5C — Les Réglages : le dictionnaire, puis la restructuration (planifié le 22/07, pas commencé)
+
+Déclenché par Alexandre à l'usage : « le glossaire, c'était un réglage qu'il y
+avait déjà dans Murmur et je le trouvais vraiment cool, ça permettait de mettre
+un genre de dictionnaire personnel. Dans Aparté ça semble être plutôt ce qui est
+dit versus ce qui est à écrire. Et ça, c'est peut-être un petit peu difficile à
+comprendre pour tout le monde. D'ailleurs toute la partie réglage serait
+certainement à revoir, restructurer et organiser. »
+
+Critique complète : `.impeccable/critique/2026-07-23T02-28-52Z__src-aparte-assets-index-html.md`.
+**20/40**, trois problèmes P1. Le détecteur automatique ne remonte rien : le
+système visuel tient, le problème est d'organisation et de vocabulaire.
+
+### Le diagnostic en une phrase
+
+Un panneau bien fait qui a grandi sans plan. Dix-sept contrôles de poids égal
+dans une colonne, où le plus personnel — le dictionnaire — est tout en bas, et le
+plus dangereux — « Calcul » — à hauteur d'yeux. **Ces dix-sept réglages ne sont
+pas de même nature, et les traiter comme s'ils l'étaient est la racine du reste.**
+
+### Les trois défauts prouvés, pas supposés
+
+| Où | Quoi |
+|---|---|
+| `app.js:354` | `if (i === -1) continue` — une ligne de vocabulaire sans `=` est **jetée en silence**. « cloud : Claude » se perd sans erreur, sans trace. |
+| `polish.py:154` | `cleanup_level` supprime les **hésitations** (« euh », « heu »). Le libellé « Nettoyage / Léger / Moyen / Élevé » ne le dit à personne, et c'est le seul champ du groupe sans texte d'aide. |
+| `index.html` | « Snippets » est un anglicisme en toutes lettres dans l'interface française, ce que les règles du projet interdisent. |
+
+Plus un quatrième, de comportement : un échec d'enregistrement s'écrit dans la
+ligne d'état de la page principale, c'est-à-dire **derrière le tiroir modal**.
+
+### Le dictionnaire : la question d'Alexandre, et la réponse
+
+Il a posé le vrai dilemme : faire saisir **un seul mot** (simple, mais il faut
+espérer que l'application recoupe) ou **les deux** (précis, mais il faut avoir
+observé l'erreur et savoir la reproduire — « toute une éducation à donner »).
+
+**La prémisse est fausse, et c'est vérifié le 22/07 :** `faster-whisper` 1.2.1
+expose `hotwords` **et** `initial_prompt`, tous deux acceptés de bout en bout sur
+cette installation. On peut donner une liste de mots à Whisper **avant** qu'il
+transcrive ; il penche alors vers eux quand le son est ambigu. La liste simple
+n'est donc pas une version dégradée du couple entendu/écrit — **c'est un outil
+différent, qui agit plus tôt.**
+
+D'où deux réglages distincts, aux consignes distinctes :
+
+1. **Mes mots** — une simple liste, passée en `hotwords`. Clients, outils,
+   prénoms de collègues. La consigne tient en une phrase : « écris les mots que
+   tu emploies et qu'un inconnu écrirait mal ». Aucune erreur à observer.
+2. **Corrections** — entendu → écrit. Le filet pour ce qui passe quand même.
+
+**Et la correction ne se saisit plus dans les Réglages.** Alexandre a mis le
+doigt dessus : réécrire de mémoire l'erreur de l'application est absurde, puisque
+l'application la connaît — elle est à l'écran, dans l'éditeur, au moment où elle
+se produit. La capture se fait donc **depuis l'éditeur**, quand l'utilisateur
+corrige le mot. Les Réglages ne servent plus qu'à relire et à supprimer.
+
+**Expérience à faire avant de construire « Mes mots », et c'est Alexandre qui
+l'a en main.** Le paramètre est vérifié, le gain ne l'est pas : le mesurer demande
+de la vraie parole avec son vrai vocabulaire. Dicter deux fois « je travaille
+avec Playwright et Wayland », avec et sans la liste. **Si le gain n'est pas net,
+on ne construit pas « Mes mots »** et on garde uniquement la capture depuis
+l'éditeur.
+
+### La restructuration proposée
+
+Classée par fréquence d'usage réelle, pas par architecture interne. Ce qui ne se
+touche presque jamais part dans un `<details>` — l'élément **natif** de dépliage :
+zéro JavaScript, clavier et lecteurs d'écran gratuits, et ça respecte la règle du
+projet de garder les contrôles natifs natifs. Pas d'onglets maison.
+
+**Visible d'emblée** (quatre champs maximum par groupe, contre sept aujourd'hui)
+
+- **Dictée** — Langue · Aperçu pendant la dictée · Style · **Suppression des hésitations** *(ex-« Nettoyage »)*
+- **Mon dictionnaire** — **Mes mots** *(neuf)* · **Corrections** *(ex-« Remplacements »)* · **Raccourcis dictés** *(ex-« Snippets »)*
+- **Typographie française** *(ex-« Mise en forme » — c'est la signature du produit, elle mérite son nom)* — Espaces insécables · Nombres dictés · Espace à la fin · **Dictées très courtes** *(ex-« Texte court »)*
+
+**Replié par défaut**
+
+- **Matériel** — Microphone · Bip · Manière d'insérer
+- **Avancé** — Modèle par défaut · Calcul · **Moteur de mise en forme** *(ex-« Moteur de polish »)* · Historique
+
+### Ordre de bataille quand on s'y mettra
+
+- [ ] L'expérience `hotwords` d'Alexandre — elle décide si « Mes mots » existe
+- [ ] La perte silencieuse d'`app.js:354` : refuser en pointant la ligne, ou passer à une saisie par entrée
+- [ ] Capture d'une correction **depuis l'éditeur**, pas depuis les Réglages
+- [ ] Les six renommages, `i18n.js` en FR **et** en EN, `aria` compris
+- [ ] Le reclassement des groupes et les deux `<details>`
+- [ ] L'erreur d'enregistrement ramenée dans le pied du tiroir
+- [ ] `aria-describedby` sur les champs de vocabulaire — leur aide est aujourd'hui dans un `<small>` voisin, non rattaché
+- [ ] Passe `/impeccable` sur le rendu, puis re-critique pour voir bouger le 20/40
+
+### Ne pas perdre en route
+
+Les textes d'aide actuels sont le point fort du panneau — concrets, avec exemples
+chiffrés (« vingt-deux personnes » devient « 22 personnes »). Et l'état vide du
+micro est le modèle à suivre : il dit ce qui manque, la conséquence exacte, et où
+aller. La restructuration doit les garder, pas les réécrire.
+
 ---
 
 ## À ne pas reprendre
@@ -597,6 +697,15 @@ bascule vers l'anglais quand l'audio est moyen ». Lui proposer de mettre
   principale : un seul modèle multilingue, aucun moyen de forcer une langue,
   bascule vers l'anglais quand l'audio est moyen. Notre réglage de langue
   explicite dans Whisper est exactement ce qui nous fait gagner sur le français.
+
+  **Nuance apportée par l'usage réel, 22/07.** La faiblesse du concurrent est
+  de ne pas avoir **le choix**, pas d'offrir la détection. Alexandre laisse
+  volontairement « Auto » et le rapporte comme très fiable : il alterne français
+  et anglais **à l'intérieur d'une même dictée** — des mots anglais au milieu
+  d'une phrase française — et le taux d'erreur reste très faible. Forcer le
+  français casserait ce cas d'usage. Ne pas lui reproposer de basculer sur
+  « Français » : c'est un choix informé, pas un oubli. Ce qui compte, c'est que
+  le réglage existe pour qui en a besoin.
 - **L'exécution sur processeur seulement.** Nous avons le repli GPU/CPU.
 - **La correction floue par distance de Levenshtein sur le dictionnaire.** Chez
   eux, elle peut faire basculer une phrase courte entière dans une autre langue.
