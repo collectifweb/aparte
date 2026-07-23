@@ -6,7 +6,11 @@ from pathlib import Path
 
 from aparte.cli import transcribe_path
 from aparte.config import Settings
-from aparte.transcription import FasterWhisperTranscriber, TranscriptionError
+from aparte.transcription import (
+    FasterWhisperTranscriber,
+    TranscriptionError,
+    build_transcriber,
+)
 
 
 class TextTranscriptionTest(unittest.TestCase):
@@ -47,7 +51,7 @@ class FasterWhisperFallbackTest(unittest.TestCase):
                 if device != "cpu":
                     raise RuntimeError("Library libcublas.so.12 is not found or cannot be loaded")
 
-            def transcribe(self, path, language=None):
+            def transcribe(self, path, language=None, hotwords=None):
                 return [_Segment("hello from cpu")], None
 
         self._install_fake_faster_whisper(FakeModel)
@@ -61,7 +65,7 @@ class FasterWhisperFallbackTest(unittest.TestCase):
             def __init__(self, name, device="auto", compute_type="auto"):
                 self.device = device
 
-            def transcribe(self, path, language=None):
+            def transcribe(self, path, language=None, hotwords=None):
                 if self.device != "cpu":
                     raise RuntimeError("Library libcublas.so.12 cannot be loaded")
                 return [_Segment("recovered on cpu")], None
@@ -76,13 +80,57 @@ class FasterWhisperFallbackTest(unittest.TestCase):
             def __init__(self, name, device="auto", compute_type="auto"):
                 pass
 
-            def transcribe(self, path, language=None):
+            def transcribe(self, path, language=None, hotwords=None):
                 raise RuntimeError("audio file is corrupt")
 
         self._install_fake_faster_whisper(FakeModel)
         transcriber = FasterWhisperTranscriber("small", device="cpu")
         with self.assertRaises(TranscriptionError):
             transcriber.transcribe(Path("x.wav"))
+
+
+class HotwordsTest(unittest.TestCase):
+    """« Mes mots » : le vocabulaire de l'utilisateur, donné à Whisper en amont."""
+
+    def _fake_model(self, seen):
+        class FakeModel:
+            def __init__(self, name, device="auto", compute_type="auto"):
+                pass
+
+            def transcribe(self, path, language=None, hotwords=None):
+                seen.append(hotwords)
+                return [_Segment("ok")], None
+
+        module = types.ModuleType("faster_whisper")
+        module.WhisperModel = FakeModel
+        self.addCleanup(lambda: sys.modules.pop("faster_whisper", None))
+        sys.modules["faster_whisper"] = module
+
+    def test_the_word_list_reaches_whisper_as_one_string(self):
+        seen = []
+        self._fake_model(seen)
+        transcriber = FasterWhisperTranscriber("small", device="cpu", hotwords=("Playwright", "Wayland"))
+        transcriber.transcribe(Path("x.wav"))
+        self.assertEqual(seen, ["Playwright, Wayland"])
+
+    def test_no_words_means_none_not_an_empty_string(self):
+        # Une chaîne vide entre quand même dans l'amorce du décodeur ; None est
+        # la seule façon de dire « aucun penchant ».
+        seen = []
+        self._fake_model(seen)
+        FasterWhisperTranscriber("small", device="cpu").transcribe(Path("x.wav"))
+        self.assertEqual(seen, [None])
+
+    def test_backends_without_hotwords_still_build(self):
+        # openai-whisper et whisper.cpp n'ont pas d'équivalent : le réglage doit
+        # s'effacer, pas faire échouer la construction.
+        transcriber = build_transcriber(
+            backend="whisper.cpp",
+            model="small",
+            whisper_cpp="/bin/true",
+            hotwords=("Playwright",),
+        )
+        self.assertEqual(transcriber.model, "small")
 
 
 if __name__ == "__main__":

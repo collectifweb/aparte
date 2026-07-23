@@ -258,6 +258,7 @@ def transcribe_path(path: Path, args: argparse.Namespace, settings: Settings) ->
             whisper_cpp=settings.whisper_cpp,
             device=settings.device,
             compute_type=settings.compute_type,
+            hotwords=settings.hotwords,
         )
         transcript = transcriber.transcribe(path).text
     if getattr(args, "polish", False):

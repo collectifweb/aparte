@@ -407,6 +407,21 @@ class LivePreviewTest(unittest.TestCase):
         self.assertIs(json.loads(path.read_text(encoding="utf-8"))["live_preview"], False)
         self.assertIs(json.loads(make_request("GET", "/api/config")["body"])["live_preview"], False)
 
+    def test_my_words_round_trip_and_blank_lines_are_dropped(self):
+        """« Mes mots » arrive du navigateur en lignes de zone de texte : une
+        ligne vide y est normale, elle ne doit pas devenir un mot vide."""
+        path = Path(self.directory.name) / "config.json"
+        body = json.dumps({"hotwords": ["Playwright", "  ", "", " Wayland "]}).encode("utf-8")
+        res = make_request("POST", "/api/config", body)
+
+        self.assertEqual(res["status"], int(HTTPStatus.OK))
+        self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["hotwords"], ["Playwright", "Wayland"])
+        self.assertEqual(
+            json.loads(make_request("GET", "/api/config")["body"])["hotwords"],
+            ["Playwright", "Wayland"],
+        )
+        self.assertEqual(Settings.from_env().hotwords, ("Playwright", "Wayland"))
+
 
 if __name__ == "__main__":
     unittest.main()

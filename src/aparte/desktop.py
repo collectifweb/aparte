@@ -58,6 +58,7 @@ EDITABLE_FIELDS = (
     "microphone",
     "beep",
     "live_preview",
+    "hotwords",
     "replacements",
     "snippets",
 )
@@ -207,6 +208,7 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                     whisper_cpp=active.whisper_cpp,
                     device=active.device,
                     compute_type=active.compute_type,
+                    hotwords=active.hotwords,
                 )
                 transcriber_cache[model] = transcriber
             return transcriber
@@ -404,6 +406,8 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                     value = payload[key]
                     if key in {"replacements", "snippets"}:
                         value = {str(k): str(v) for k, v in dict(value).items()} if value else {}
+                    elif key == "hotwords":
+                        value = [str(item).strip() for item in (value or []) if str(item).strip()]
                     elif key == "language":
                         value = (str(value).strip() or None) if value is not None else None
                     elif key in {"nonbreaking_spaces", "history_persist", "trailing_space", "beep", "live_preview"}:

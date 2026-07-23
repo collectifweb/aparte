@@ -38,6 +38,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "ollama_url": "http://127.0.0.1:11434",
     "ollama_model": "llama3.1:8b",
     "whisper_cpp": None,
+    "hotwords": [],
     "replacements": {
         "whisper flow": "Wispr Flow",
         "wispr flow": "Wispr Flow",
@@ -73,6 +74,7 @@ class Settings:
     ollama_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.1:8b"
     whisper_cpp: str | None = None
+    hotwords: tuple[str, ...] = ()
     replacements: dict[str, str] | None = None
     snippets: dict[str, str] | None = None
     config_path: Path | None = None
@@ -108,6 +110,7 @@ class Settings:
             ollama_url=get_env("OLLAMA_URL") or str(config.get("ollama_url", DEFAULT_CONFIG["ollama_url"])),
             ollama_model=get_env("OLLAMA_MODEL") or str(config.get("ollama_model", DEFAULT_CONFIG["ollama_model"])),
             whisper_cpp=whisper_cpp if whisper_cpp is not None else _optional_str(config.get("whisper_cpp")),
+            hotwords=_string_list(config.get("hotwords", DEFAULT_CONFIG["hotwords"])),
             replacements=replacements,
             snippets=snippets,
             config_path=config_path,
@@ -216,6 +219,18 @@ def positive_int(value: object) -> int:
         return max(0, int(value))  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return 0
+
+
+def _string_list(value: object) -> tuple[str, ...]:
+    """The user's own vocabulary, one entry per line in the settings drawer.
+
+    Blank lines are dropped rather than passed on: an empty hotword would bias
+    Whisper toward nothing in particular, and a trailing newline is the normal
+    way a textarea ends.
+    """
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(str(item).strip() for item in value if str(item).strip())
 
 
 def _string_dict(value: object) -> dict[str, str]:

@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sysconfig
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -78,11 +79,16 @@ class FasterWhisperTranscriber(Transcriber):
         language: str | None = None,
         device: str = "auto",
         compute_type: str = "auto",
+        hotwords: Sequence[str] = (),
     ) -> None:
         self.model_name = model
         self.language = language
         self.device = device
         self.compute_type = compute_type
+        # faster-whisper takes the user's vocabulary as one string. Empty means
+        # "no bias at all", and that is not the same as an empty string: a blank
+        # hint still enters the decoder's prompt.
+        self.hotwords = ", ".join(hotwords) or None
         self.model = self._load_model(device, compute_type)
 
     def _load_model(self, device: str, compute_type: str):
@@ -119,14 +125,18 @@ class FasterWhisperTranscriber(Transcriber):
 
     def transcribe(self, audio_path: Path) -> Transcript:
         try:
-            segments, _info = self.model.transcribe(str(audio_path), language=self.language)
+            segments, _info = self.model.transcribe(
+                str(audio_path), language=self.language, hotwords=self.hotwords
+            )
             text = " ".join(segment.text.strip() for segment in segments if segment.text.strip())
         except Exception as exc:
             # CUDA can fail lazily on the first real inference; retry once on CPU.
             if self.device == "cpu" or not self._is_cuda_error(exc):
                 raise TranscriptionError(str(exc)) from exc
             self.model = self._load_cpu_model()
-            segments, _info = self.model.transcribe(str(audio_path), language=self.language)
+            segments, _info = self.model.transcribe(
+                str(audio_path), language=self.language, hotwords=self.hotwords
+            )
             text = " ".join(segment.text.strip() for segment in segments if segment.text.strip())
         # Le filtre est ici, et pas dans polish.py, pour couvrir aussi les
         # chemins qui ne polissent pas : `--no-polish`, le raccourci global,
@@ -170,11 +180,19 @@ def build_transcriber(
     whisper_cpp: str | None = None,
     device: str = "auto",
     compute_type: str = "auto",
+    hotwords: Sequence[str] = (),
 ) -> Transcriber:
+    """Build a transcriber for ``backend``.
+
+    ``hotwords`` is the user's own vocabulary, nudging Whisper toward those
+    spellings when the audio is ambiguous. Only faster-whisper accepts it;
+    openai-whisper and whisper.cpp have no equivalent, so the setting quietly
+    does nothing there rather than promising what the backend cannot deliver.
+    """
     if backend == "text":
         return TextFileTranscriber()
     if backend == "faster-whisper":
-        return FasterWhisperTranscriber(model, language, device, compute_type)
+        return FasterWhisperTranscriber(model, language, device, compute_type, hotwords)
     if backend == "openai-whisper":
         return OpenAIWhisperTranscriber(model, language)
     if backend == "whisper.cpp":
@@ -186,7 +204,7 @@ def build_transcriber(
         raise TranscriptionError(f"Unknown transcriber backend: {backend}")
 
     try:
-        return FasterWhisperTranscriber(model, language, device, compute_type)
+        return FasterWhisperTranscriber(model, language, device, compute_type, hotwords)
     except Exception:
         pass
     try:
