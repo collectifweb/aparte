@@ -150,10 +150,6 @@ launches Aparté, so a shortcut bound to it keeps working. See
   binding instead of creating duplicates, preserves an already-chosen accelerator
   unless `--key` is given, and supports `--print` and `--remove`. Other desktops
   get printable manual instructions.
-- **In-app keyboard-shortcut guide**: the desktop **Setup & diagnostics** panel
-  now shows the current shortcut status (bound key or "not set"), the exact
-  command to bind, and the auto-bind command, each with a copy button. `aparte
-  doctor` gained a matching `hotkey` line.
 
 ### Changed
 
@@ -306,6 +302,18 @@ launches Aparté, so a shortcut bound to it keeps working. See
   though its Origin and Host agree with each other. Requests carrying no
   `Origin` header, which is every command-line client, are unaffected.
 
+## [0.2.0] - 2026-06-15
+
+Reconstructed after the fact: this tag was cut without a changelog section and
+without bumping the version, so its entry sat under *Unreleased* until 1.0.0.
+
+### Added
+
+- **Keyboard-shortcut card in the desktop Setup panel**: it shows whether a
+  global shortcut is bound and to which key, plus the exact `toggle` command to
+  bind by hand, with a copy button. Binding it in one command
+  (`aparte install-hotkey`) came later, in 1.0.0.
+
 ## [0.1.0] - 2026-06-01
 
 First public release — a local-first dictation app for Linux.
@@ -341,5 +349,6 @@ First public release — a local-first dictation app for Linux.
   3.10–3.13.
 
 [Unreleased]: https://github.com/collectifweb/aparte/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/collectifweb/aparte/compare/v0.1.0...v1.0.0
+[1.0.0]: https://github.com/collectifweb/aparte/compare/v0.2.0...v1.0.0
+[0.2.0]: https://github.com/collectifweb/aparte/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/collectifweb/aparte/releases/tag/v0.1.0
