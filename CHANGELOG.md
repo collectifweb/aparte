@@ -25,6 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not a user-facing feature: insertion into the active app is still Linux-only
   (coming in M3), and the browser dictation experience is unchanged. Proven with
   mocked unit tests on Linux; the real behaviour is validated later on a Mac.
+- **macOS diagnostics (M2a).** `aparte doctor` and the web setup panel now show a
+  macOS-specific check list: microphone and Accessibility permissions (read
+  through AVFoundation and `AXIsProcessTrusted`, in a new `macos_permissions`
+  module that degrades to "unknown" off a Mac), the speech model's download state,
+  PortAudio capture, and the pbcopy clipboard — with Homebrew/Settings guidance
+  instead of apt. The checks render in the existing panel with no new UI. Linux
+  diagnostics are unchanged. Verified with mocked unit tests on Linux; the PyObjC
+  calls are validated later on a Mac.
 
 ## [1.1.1] - 2026-07-23
 

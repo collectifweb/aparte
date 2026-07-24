@@ -885,6 +885,66 @@ encore collée.
 tests -t tests`), dont les 244 Linux d'avant, inchangés. +9 tests Mac (1
 clipboard, 4 notify, 4 audio). Aucune release.
 
+### M2 — diagnostics macOS (branche `feat/portage-macos`, **M2a fait le 23/07 ; M2b optionnel**)
+
+Donner à `doctor` (CLI) et au panneau web une liste de checks macOS. Le panneau
+affiche déjà **n'importe quel** `Check` de façon générique et traduit chaque
+libellé par clé `check.<clé>` avec repli anglais — donc **aucune ligne de
+HTML/CSS neuve** tant que les checks mac se rangent dans les 4 catégories
+existantes (Transcription, Microphone, Insertion, System). Détail dans le plan
+global (§ TCC, § Sécurité, § Acquisition des modèles).
+
+**M2a — le moteur (backend, testable en mocké, sans design) — fait :**
+- [x] `diagnostics.py` : `collect_checks` dispatche par OS
+      (`_collect_checks_linux` = l'ancien corps, inchangé caractère pour
+      caractère ; `_collect_checks_macos` neuf). `collect_diagnostics` rendu
+      tolérant aux clés absentes (pas de check `paste` sur Mac) sans changer le
+      résultat Linux.
+- [x] `macos_permissions.py` (neuf, dormant, importé seulement sur Darwin) :
+      statut micro AVFoundation (notDetermined / restricted / denied /
+      authorized = 0/1/2/3), confiance Accessibilité `AXIsProcessTrusted`
+      (**lecture passive, pas** `…WithOptions` : aucune boîte de dialogue au
+      diagnostic). Toute erreur PyObjC dégrade en « inconnu »/`None`, ne lève
+      jamais. **À valider sur un vrai Mac** — le code Mac ne s'exécute pas ici.
+- [x] Liste macOS : permission micro (cat. Microphone), Accessibilité (cat.
+      Insertion, pour le collage M3), moteur Whisper, enregistreur PortAudio, état
+      du modèle, presse-papiers pbcopy, notifications.
+- [x] i18n : clés `check.<clé>.label`/`.detail` fr **et** en pour les 3 checks mac
+      neufs ; parité vérifiée (23 clés, toutes en double).
+- [x] `pyproject` : `pyobjc-framework-ApplicationServices` ajouté à `[macos]`
+      (là où vit `AXIsProcessTrusted`), darwin-gated comme les autres.
+- [x] Tests mockés (Linux) : les 4 statuts micro, la confiance Accessibilité, le
+      dispatch par OS, la forme des checks, le CLI qui montre une permission.
+
+**M2b — l'affordance de permission (visible, `/impeccable`, optionnel) :** si on
+décide qu'une permission mérite mieux qu'une ligne de détail (bouton « Ouvrir les
+Réglages », pastille d'état distincte, guidage refusé-vs-jamais-demandé), ça passe
+par `/impeccable` + DESIGN.md. Pas nécessaire pour que M2a rende service.
+
+**Décidé (dont ce que la revue adversariale a corrigé).**
+- *Détails statiques et neutres, pas d'état dans le texte.* Le panneau traduit le
+  détail **par clé** ; un texte qui varie selon l'état (refusé/accordé) est écrasé
+  par la clé i18n et pouvait contredire l'icône (« va autoriser » à côté d'un ✓).
+  On suit la convention du check `config` : le détail décrit ce que le check
+  **est**, l'icône porte l'état. Le guidage fin refusé-vs-jamais-demandé est le
+  travail du **parcours guidé M3**, pas d'une ligne de diagnostic passive.
+- *`recorder` et `clipboard` neutralisés.* Ils partagent leur clé i18n avec Linux ;
+  le texte Linux (« sounddevice, arecord, pw-record ») s'affichait tel quel sur un
+  Mac. Reformulés en description de rôle, neutres et vrais des deux côtés — **2
+  chaînes Linux touchées**, assumé.
+- *Le CLI n'est plus muet.* `print_doctor` liste aussi les checks sans `fix` mais
+  avec un détail (les permissions). Sortie Linux **inchangée** : tous les checks
+  Linux ont un `fix`, donc la nouvelle branche y est vide (vérifié).
+- *Pas de nouvelle catégorie* ; permission sans `fix` shell (détour Réglages).
+  `macos_permissions.py` est le **premier** module natif PyObjC du projet.
+
+**Preuve.** 265 tests verts, dont les tests Linux d'origine (`DiagnosticsTest`)
+et la sortie `doctor` Linux, inchangés. +11 tests mac (6 permissions, 5
+diagnostics). `i18n.js` valide (`node --check`), parité fr/en vérifiée. **À faire
+sur un vrai Mac** : confirmer les API PyObjC (AVFoundation, `AXIsProcessTrusted`)
+et la présence des wheels `pyobjc-framework-ApplicationServices` arm64. Aucune
+release.
+
 ### Windows, pour mémoire (étudié le 23/07, non planifié)
 
 Réécriture partielle, ~15–21 jours, ~le double de Mac. Aucun modèle Unix de

@@ -53,6 +53,7 @@ macos = [
   "pyobjc-framework-Quartz; sys_platform == 'darwin'",        # CGEvent — insertion (M3)
   "pyobjc-framework-Cocoa; sys_platform == 'darwin'",         # AppKit / run loop (M5)
   "pyobjc-framework-AVFoundation; sys_platform == 'darwin'",  # microphone permission (M2)
+  "pyobjc-framework-ApplicationServices; sys_platform == 'darwin'",  # AXIsProcessTrusted — Accessibility (M2)
   "rumps; sys_platform == 'darwin'",                          # menu-bar tray (M6)
   "quickmachotkey; sys_platform == 'darwin'",                 # global-shortcut façade (M5)
 ]

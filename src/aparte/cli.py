@@ -397,11 +397,18 @@ def print_doctor(settings: Settings) -> None:
         print(f"hotkey  bind manually: {hotkey['command']}")
 
     fixes = [c for c in diagnostics["checks"] if not c["ok"] and c["fix"]]
-    if fixes:
+    # A macOS permission has no shell fix but carries its remedy in the detail;
+    # surface those too so the CLI is not silent about what to do. On Linux this
+    # list is empty — every Linux check ships a fix — so the output is unchanged.
+    guidance = [c for c in diagnostics["checks"] if not c["ok"] and not c["fix"] and c["detail"]]
+    if fixes or guidance:
         print("\nNext steps:")
         for check in fixes:
             flag = " (required)" if check["essential"] else ""
             print(f"- {check['label']}{flag}: {check['fix']}")
+        for check in guidance:
+            flag = " (required)" if check["essential"] else ""
+            print(f"- {check['label']}{flag}: {check['detail']}")
 
 
 def handle_config_command(args: argparse.Namespace) -> None:
