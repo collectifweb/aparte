@@ -1008,6 +1008,64 @@ routes), dont les tests Linux d'origine et la sortie `doctor` Linux, inchangés.
 **Aucune UI visible** touchée → pas de `/impeccable` (M2b garde l'affordance web).
 Aucune release.
 
+### M4 — enregistrement in-process macOS (branche `feat/portage-macos`, **fait le 24/07**)
+
+Donner à macOS l'enregistrement **en mémoire du serveur résident**, via un
+`RecordingController` : la version Mac de la bascule Linux `session.py`, sans
+sous-processus, PID, fichier de session ni `/proc`. Plan consolidé :
+`docs/plan-portage-macos-m4.md`. Dormant en M4 (déclenché par le raccourci en M5).
+
+- [x] `deliver_transcript` extrait dans `cli.py` : la séquence porteuse
+      (vide → rien ; historique **avant** insertion ; notif de succès **après**)
+      était **dupliquée** dans `dictate_once` et `toggle_dictation`. Un seul foyer,
+      partagé aussi par le worker macOS → pas de dérive sur le chemin non exercé à
+      la main. Linux byte-identique (mêmes lignes déplacées).
+- [x] `macos_recording.py` (neuf, natif, dormant) : `RecordingController`,
+      dépendances **injectées** (`transcribe_fn`, `settings_provider`), `sounddevice`
+      et `cli` importés **paresseusement** (sinon cycle
+      `desktop → macos_recording → cli → desktop`). Capture `sd.RawInputStream`
+      int16 mono 16 kHz, callback temps réel **borné** (plafond en frames, statuts
+      overflow, ne bloque/ne lève pas), WAV via `wave`, `stop`/`close` **best-effort**
+      (frames déjà en mémoire), `threading.Timer` pour la dictée oubliée. Machine
+      d'état `idle`/`recording`/`processing`/`error` ; `recording_lock` **distinct**
+      d'`inference_lock` ; debounce ~250 ms ; appui en `processing` refusé ; shutdown
+      = discard propre. Worker : transcribe → `deliver_transcript(…, "paste", …)`.
+- [x] `desktop.py` — intégration **mac only** (`is_macos()`, Linux inchangé) :
+      `transcribe_fn` serveur-local (`with inference_lock:
+      get_transcriber(…).transcribe(wav).text` — un seul modèle, un seul verrou,
+      **jamais** d'auto-HTTP), instanciation du contrôleur sur
+      `DesktopHandler._recording_controller`, route **lecture seule**
+      `GET /api/recording-state` (autorisée sur Darwin, absente/404 ailleurs).
+- [x] `cli.py` — `aparte toggle` sur Mac : message clair après le `--status`, pas de
+      crash sur l'`arecord` Linux ; `session.py` intact.
+- [x] Tests mockés (Linux) : `test_macos_recording.py` (16 — fake `sounddevice`,
+      tampon borné, overflow, WAV, machine d'état, debounce, conflit, discard,
+      framework absent, erreur worker) ; `test_desktop.py` (route + câblage mac only
+      + `transcribe_fn` via le modèle serveur) ; `test_cli.py` (`deliver_transcript`,
+      toggle Mac).
+
+**Décidé.**
+- *`aparte dictate` marchait déjà sur Mac* (M1+M3 : `record_wav` sounddevice →
+  `transcribe_path` avec **repli local** → `paste_text` mac). M4 n'y ajoute aucun
+  runtime ; le repli est déjà couvert par `DelegationFallbackTest`. Le vrai code neuf
+  de M4 est le `RecordingController`.
+- *Auto-stop par `threading.Timer`* (le plus simple, testable) + tampon borné en
+  frames (mémoire), plutôt que `sd.CallbackStop` (sémantique PortAudio à émuler).
+- *Contrôleur dormant en M4* : on isole la machine d'état (pur Python, testable) de
+  la run loop AppKit (non testable ici, M5).
+
+**Reliquats documentés (à traiter avec leur lot).**
+- Provider d'état vers **doctor** (Mac) et le tray : **M6**, avec le tray rumps.
+- `aparte toggle --status` sur Mac rend « idle » (pas de session) — inoffensif ;
+  l'état réel se lit via `GET /api/recording-state` ou le tray (M6).
+
+**À valider sur un vrai Mac (M8).** Capture PortAudio réelle, insertion effective
+dans Slack/Mail/Electron, plafond en frames sous charge, discard au shutdown.
+
+**Preuve.** 306 tests verts (+23 : 16 recording, 4 desktop, 3 cli), dont les tests
+Linux d'origine et la sortie `doctor` Linux, inchangés. **Aucune UI visible** →
+pas de `/impeccable`. Aucune release.
+
 ### Windows, pour mémoire (étudié le 23/07, non planifié)
 
 Réécriture partielle, ~15–21 jours, ~le double de Mac. Aucun modèle Unix de

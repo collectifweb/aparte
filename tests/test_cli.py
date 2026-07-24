@@ -93,6 +93,49 @@ class StopDictationTest(unittest.TestCase):
         self.assertEqual(failure.kwargs["urgency"], "critical")
 
 
+class DeliverTranscriptTest(unittest.TestCase):
+    """The single home of the empty→nothing / history-before-insert order, shared
+    by dictate_once, toggle_dictation and the macOS RecordingController worker."""
+
+    def test_an_empty_transcript_touches_nothing(self):
+        with mock.patch.object(cli, "_deliver") as deliver:
+            with mock.patch.object(cli.history, "record") as record:
+                with mock.patch.object(cli, "_notify_nothing_heard") as nothing:
+                    self.assertIs(cli.deliver_transcript("  \n ", "paste", Settings()), False)
+        nothing.assert_called_once()
+        deliver.assert_not_called()
+        record.assert_not_called()
+
+    def test_a_real_transcript_records_before_it_inserts(self):
+        settings = Settings()
+        manager = mock.Mock()
+        with mock.patch.object(cli, "_deliver") as deliver:
+            with mock.patch.object(cli.history, "record") as record:
+                manager.attach_mock(record, "record")
+                manager.attach_mock(deliver, "deliver")
+                self.assertIs(cli.deliver_transcript("Bonjour", "paste", settings), True)
+        self.assertEqual([name for name, *_ in manager.mock_calls], ["record", "deliver"])
+        record.assert_called_once_with("Bonjour", settings.history_persist)
+        deliver.assert_called_once_with("Bonjour", "paste", settings)
+
+
+class MacToggleTest(unittest.TestCase):
+    """On macOS the toggle has no detached recorder to drive: recording lives in
+    the resident server (M4/M5). The CLI says so plainly instead of crashing on the
+    Linux-only arecord path. The dev host is Linux, so the platform is mocked."""
+
+    def test_it_refuses_clearly_without_touching_the_linux_recorder(self):
+        with mock.patch.object(cli, "is_macos", return_value=True):
+            with mock.patch.object(cli, "get_active_session", return_value=None):
+                with mock.patch.object(cli, "start_toggle_recording") as start:
+                    with mock.patch.object(cli, "notify") as notify:
+                        message = cli.toggle_dictation(_toggle_args(), Settings())
+        start.assert_not_called()
+        self.assertIn("macOS", message)
+        self.assertIn("dictate", message)
+        self.assertIn("Bascule indisponible", notify.call_args.args[0])
+
+
 class CliParserTest(unittest.TestCase):
     def test_dictate_defaults_to_paste_and_polish(self):
         args = build_parser().parse_args(["dictate"])

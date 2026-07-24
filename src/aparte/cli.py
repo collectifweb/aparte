@@ -16,7 +16,7 @@ from .hotkey import (
     install_hotkey,
     remove_hotkey,
 )
-from .platform_dispatch import desktop_integration
+from .platform_dispatch import desktop_integration, is_macos
 from .notify import _preview, notify
 from .polish import PolishOptions, build_polisher
 from .session import get_active_session, start_toggle_recording, stop_toggle_recording
@@ -275,16 +275,7 @@ def dictate_once(args: argparse.Namespace, settings: Settings) -> str:
             cleanup_level=args.cleanup_level or settings.cleanup_level,
         )
         output = transcribe_path(path, transcribe_args, settings)
-        if not output.strip():
-            # Ni copie ni collage : `paste_text` passe d'abord par le
-            # presse-papiers, et une dictée vide y écraserait ce que
-            # l'utilisateur gardait.
-            _notify_nothing_heard()
-            return output
-        # L'historique avant l'insertion : si le collage casse, le texte reste
-        # rattrapable par `aparte last`.
-        history.record(output, settings.history_persist)
-        _deliver(output, args.target, settings)
+        deliver_transcript(output, args.target, settings)
         return output
     finally:
         if not args.keep_audio:
@@ -327,12 +318,43 @@ def _notify_inserted(output: str, target: str) -> None:
     notify(title, _preview(output))
 
 
+def deliver_transcript(output: str, target: str, settings: Settings) -> bool:
+    """Placer la dictée transcrite, dans l'ordre qui la rend rattrapable.
+
+    Vide → on ne touche à rien : `paste_text` passe d'abord par le presse-papiers,
+    et une dictée vide y écraserait ce que l'utilisateur gardait. Sinon l'historique
+    s'écrit AVANT l'insertion : si le collage casse, le texte reste rattrapable par
+    « aparte last ». Renvoie True si le texte a été livré, False s'il était vide.
+
+    Un seul endroit pour cet ordre, partagé par `dictate_once`, `toggle_dictation`
+    et le worker macOS in-process (`RecordingController`) : le dupliquer risquerait
+    une dérive silencieuse sur le chemin que personne n'exerce à la main.
+    """
+    if not output.strip():
+        _notify_nothing_heard()
+        return False
+    history.record(output, settings.history_persist)
+    _deliver(output, target, settings)
+    return True
+
+
 def toggle_dictation(args: argparse.Namespace, settings: Settings) -> str:
     active = get_active_session()
     if args.status:
         if active:
             return f"recording {active.audio_path}"
         return "idle"
+    if is_macos():
+        # The Linux toggle spawns detached arecord processes coordinated through a
+        # session file — none of which exists on macOS, where recording lives in the
+        # resident server's RecordingController, driven by the global shortcut (M5).
+        # A fresh CLI process can't reach that in-memory state, so don't fake it.
+        message = (
+            "La bascule dictée sur macOS passe par le raccourci global ou "
+            "l'application résidente ; « aparte dictate » fait une passe unique."
+        )
+        notify("🎙️ Bascule indisponible", message, urgency="low")
+        return message
     if not active:
         if settings.beep:
             play_beep("start")
@@ -353,11 +375,7 @@ def toggle_dictation(args: argparse.Namespace, settings: Settings) -> str:
             cleanup_level=args.cleanup_level or settings.cleanup_level,
         )
         output = transcribe_path(session.audio_path, transcribe_args, settings)
-        if not output.strip():
-            _notify_nothing_heard()
-            return output
-        history.record(output, settings.history_persist)
-        _deliver(output, args.target, settings)
+        deliver_transcript(output, args.target, settings)
         return output
     finally:
         if not args.keep_audio:

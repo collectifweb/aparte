@@ -45,6 +45,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   toggle-to-dictate and the global shortcut come later (M4/M5). Linux behaviour is
   unchanged. Proven with mocked unit tests on Linux; the native CGEvent behaviour
   is validated later on a Mac.
+- **macOS in-process recording (M4).** A new `RecordingController` records in the
+  resident server's memory — no subprocess, no session file, no `/proc` — with a
+  bounded real-time PortAudio callback, an idle→recording→processing state machine,
+  a worker that transcribes on the server's single cached model, and a read-only
+  `GET /api/recording-state` for the tray and doctor to observe. It reuses the same
+  deliver-order as the CLI (empty→nothing, history before insertion, success only
+  after), now extracted into one shared `deliver_transcript` helper. On macOS
+  `aparte toggle` says plainly that recording lives in the resident app rather than
+  crashing on the Linux-only recorder. The controller is dormant until its trigger
+  — the global shortcut — lands in M5. Linux behaviour is unchanged. Proven with
+  mocked unit tests on Linux; the real PortAudio capture is validated later on a Mac.
 
 ## [1.1.1] - 2026-07-23
 

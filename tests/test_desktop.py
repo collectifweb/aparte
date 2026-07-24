@@ -455,5 +455,44 @@ class DarwinRouteGuardTest(unittest.TestCase):
             paste.assert_called_once()
 
 
+class RecordingStateRouteTest(unittest.TestCase):
+    """On macOS the resident server records in memory (M4). Its state is observable
+    through a read-only GET — allowed on Darwin — for the tray and doctor. Off
+    Darwin there is no controller, so the route is absent. The dev host is Linux,
+    so the platform is mocked; the controller is built at handler_factory time."""
+
+    def _mac_handler(self):
+        with mock.patch.object(desktop, "is_macos", return_value=True):
+            return handler_factory(Settings())
+
+    def test_the_state_is_idle_at_rest_on_darwin(self):
+        res = make_request("GET", "/api/recording-state", handler_class=self._mac_handler())
+        self.assertEqual(res["status"], int(HTTPStatus.OK))
+        self.assertEqual(json.loads(res["body"]), {"state": "idle"})
+
+    def test_the_route_is_absent_off_darwin(self):
+        # Default factory (is_macos False here): no controller, route 404s.
+        res = make_request("GET", "/api/recording-state")
+        self.assertEqual(res["status"], int(HTTPStatus.NOT_FOUND))
+
+    def test_the_controller_is_wired_only_on_darwin(self):
+        self.assertIsNotNone(self._mac_handler()._recording_controller)
+        self.assertIsNone(handler_factory(Settings())._recording_controller)
+
+    def test_the_capture_transcriber_flows_through_the_server_model(self):
+        # The controller's transcribe_fn reuses the server's cached transcriber (and
+        # the same inference_lock, by construction) — never a self-HTTP call.
+        fake = mock.Mock()
+        fake.transcribe.return_value = SimpleNamespace(text="coucou")
+        with tempfile.TemporaryDirectory() as directory:
+            env = {"APARTE_CONFIG": str(Path(directory) / "config.json"), "MURMUR_CONFIG": ""}
+            with mock.patch.dict(os.environ, env):
+                with mock.patch.object(desktop, "build_transcriber", return_value=fake) as build:
+                    controller = self._mac_handler()._recording_controller
+                    self.assertEqual(controller._transcribe_fn(Path("/tmp/x.wav")), "coucou")
+        build.assert_called_once()
+        fake.transcribe.assert_called_once_with(Path("/tmp/x.wav"))
+
+
 if __name__ == "__main__":
     unittest.main()

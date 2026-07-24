@@ -16,6 +16,7 @@ from .audio import list_microphones
 from .clipboard import copy_text, paste_text
 from .config import Settings, get_env, load_config, positive_int, update_config
 from .diagnostics import collect_diagnostics
+from .macos_recording import RecordingController
 from .platform_dispatch import is_macos
 from .polish import PolishOptions, build_polisher
 from .transcription import build_transcriber
@@ -238,6 +239,10 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
             return transcriber
 
     class DesktopHandler(BaseHTTPRequestHandler):
+        # The in-process macOS recorder, wired below on Darwin only. None on Linux,
+        # where the global shortcut drives detached CLI recorders instead.
+        _recording_controller = None
+
         def do_GET(self) -> None:
             route = self.path.split("?", 1)[0]
             if route == "/" or self.path.startswith("/?"):
@@ -264,6 +269,16 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                 # panel must not phone home on its own.
                 fetch = (parse_qs(urlsplit(self.path).query).get("fetch") or [""])[0] == "1"
                 self._send_json(check_update(fetch=fetch))
+                return
+            if route == "/api/recording-state":
+                # Read-only, so it stays allowed on Darwin: the tray (M6) and
+                # doctor observe the in-process controller's state here. Absent
+                # (404) off macOS, where there is no controller.
+                controller = self._recording_controller
+                if controller is None:
+                    self.send_error(HTTPStatus.NOT_FOUND)
+                    return
+                self._send_json({"state": controller.state})
                 return
             self.send_error(HTTPStatus.NOT_FOUND)
 
@@ -473,5 +488,18 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(data)
+
+    if is_macos():
+        # macOS records in the resident server's memory (M4). The controller shares
+        # the single inference_lock and the one cached Whisper model — never a
+        # self-HTTP call — and is reached in-process by the M5 shortcut and the M6
+        # tray. Its trigger lands in M5; here it is built and observable.
+        def _transcribe_capture(wav: Path) -> str:
+            with inference_lock:
+                return get_transcriber(current_settings()).transcribe(wav).text
+
+        DesktopHandler._recording_controller = RecordingController(
+            _transcribe_capture, current_settings
+        )
 
     return DesktopHandler
