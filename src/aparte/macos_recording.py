@@ -19,9 +19,10 @@ callback, the post-capture order. The real capture is verified by hand on a Mac
 The controller is built with every dependency **injected** so it stays pure and
 testable:
 
-- ``transcribe_fn(wav) -> str`` — server-local transcription. The desktop wiring
-  builds it to take the single ``inference_lock`` and reuse the one cached Whisper
-  model, never a self-HTTP call.
+- ``transcribe_fn(wav) -> str`` — server-local **raw** transcription. The desktop
+  wiring builds it to take the single ``inference_lock`` and reuse the one cached
+  Whisper model, never a self-HTTP call. Polishing (French typography) happens in
+  the worker, after transcription — not in this primitive.
 - ``settings_provider() -> Settings`` — re-read each recording, so a config change
   (device, beep, cap, polish) takes effect without a restart.
 
@@ -66,6 +67,26 @@ _DEBOUNCE_SECONDS = 0.25
 _MIN_TRANSCRIBABLE_SECONDS = 0.3
 
 
+class _Capture:
+    """One recording's own mutable state, owned by its stream's callback.
+
+    Each capture gets a fresh capsule and a callback closed over it, so a late
+    or leaked callback from a *previous* stream can only ever write into its own
+    dead capsule — never into the live one. ``active`` is flipped false the moment
+    a capture stops; the callback checks it first and becomes a no-op.
+    """
+
+    __slots__ = ("frames", "frame_count", "max_frames", "active", "truncated", "overflowed")
+
+    def __init__(self, max_frames: int) -> None:
+        self.frames: list[bytes] = []
+        self.frame_count = 0
+        self.max_frames = max_frames
+        self.active = True
+        self.truncated = False  # buffer cap hit — recording longer than the ceiling
+        self.overflowed = False  # PortAudio reported an over/underflow
+
+
 def _sounddevice():
     """Import sounddevice, or raise a RecordingError the notification shows as-is."""
     try:
@@ -91,9 +112,9 @@ class RecordingController:
 
     Thread model: :meth:`toggle`, :meth:`shutdown` and the cap timer mutate state
     under ``_lock``. The PortAudio callback runs on the real-time audio thread and
-    only appends to a bounded buffer. Transcription and insertion run on a **worker
-    thread**, off both the lock and the audio thread, so the shortcut handler never
-    blocks on the run loop.
+    only appends to its own capture's bounded buffer. Transcription, polishing and
+    insertion run on a **worker thread**, off both the lock and the audio thread,
+    so the shortcut handler never blocks on the run loop.
     """
 
     def __init__(
@@ -112,11 +133,7 @@ class RecordingController:
         self._lock = threading.Lock()
         self._state = IDLE
         self._stream = None
-        self._frames: list[bytes] = []
-        self._frame_count = 0
-        self._max_frames = 0
-        self._truncated = False  # buffer cap hit — recording longer than the ceiling
-        self._overflowed = False  # PortAudio reported an over/underflow
+        self._capture: _Capture | None = None
         self._timer: threading.Timer | None = None
         self._worker: threading.Thread | None = None
         self._last_toggle: float | None = None
@@ -147,9 +164,11 @@ class RecordingController:
         with self._lock:
             self._cancel_timer()
             if self._state == RECORDING:
+                if self._capture is not None:
+                    self._capture.active = False
                 self._close_stream(self._stream)
                 self._stream = None
-                self._frames = []
+                self._capture = None
                 self._state = IDLE
 
     # -- Start ------------------------------------------------------------------
@@ -159,81 +178,105 @@ class RecordingController:
             self._start_locked()
         except Exception as exc:
             # A framework or a device that won't open must surface, not fake a
-            # recording. The next press starts fresh from ERROR.
+            # recording. Close a stream that already started (e.g. the cap timer
+            # failed to arm) before dropping it, so nothing keeps capturing. The
+            # next press starts fresh from ERROR.
             self._cancel_timer()
+            self._close_stream(self._stream)
             self._stream = None
+            self._capture = None
             self._state = ERROR
             self._notify_error(exc)
 
     def _start_locked(self) -> None:
         settings = self._settings_provider()
         sd = _sounddevice()
-        self._frames = []
-        self._frame_count = 0
-        self._truncated = False
-        self._overflowed = False
-        self._max_frames = max(1, self._sample_rate * int(settings.max_recording_seconds))
+        max_frames = max(1, self._sample_rate * int(settings.max_recording_seconds))
+        capture = _Capture(max_frames)
+
+        def on_audio(indata, frames, time_info, status, _cap=capture) -> None:
+            # PortAudio real-time thread: no disk I/O, no Whisper, no long lock, no
+            # raise (a callback exception does not propagate as a normal one). It
+            # writes only into its own capsule, and stops the instant the capsule is
+            # deactivated — so a late or leaked callback can't touch a live capture.
+            if not _cap.active:
+                return
+            if status:
+                _cap.overflowed = True
+            if _cap.frame_count >= _cap.max_frames:
+                _cap.truncated = True
+                return
+            _cap.frames.append(bytes(indata))
+            _cap.frame_count += frames
+
         stream = sd.RawInputStream(
             samplerate=self._sample_rate,
             channels=1,
             dtype="int16",
             device=settings.microphone or None,
-            callback=self._callback,
+            callback=on_audio,
         )
+        # The opening tone must finish before the mic actually captures, or it ends
+        # up in the recording (see audio.play_beep). Construction doesn't capture;
+        # stream.start() does — so beep between the two.
+        if settings.beep:
+            _play_beep_safe("start")
         try:
             stream.start()
         except Exception:
             stream.close()
             raise
         self._stream = stream
+        self._capture = capture
         self._state = RECORDING
         self._arm_cap_timer(settings.max_recording_seconds)
-        if settings.beep:
-            _play_beep_safe("start")
-
-    def _callback(self, indata, frames, time_info, status) -> None:
-        # PortAudio real-time thread: no disk I/O, no Whisper, no long lock, no
-        # raise (a callback exception does not propagate as a normal one). Copy the
-        # frames out of the reused buffer into a bounded list and note overflows.
-        if status:
-            self._overflowed = True
-        if self._frame_count >= self._max_frames:
-            self._truncated = True
-            return
-        self._frames.append(bytes(indata))
-        self._frame_count += frames
 
     # -- Stop / finalize --------------------------------------------------------
 
     def _stop_locked(self) -> None:
         self._cancel_timer()
+        capture = self._capture
+        if capture is not None:
+            capture.active = False  # stale callbacks from this stream now no-op
+        self._capture = None
         stream = self._stream
         self._stream = None
-        frames = self._frames
-        self._frames = []
         self._state = PROCESSING
-        if self._settings_provider().beep:
-            _play_beep_safe("stop")
-        # Never transcribe on the trigger thread: hand the capture to a worker.
-        self._worker = threading.Thread(
-            target=self._finalize, args=(stream, frames), daemon=True
-        )
-        self._worker.start()
-
-    def _finalize(self, stream, frames: list[bytes]) -> None:
+        # Never transcribe on the trigger thread: hand the capture to a worker. If
+        # the worker can't even start (thread exhaustion), close the stream and go
+        # to ERROR — never leave the state stuck on PROCESSING, which would refuse
+        # every future press. Settings are read in the worker, not here, so nothing
+        # between the state change and the worker can raise and strand us.
         try:
+            self._worker = threading.Thread(
+                target=self._finalize, args=(stream, capture), daemon=True
+            )
+            self._worker.start()
+        except Exception as exc:
             self._close_stream(stream)
+            self._state = ERROR
+            self._notify_error(exc)
+
+    def _finalize(self, stream, capture: _Capture | None) -> None:
+        try:
+            # Close first, so the device is freed even if reading settings raises.
+            self._close_stream(stream)
+            settings = self._settings_provider()
+            if getattr(settings, "beep", False):
+                _play_beep_safe("stop")
+            frames = capture.frames if capture is not None else []
             if self._captured_seconds(frames) < _MIN_TRANSCRIBABLE_SECONDS:
                 # Nothing to transcribe — feed the empty string through the shared
                 # helper so "nothing heard" is announced in one place, and history
                 # and the clipboard are left untouched.
-                self._deliver("")
+                self._deliver("", settings)
                 self._set_state(IDLE)
                 return
             wav = self._write_wav(frames)
             try:
-                output = self._transcribe_fn(wav)
-                self._deliver(output)
+                raw = self._transcribe_fn(wav)
+                output = self._polish(raw, settings)
+                self._deliver(output, settings)
             finally:
                 wav.unlink(missing_ok=True)
             self._set_state(IDLE)
@@ -243,14 +286,22 @@ class RecordingController:
             self._set_state(ERROR)
             self._notify_error(exc)
 
-    def _deliver(self, output: str) -> None:
-        # Lazy import: cli imports desktop imports this module, so importing cli at
-        # load time would cycle. deliver_transcript is the single home of the
-        # empty→nothing / history-before-insert / notify-after order, shared with
-        # the CLI so the invariants can't drift on this path.
+    def _polish(self, transcript: str, settings) -> str:
+        # Lazy import (cli → desktop → this module would cycle at load). The
+        # in-process path must polish like the CLI, or the shortcut would deliver
+        # raw text with no French typography — the one thing the app exists for.
+        from .cli import polish_for_delivery
+
+        return polish_for_delivery(transcript, settings)
+
+    def _deliver(self, output: str, settings) -> None:
+        # Lazy import for the same cycle reason. deliver_transcript is the single
+        # home of the empty→nothing / history-before-insert / notify-after order,
+        # shared with the CLI so the invariants can't drift on this path. One same
+        # Settings snapshot polished and delivered, never two.
         from .cli import deliver_transcript
 
-        deliver_transcript(output, "paste", self._settings_provider())
+        deliver_transcript(output, "paste", settings)
 
     # -- Cap timer --------------------------------------------------------------
 
@@ -276,7 +327,9 @@ class RecordingController:
     def _close_stream(stream) -> None:
         # Best-effort: the frames are already captured in memory before we get
         # here, so a stop/close hiccup only fails to release the device — it must
-        # never cost the recording. Both are attempted regardless.
+        # never cost the recording. Safe because the capture's callback is already
+        # deactivated, so a stream that refuses to close can't contaminate the next
+        # capture. Both stop and close are attempted regardless.
         if stream is None:
             return
         try:

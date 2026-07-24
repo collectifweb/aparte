@@ -95,6 +95,13 @@ class ControllerTestBase(unittest.TestCase):
             return bool(output.strip())
 
         self.deliver = mock.patch("aparte.cli.deliver_transcript", side_effect=deliver).start()
+        # The worker polishes before delivering. Stub the shared helper to an
+        # identity so worker tests assert on the raw transcript; PolishTest overrides
+        # the side effect to prove the polished output is what actually reaches
+        # deliver. The real polish chain is exercised in test_cli.
+        self.polish = mock.patch(
+            "aparte.cli.polish_for_delivery", side_effect=lambda text, settings: text
+        ).start()
         self._sd_patch = mock.patch.dict(sys.modules, {"sounddevice": self.sd})
         self._sd_patch.start()
         self.addCleanup(self._sd_patch.stop)
@@ -144,19 +151,20 @@ class CallbackTest(ControllerTestBase):
     def test_buffer_is_bounded_at_the_frame_ceiling(self):
         self.controller.toggle()
         self.controller._cancel_timer()   # drop the real cap timer; drive the cap by hand
-        self.controller._max_frames = 100
+        capture = self.controller._capture
+        capture.max_frames = 100
         stream = self.sd.streams[0]
         stream.feed(40)
         stream.feed(40)
         stream.feed(40)   # count 120 ≥ 100 on the next feed
         stream.feed(40)   # dropped
-        self.assertEqual(len(self.controller._frames), 3)
-        self.assertTrue(self.controller._truncated)
+        self.assertEqual(len(capture.frames), 3)
+        self.assertTrue(capture.truncated)
 
     def test_a_portaudio_status_is_recorded_as_overflow(self):
         self.controller.toggle()
         self.sd.streams[0].feed(10, status="input overflow")
-        self.assertTrue(self.controller._overflowed)
+        self.assertTrue(self.controller._capture.overflowed)
 
 
 class ShortAndEmptyTest(ControllerTestBase):
@@ -258,6 +266,75 @@ class WavTest(ControllerTestBase):
                 self.assertEqual(wav.readframes(wav.getnframes()), b"\x01\x02\x03\x04")
         finally:
             path.unlink(missing_ok=True)
+
+
+class LateCallbackTest(ControllerTestBase):
+    """A callback that fires after its capture stopped — or from a stream whose
+    close() failed — must never write into a later capture."""
+
+    def test_a_late_callback_from_the_old_stream_cannot_contaminate_the_next(self):
+        self.sd.stop_error = RuntimeError("close hiccup")  # the old stream lingers
+        self.controller.toggle()
+        old = self.sd.streams[0]
+        old.feed(16000)
+        self.now += 1.0
+        self.controller.toggle()   # stop: old capsule deactivated, worker runs
+        self._run_worker()
+
+        self.now += 1.0
+        self.controller.toggle()   # a fresh capture, its own capsule + stream
+        new_capture = self.controller._capture
+        old.feed(16000)            # the lingering old stream fires again
+        self.assertEqual(new_capture.frame_count, 0)  # not contaminated
+
+
+class BeepOrderTest(ControllerTestBase):
+    def test_the_start_beep_finishes_before_the_mic_captures(self):
+        self.settings.beep = True
+        started_at_beep = {}
+
+        def beep(kind):
+            if self.sd.streams:
+                started_at_beep[kind] = self.sd.streams[-1].started
+
+        with mock.patch.object(macos_recording, "play_beep", side_effect=beep):
+            self.controller.toggle()
+        # The opening tone played while the stream existed but had not started yet.
+        self.assertIs(started_at_beep.get("start"), False)
+        self.assertTrue(self.sd.streams[0].started)
+
+
+class PolishTest(ControllerTestBase):
+    def test_the_worker_polishes_the_transcript_before_delivering(self):
+        self.controller._transcribe_fn = lambda p: "brut"
+        self.polish.side_effect = lambda text, settings: text.upper()  # visible marker
+        self._record_and_stop()
+        self.polish.assert_called_once_with("brut", self.settings)
+        # The polished text, not the raw one, is what gets delivered.
+        self.assertEqual(self.delivered[-1][0], "BRUT")
+
+
+class StopRobustnessTest(ControllerTestBase):
+    def test_a_worker_that_wont_start_errors_instead_of_sticking_on_processing(self):
+        self.controller.toggle()
+        self.sd.streams[0].feed(16000)
+        self.now += 1.0
+        with mock.patch.object(
+            macos_recording.threading, "Thread"
+        ) as Thread:
+            Thread.return_value.start.side_effect = RuntimeError("no threads")
+            self.controller.toggle()  # stop
+        self.assertEqual(self.controller.state, ERROR)
+        self.assertTrue(self.sd.streams[0].closed)  # stream freed, not leaked
+        self.assertEqual(self.notify.call_args.kwargs.get("urgency"), "critical")
+
+    def test_a_cap_timer_that_wont_arm_closes_the_started_stream(self):
+        with mock.patch.object(
+            self.controller, "_arm_cap_timer", side_effect=RuntimeError("no timer")
+        ):
+            self.controller.toggle()
+        self.assertEqual(self.controller.state, ERROR)
+        self.assertTrue(self.sd.streams[0].closed)  # the started stream is not left open
 
 
 if __name__ == "__main__":

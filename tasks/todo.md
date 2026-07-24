@@ -1066,6 +1066,28 @@ dans Slack/Mail/Electron, plafond en frames sous charge, discard au shutdown.
 Linux d'origine et la sortie `doctor` Linux, inchangés. **Aucune UI visible** →
 pas de `/impeccable`. Aucune release.
 
+**Durcissement avant M5 (contre-expertise `/confront-codex`, 24/07).** Le découpage
+M4 est validé des deux côtés (consensus) ; cinq corrections chirurgicales appliquées
+avant de brancher le raccourci. Plan : `docs/plan-portage-macos-m4-durcissement.md`.
+- [x] **Callback isolé par capture** (`_Capture`, fermeture) : un callback tardif ou
+      un stream fuité ne peut plus contaminer la capture suivante. `_close_stream`
+      reste best-effort, désormais sûr.
+- [x] **Bip d'ouverture avant `stream.start()`** : il n'entre plus dans
+      l'enregistrement (respecte `audio.play_beep`) ; bip d'arrêt après fermeture.
+- [x] **Polissage dans le worker** (`polish_for_delivery`, partagé avec la CLI) : le
+      chemin résident livre du texte **poli** (typographie française), plus du brut.
+      Refusé dans `_transcribe_capture`, qui reste une primitive de transcription pure.
+- [x] **Stop robuste** : si le worker ne démarre pas → `error` observable, stream
+      fermé, jamais d'état collé sur `processing`. Réglages lus dans le worker.
+- [x] **Fermeture du stream sur erreur de start** (`_begin_locked`) : un stream déjà
+      démarré (ex. `_arm_cap_timer` qui lève) est fermé avant d'être oublié.
+- Reporté et daté par le consensus : `toggle()` dispatché **hors run loop** (M5) ;
+  `run_desktop()` détient la réf. du contrôleur et câble `shutdown()` (M5/M6) ;
+  surface d'état riche `truncated`/`overflowed`/dernière erreur (M6/M8) ; sémantique
+  du debounce après observation de `RegisterEventHotKey` (M5).
+- Preuve : **313 tests verts** (+7 : 5 recording, 2 cli). `cli.py` purement additif,
+  `desktop.py` non touché → Linux byte-identique.
+
 ### Windows, pour mémoire (étudié le 23/07, non planifié)
 
 Réécriture partielle, ~15–21 jours, ~le double de Mac. Aucun modèle Unix de

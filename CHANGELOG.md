@@ -56,6 +56,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   crashing on the Linux-only recorder. The controller is dormant until its trigger
   — the global shortcut — lands in M5. Linux behaviour is unchanged. Proven with
   mocked unit tests on Linux; the real PortAudio capture is validated later on a Mac.
+  Following an independent review, the controller was hardened before M5: each
+  recording now owns its callback buffer (a late or leaked callback can't
+  contaminate the next capture), the opening beep plays before the mic captures,
+  the worker **polishes** the transcript (French typography) like the CLI instead
+  of delivering raw text, a stop that fails to start its worker goes to an
+  observable error state instead of sticking on "processing", and a stream is
+  always closed on a start error.
 
 ## [1.1.1] - 2026-07-23
 

@@ -119,6 +119,26 @@ class DeliverTranscriptTest(unittest.TestCase):
         deliver.assert_called_once_with("Bonjour", "paste", settings)
 
 
+class PolishForDeliveryTest(unittest.TestCase):
+    """The resident shortcut has no per-call flags: it polishes with the config
+    defaults, the same chain transcribe_path applies on the CLI side."""
+
+    def test_it_polishes_with_the_settings_defaults(self):
+        settings = Settings()
+        with mock.patch.object(cli, "polish_text", return_value="poli") as polish:
+            out = cli.polish_for_delivery("brut", settings)
+        self.assertEqual(out, "poli")
+        args = polish.call_args.args[1]
+        self.assertTrue(args.polish)
+        self.assertEqual(args.style, settings.default_style)
+        self.assertEqual(args.cleanup_level, settings.cleanup_level)
+
+    def test_an_empty_transcript_is_returned_untouched_without_polishing(self):
+        with mock.patch.object(cli, "polish_text") as polish:
+            self.assertEqual(cli.polish_for_delivery("   ", Settings()), "   ")
+        polish.assert_not_called()
+
+
 class MacToggleTest(unittest.TestCase):
     """On macOS the toggle has no detached recorder to drive: recording lives in
     the resident server (M4/M5). The CLI says so plainly instead of crashing on the

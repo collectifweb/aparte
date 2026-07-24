@@ -338,6 +338,25 @@ def deliver_transcript(output: str, target: str, settings: Settings) -> bool:
     return True
 
 
+def polish_for_delivery(transcript: str, settings: Settings) -> str:
+    """Polir le texte dicté pour le chemin résident (raccourci macOS).
+
+    Le raccourci n'a pas d'options par appel : il prend les défauts des réglages
+    (polissage activé, style et niveau de nettoyage de la config). C'est le pendant
+    du polissage que `transcribe_path` applique côté ligne de commande — sans ce
+    passage, le raccourci macOS livrerait du texte brut, sans typographie française,
+    sur le chemin principal du produit. Une chaîne vide reste vide, sans polir.
+    """
+    if not transcript.strip():
+        return transcript
+    polish_args = argparse.Namespace(
+        polish=True,
+        style=settings.default_style,
+        cleanup_level=settings.cleanup_level,
+    )
+    return polish_text(transcript, polish_args, settings)
+
+
 def toggle_dictation(args: argparse.Namespace, settings: Settings) -> str:
     active = get_active_session()
     if args.status:
