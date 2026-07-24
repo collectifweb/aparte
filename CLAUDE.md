@@ -91,6 +91,13 @@ test supprime en silence un vrai ancien `murmur.desktop` de l'utilisateur. Même
 famille que `HistoryEndpointTest` ; vu le 23/07 sur un test de la couture macOS
 (M0).
 
+**Un test qui laisse un chemin natif macOS appeler le vrai `notify()` empoisonne
+l'interpréteur** : `notify.py` importe `gi` (GTK), qui échoue ici (« Unable to
+register enum ») et laisse le module cassé pour les tests suivants — erreurs en
+cascade, invisibles en isolé, seulement en suite. Stubber `notify` (et le
+`deliver_transcript` importé paresseusement) au niveau du module dans le `setUp`,
+comme `test_macos_recording.py`. Vu le 24/07 (M4).
+
 ## Invariants à ne pas casser
 
 ### Reprise depuis l'ancien nom (Murmur → Aparté)
@@ -302,6 +309,17 @@ phrases voisines.
   est un test de route explicite dans `do_POST`, **après** l'Origin-check. Les
   actions natives Mac passent par la CLI, le raccourci in-process ou le tray.
   (M3, `docs/plan-portage-macos-m3.md`.)
+- **Sur macOS, l'enregistrement de la bascule vit en mémoire du serveur**
+  (`macos_recording.py`, `RecordingController`), pas dans `session.py` (arecord,
+  `/proc` — Linux only). Trois garde-fous que M5 ne doit pas casser : son
+  `recording_lock` est **distinct** d'`inference_lock` (les mélanger bloque
+  l'aperçu au fil de la parole) ; son `transcribe_fn` transcrit **en local** sous
+  `inference_lock`, jamais par un appel HTTP à soi-même ; le module importe `cli`
+  **paresseusement** (dans le worker), car `desktop → macos_recording → cli →
+  desktop` cyclerait à l'import. Le contrôleur n'est **déclenché par aucune route
+  HTTP** (invariant Darwin ci-dessus) : seul `GET /api/recording-state`, en lecture
+  seule, l'observe ; son vrai déclencheur est le raccourci in-process (M5).
+  (M4, `docs/plan-portage-macos-m4.md`.)
 - **L'unité de mise à jour est un tag de version, jamais la pointe de la
   branche.** `update.py` compare `__version__` au plus haut tag `vX.Y.Z`
   accessible depuis la branche suivie, et avance jusqu'à **ce tag**. Compter les
