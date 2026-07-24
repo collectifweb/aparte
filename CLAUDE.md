@@ -292,6 +292,16 @@ phrases voisines.
 - `/api/update/apply` lance un `git merge --ff-only` puis `pip install`. Toute
   nouvelle route qui exécute une commande passe par la même porte, sans
   exception.
+- **Sur Darwin, aucune route POST ne réalise d'effet système.**
+  `_DARWIN_DISABLED_POST_ROUTES` (`desktop.py`) rend 404 `/api/paste`, `/api/copy`
+  et `/api/update/apply` quand `is_macos()` — le serveur résident détient des
+  permissions TCC qu'un navigateur n'a pas, une route qui les emploie serait un
+  proxy de privilèges. Le critère est **« effet système déclenché par HTTP »**,
+  pas « permission TCC » : toute route POST future à effet système (insertion,
+  presse-papiers, commande, réglage système) doit rejoindre cet ensemble. Le garde
+  est un test de route explicite dans `do_POST`, **après** l'Origin-check. Les
+  actions natives Mac passent par la CLI, le raccourci in-process ou le tray.
+  (M3, `docs/plan-portage-macos-m3.md`.)
 - **L'unité de mise à jour est un tag de version, jamais la pointe de la
   branche.** `update.py` compare `__version__` au plus haut tag `vX.Y.Z`
   accessible depuis la branche suivie, et avance jusqu'à **ce tag**. Compter les
