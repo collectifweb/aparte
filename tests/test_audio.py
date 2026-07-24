@@ -1,5 +1,6 @@
 import subprocess
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from aparte import audio
@@ -92,6 +93,52 @@ class BeepTest(unittest.TestCase):
     def test_a_missing_player_is_not_an_error(self):
         with mock.patch.object(audio.shutil, "which", return_value=None):
             self.assertIsNone(audio.play_beep("start"))
+
+
+class MacBackendTest(unittest.TestCase):
+    """macOS speaks afplay and PortAudio, never ALSA/arecord."""
+
+    def test_beep_plays_through_afplay(self):
+        with mock.patch.object(audio, "is_macos", return_value=True):
+            with mock.patch.object(audio.shutil, "which", return_value="/usr/bin/afplay"):
+                with mock.patch.object(audio, "_beep_file", return_value=Path("/tmp/beep.wav")):
+                    with mock.patch.object(audio.subprocess, "run") as run:
+                        audio.play_beep("start")
+        command = run.call_args.args[0]
+        self.assertEqual(command[0], "afplay")
+        self.assertNotIn("-q", command)  # -q is an aplay flag, not an afplay one
+
+    def test_microphones_come_from_portaudio_as_names(self):
+        fake_sd = mock.Mock()
+        fake_sd.query_devices.return_value = [
+            {"name": "MacBook Pro Microphone", "max_input_channels": 1},
+            {"name": "MacBook Pro Speakers", "max_input_channels": 0},
+            {"name": "USB Mic", "max_input_channels": 2},
+        ]
+        with mock.patch.object(audio, "is_macos", return_value=True):
+            with mock.patch.dict("sys.modules", {"sounddevice": fake_sd}):
+                devices = audio.list_microphones()
+        self.assertEqual(
+            devices,
+            [
+                {"name": "MacBook Pro Microphone", "label": "MacBook Pro Microphone"},
+                {"name": "USB Mic", "label": "USB Mic"},
+            ],
+        )
+
+    def test_missing_portaudio_is_an_empty_list_not_an_error(self):
+        # sys.modules["sounddevice"] = None makes `import sounddevice` raise.
+        with mock.patch.object(audio, "is_macos", return_value=True):
+            with mock.patch.dict("sys.modules", {"sounddevice": None}):
+                self.assertEqual(audio.list_microphones(), [])
+
+    def test_record_wav_uses_sounddevice_and_never_arecord(self):
+        with mock.patch.object(audio, "is_macos", return_value=True):
+            with mock.patch.object(audio, "_record_wav_sounddevice") as sounddevice:
+                with mock.patch.object(audio, "_record_wav_arecord") as arecord:
+                    audio.record_wav(2.0, device="USB Mic")
+        sounddevice.assert_called_once_with(2.0, 16000, "USB Mic")
+        arecord.assert_not_called()
 
 
 if __name__ == "__main__":

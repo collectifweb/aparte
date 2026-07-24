@@ -4,12 +4,18 @@ import os
 import shutil
 import subprocess
 
+from .platform_dispatch import is_macos
+
 
 class ClipboardError(RuntimeError):
     pass
 
 
 def copy_text(text: str) -> str:
+    if is_macos():
+        # pbcopy ships with macOS, so there is no tool to look for.
+        subprocess.run(["pbcopy"], input=text, text=True, check=True)
+        return "pbcopy"
     if shutil.which("wl-copy") and os.getenv("WAYLAND_DISPLAY"):
         subprocess.run(["wl-copy"], input=text, text=True, check=True)
         return "wl-copy"

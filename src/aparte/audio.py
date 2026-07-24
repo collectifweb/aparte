@@ -8,6 +8,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from .platform_dispatch import is_macos
+
 
 class RecordingError(RuntimeError):
     pass
@@ -20,6 +22,8 @@ def list_microphones() -> list[dict[str, str]]:
     fly, which the raw ``hw`` ones do not — a 48 kHz microphone would refuse the
     16 kHz Whisper wants.
     """
+    if is_macos():
+        return _list_microphones_sounddevice()
     if not shutil.which("arecord"):
         return []
     try:
@@ -38,6 +42,35 @@ def list_microphones() -> list[dict[str, str]]:
     return devices
 
 
+def _list_microphones_sounddevice() -> list[dict[str, str]]:
+    """The input devices PortAudio knows about, for the microphone setting on macOS.
+
+    A device is named, not addressed by an ALSA ``plughw`` string: the name is
+    stored in the config as a plain string — the same shape Linux keeps — and
+    ``sounddevice`` resolves it back to a device at record time. Best-effort:
+    an empty list rather than an error when PortAudio is unavailable.
+    """
+    try:
+        import sounddevice as sd
+    except Exception:
+        return []
+    try:
+        devices = sd.query_devices()
+    except Exception:
+        return []
+    seen: set[str] = set()
+    microphones: list[dict[str, str]] = []
+    for device in devices:
+        if device.get("max_input_channels", 0) <= 0:
+            continue
+        name = str(device.get("name", "")).strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        microphones.append({"name": name, "label": name})
+    return microphones
+
+
 def record_wav(
     seconds: float,
     sample_rate: int = 16000,
@@ -46,6 +79,10 @@ def record_wav(
 ) -> Path:
     if seconds <= 0:
         raise RecordingError("Recording duration must be greater than zero.")
+    if is_macos():
+        # macOS has no arecord; PortAudio via sounddevice is the only recorder,
+        # so there is no ALSA fallback to suggest when it is missing.
+        return _record_wav_sounddevice(seconds, sample_rate, device)
     last_error: Exception | None = None
     # A chosen microphone is an ALSA name, and arecord is the backend that
     # speaks it — so it takes the lead as soon as one is set, which also keeps
@@ -136,12 +173,15 @@ def play_beep(kind: str) -> None:
     microphone starts, or it ends up in the recording.
     """
     frequency = BEEP_TONES.get(kind)
-    player = next((name for name in ("paplay", "aplay") if shutil.which(name)), None)
+    if is_macos():
+        player = "afplay" if shutil.which("afplay") else None
+    else:
+        player = next((name for name in ("paplay", "aplay") if shutil.which(name)), None)
     if not frequency or not player:
         return
     try:
         path = _beep_file(kind, frequency)
-        command = [player, str(path)] if player == "paplay" else [player, "-q", str(path)]
+        command = [player, "-q", str(path)] if player == "aplay" else [player, str(path)]
         subprocess.run(command, check=False, capture_output=True, timeout=3)
     except (OSError, subprocess.SubprocessError, wave.Error):
         return

@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   active app, the global shortcut, the tray, and native notifications remain
   Linux-only, and the macOS modules themselves are not written. Linux behaviour is
   unchanged.
+- **Trivial macOS backends (M1).** The clipboard (`pbcopy`), notifications
+  (`osascript`), the start/stop beep (`afplay`), the microphone list, and audio
+  capture (PortAudio via `sounddevice`) now have their Darwin path, added as inline
+  branches that leave the Linux code untouched. This is plumbing for later work,
+  not a user-facing feature: insertion into the active app is still Linux-only
+  (coming in M3), and the browser dictation experience is unchanged. Proven with
+  mocked unit tests on Linux; the real behaviour is validated later on a Mac.
 
 ## [1.1.1] - 2026-07-23
 

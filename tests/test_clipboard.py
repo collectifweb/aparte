@@ -2,7 +2,7 @@ import unittest
 from unittest import mock
 
 from aparte import clipboard as clipboard_module
-from aparte.clipboard import ClipboardError, paste_text
+from aparte.clipboard import ClipboardError, copy_text, paste_text
 
 
 def _which(available):
@@ -94,6 +94,18 @@ class PasteTextTest(unittest.TestCase):
                         paste_text("ne pas perdre")
         commands = [call.args[0] for call in run.call_args_list]
         self.assertEqual(commands[0][0], "xclip")
+
+
+class CopyMacTest(unittest.TestCase):
+    """On macOS the clipboard is pbcopy, not the Linux wl-copy/xclip/xsel trio."""
+
+    def test_copy_text_uses_pbcopy(self):
+        with mock.patch.object(clipboard_module, "is_macos", return_value=True):
+            with mock.patch.object(clipboard_module.subprocess, "run") as run:
+                tool = copy_text("bonjour")
+        self.assertEqual(tool, "pbcopy")
+        self.assertEqual(run.call_args.args[0], ["pbcopy"])
+        self.assertEqual(run.call_args.kwargs["input"], "bonjour")
 
 
 if __name__ == "__main__":

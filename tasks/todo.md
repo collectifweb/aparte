@@ -849,6 +849,42 @@ machine (environnement PEP 668 « externally-managed »), et la vérif des wheel
 arm64 reste de toute façon à faire sur un vrai Mac. Commits `624c585` (docs) et
 `356a0f6` (feat).
 
+### M1 — socle trivial macOS (branche `feat/portage-macos`, **fait le 23/07**)
+
+Les backends « faciles » : de simples branches `if is_macos():` (la couture de
+M0) posées **avant** le code Linux, qui ne bouge pas d'un bit. Détail dans le
+plan global (§ Autres surfaces) — ce bloc renvoie et coche.
+
+- [x] `clipboard.py` — `copy_text` : `pbcopy` sur Mac (préinstallé, aucun outil à
+      chercher), sinon le trio Linux wl-copy/xclip/xsel inchangé.
+- [x] `notify.py` — `notify` : `osascript … display notification` sur Mac (pas de
+      `notify-send`), best-effort préservé (rend `False` sans lever). Petit
+      `_applescript_escape()` : un guillemet ou un backslash dans un aperçu de
+      dictée fermerait le littéral AppleScript trop tôt. L'urgence n'existe pas
+      côté macOS, elle y est ignorée. Notifications natives par le tray = **M6**.
+- [x] `audio.py` — `play_beep` : `afplay` sur Mac (synchrone, le bip finit avant
+      l'ouverture du micro), sinon paplay/aplay Linux. `list_microphones` :
+      `sounddevice.query_devices()` (identifiants PortAudio) sur Mac, sinon
+      `arecord -L` (plughw). `record_wav` : sounddevice seul sur Mac, sans repli
+      arecord ni message qui le suggère.
+- [x] Tests mockés (Linux) : `tests/test_clipboard.py`, `tests/test_notify.py`,
+      `tests/test_audio.py` — chaque branche Mac patchée via `<module>.is_macos`.
+
+**Décidé en cours de route.** *Sérialisation du micro* : `list_microphones` mac
+renvoie le **nom** du périphérique (une chaîne), pas son index numérique —
+`sounddevice` sait résoudre un nom, le réglage `microphone` reste une chaîne des
+deux côtés, rien ne change dans la config ni dans `_record_wav_sounddevice`.
+L'index bougerait au branchement d'un micro. C'est la résolution du point de
+vigilance « sérialisation `microphone` distincte » du plan global. *Pas de
+modules `macos_*`* : branches en ligne, conforme au « pas de grande couche
+d'abstraction » du plan. *Insertion Mac (`Cmd+V`) hors périmètre* : c'est **M3**
+— `paste_text` reste Linux-only ; sur Mac la dictée est copiée (pbcopy) mais pas
+encore collée.
+
+**Preuve.** 253 tests verts (`PYTHONPATH=src python3 -m unittest discover -s
+tests -t tests`), dont les 244 Linux d'avant, inchangés. +9 tests Mac (1
+clipboard, 4 notify, 4 audio). Aucune release.
+
 ### Windows, pour mémoire (étudié le 23/07, non planifié)
 
 Réécriture partielle, ~15–21 jours, ~le double de Mac. Aucun modèle Unix de

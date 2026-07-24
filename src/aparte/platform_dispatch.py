@@ -1,10 +1,12 @@
 """OS detection and the seam that routes to OS-specific backends.
 
 Aparté is Linux-first. This module is the single place that answers "which OS
-are we on" and picks the OS-specific implementation of a feature. In M0 the only
-seam wired here is the ``*_desktop`` family (launcher + autostart); the mixed
-modules (clipboard, notify, audio) branch in place in later lots, and the macOS
-implementations do not exist yet.
+are we on" and picks the OS-specific implementation of a feature. The
+``*_desktop`` family (launcher + autostart) routes through the
+``desktop_integration`` selector below and is still Linux-only; the trivial
+mixed modules (clipboard, notify, audio) branch on ``is_macos()`` in place. The
+heavier macOS pieces — insertion, the global hotkey, the tray — arrive in later
+lots.
 
 Detection reads ``sys.platform`` at call time on purpose: tests can simulate any
 OS by patching ``aparte.platform_dispatch.sys.platform`` without leaving a stale
