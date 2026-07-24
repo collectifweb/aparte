@@ -84,6 +84,13 @@ lit la vraie configuration de l'utilisateur : si `history_persist` y est vrai,
 le test écrit dans `~/.local/state/aparte/history.json`, c'est-à-dire dans son
 vrai historique de dictées. C'est arrivé le 22/07 (`HistoryEndpointTest`).
 
+**Un test qui appelle `install_desktop_entry()` doit isoler `XDG_DATA_HOME`
+**et** `XDG_CONFIG_HOME`**, pas seulement le premier. La fonction appelle
+`remove_legacy_entries()`, qui atteint `~/.config/autostart` : sans le second, le
+test supprime en silence un vrai ancien `murmur.desktop` de l'utilisateur. Même
+famille que `HistoryEndpointTest` ; vu le 23/07 sur un test de la couture macOS
+(M0).
+
 ## Invariants à ne pas casser
 
 ### Reprise depuis l'ancien nom (Murmur → Aparté)
