@@ -202,6 +202,16 @@ phrases voisines.
   compris les `aria-label` et les `title` (via `data-i18n-aria` /
   `data-i18n-title`). Un libellé écrit en dur dans `index.html` est un bogue :
   un lecteur d'écran configuré en français annoncerait de l'anglais.
+- Le panneau de diagnostic traduit chaque check **par clé** (`app.js` :
+  `tKey("check." + c.key + ".detail", c.detail)`), et la clé i18n **gagne
+  toujours** sur le texte du backend — ce dernier n'est qu'un repli si la clé
+  n'existe pas. Donc un check dont le `detail` **varie** (selon l'OS ou selon un
+  état) ne doit **pas** porter de clé i18n statique, sinon elle l'écrase en
+  silence et peut contredire l'icône (« va autoriser » à côté d'un ✓). Le check
+  `config` montre la convention : pas de `check.config.detail`, son chemin
+  dynamique passe. Corollaire : deux OS ne peuvent pas donner deux textes à une
+  même clé — un check partagé (`recorder`, `clipboard`) doit avoir un libellé
+  neutre, vrai des deux côtés. Vu le 23/07 sur les diagnostics macOS (M2a).
 - Le texte d'aide d'un champ se pose **hors** de son `<label>`, et se rattache
   par `aria-describedby`. Dans le label, il entre dans le **nom accessible** du
   contrôle : « Nombres dictés » s'annonçait suivi de ses trois phrases d'aide.
