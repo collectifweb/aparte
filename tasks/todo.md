@@ -945,6 +945,69 @@ sur un vrai Mac** : confirmer les API PyObjC (AVFoundation, `AXIsProcessTrusted`
 et la présence des wheels `pyobjc-framework-ApplicationServices` arm64. Aucune
 release.
 
+### M3 — insertion macOS (branche `feat/portage-macos`, **fait le 24/07**)
+
+Donner à macOS la capacité d'**insérer** le texte dicté dans la fenêtre active.
+Découpage validé par revue croisée Codex le 24/07 (consensus en 2 rounds) — plan
+final autonome : `docs/plan-portage-macos-m3.md`, débat archivé sous
+`docs/archives/confront-codex-portage-macos-m3-2026-07-24-0940/`.
+
+- [x] `macos_insert.py` (neuf, natif, dormant) : Cmd+V synthétique via Quartz
+      CGEvent (`insert_via_paste`, chemin principal) et frappe Unicode directe
+      (`type_unicode`, repli mode `direct`, par blocs bornés — correct pour
+      `’ « » U+00A0`). **Jamais de succès mensonger** : framework absent / event
+      `None` → `ClipboardError`. On **ne prétend pas** détecter un échec de
+      `CGEventPost` (pas de statut fiable) — effet réel validé en M8.
+- [x] `clipboard.paste_text` — mac branch : `copy_text` (pbcopy) **d'abord** (texte
+      préservé), puis **gate `accessibility_trusted()` tri-état** avant de poster —
+      `True` insère ; `False` guide (prompt + Réglages) puis lève ; `None` (API
+      injoignable) lève avec message d'environnement, **sans** ouvrir les Réglages.
+      `direct` → frappe Unicode, sinon Cmd+V (`terminal` collapse en Cmd+V). Linux
+      intact.
+- [x] `macos_permissions.py` — volet **actif** (reporté depuis M2a) :
+      `prompt_accessibility` (`AXIsProcessTrustedWithOptions` + option prompt),
+      `open_accessibility_settings` (`open x-apple.systempreferences:…`),
+      `guide_accessibility_once` (prompt + Réglages **une fois par process**,
+      booléen anti-spam). Dégradent en silence.
+- [x] `desktop.py` — garde de route Darwin (**Option B**, tranchée par Codex) :
+      `POST /api/paste`, `/api/copy`, `/api/update/apply` → **404** sur Darwin.
+      Garde de route explicite, **après** l'Origin-check, **avant** le dispatch.
+      Critère : « effet système par HTTP », pas « TCC ». Linux inchangé.
+- [x] Tests mockés (Linux) : `test_macos_insert.py` (Cmd+V, frappe Unicode +
+      **français long conservé et découpé**, `ClipboardError` si Quartz absent /
+      event `None`) ; `test_clipboard.py` (branche mac, tri-état) ;
+      `test_macos_permissions.py` (prompt, Réglages, anti-spam) ; `test_desktop.py`
+      (les 3 routes 404 sur Darwin, handler atteint sur Linux avec backends mockés).
+
+**Décidé (revue croisée Codex).**
+- *Option B, pas A.* Le critère du plan global est « effet système déclenché par
+  HTTP », pas « permission TCC ». `/api/update/apply` (git/pip + redémarrage) est
+  plus lourde que le collage et déjà listée interdite : la laisser active de M3 à
+  M7 serait incohérent. Désactiver n'est pas implémenter M7 (garde minimal).
+- *`aparte toggle` **non** fonctionnel sur Mac en M3.* Il dépend de `session.py`
+  (`arecord`, `/proc`) — Linux only ; sa version Mac passe par le
+  `RecordingController` résident (M4) et le raccourci (M5). Seul `aparte dictate`
+  (une passe : `record_wav` mac + transcription + insertion) est vivant.
+- *Messages d'erreur en anglais*, cohérents avec les `ClipboardError` existants
+  (pas d'i18n Python). `/humanize` possible plus tard si on veut les polir.
+
+**Reliquats documentés (à traiter avec leur lot, pas en M3).**
+- Bouton **Copier** web : retombe sur `navigator.clipboard.writeText` après le 404
+  de `/api/copy` → **attendu OK, à confirmer en M8** (dépend du navigateur/geste).
+- Bouton **Mettre à jour** web : appelle `/api/update/apply` sans repli → échouerait
+  sur Mac (404). N'apparaît que si une MAJ existe ; MAJ Mac = tray M6/M7.
+- `handle_output` (`transcribe --paste`, `record --paste`) : chemin mince sans
+  historique/notif — **pré-existant et cohérent avec Linux**, non étendu en M3.
+
+**À valider sur un vrai Mac (M8).** Effet réel du collage/frappe dans Slack, Mail,
+Electron ; `kCGHIDEventTap` vs `kCGSessionEventTap` + micro-délai keydown/keyup ;
+dialogue `AXIsProcessTrustedWithOptions` ; repli navigateur du bouton Copier.
+
+**Preuve.** 283 tests verts (+18 : 5 insert, 5 clipboard mac, 6 permissions, 2
+routes), dont les tests Linux d'origine et la sortie `doctor` Linux, inchangés.
+**Aucune UI visible** touchée → pas de `/impeccable` (M2b garde l'affordance web).
+Aucune release.
+
 ### Windows, pour mémoire (étudié le 23/07, non planifié)
 
 Réécriture partielle, ~15–21 jours, ~le double de Mac. Aucun modèle Unix de

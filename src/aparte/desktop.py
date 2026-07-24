@@ -16,6 +16,7 @@ from .audio import list_microphones
 from .clipboard import copy_text, paste_text
 from .config import Settings, get_env, load_config, positive_int, update_config
 from .diagnostics import collect_diagnostics
+from .platform_dispatch import is_macos
 from .polish import PolishOptions, build_polisher
 from .transcription import build_transcriber
 from .tray import build_tray
@@ -36,6 +37,15 @@ STATIC_FILES = {
 # other name was aimed at someone else's address that now resolves here — the
 # shape of a DNS rebinding attack — even when its Origin agrees with its Host.
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+# On macOS the resident server holds TCC permissions (Microphone, Accessibility)
+# that a browser or a stray local process does not. A route that used them from
+# HTTP would become a privilege proxy, so on Darwin every system-effect POST is
+# refused — insertion, clipboard and update happen through the shortcut, the tray
+# or the CLI instead (see docs/plan-portage-macos-m3.md). The criterion is
+# "system effect triggered over HTTP", not "needs TCC": /api/update/apply runs
+# git/pip and restarts, and stays forbidden too.
+_DARWIN_DISABLED_POST_ROUTES = frozenset({"/api/paste", "/api/copy", "/api/update/apply"})
 
 # Models the desktop UI is allowed to switch to. Restricting this prevents the
 # browser from triggering an arbitrary (possibly huge) model download.
@@ -260,6 +270,11 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
         def do_POST(self) -> None:
             if not self._origin_is_ours():
                 self.send_error(HTTPStatus.FORBIDDEN)
+                return
+            # Deliberate route guard, placed after the Origin check (foreign
+            # origin → 403) and before dispatch (forbidden route on Darwin → 404).
+            if is_macos() and self.path.split("?", 1)[0] in _DARWIN_DISABLED_POST_ROUTES:
+                self.send_error(HTTPStatus.NOT_FOUND)
                 return
             try:
                 if self.path == "/api/config":

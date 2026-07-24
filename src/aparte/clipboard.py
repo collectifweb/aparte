@@ -40,6 +40,8 @@ def paste_text(text: str, mode: str = "clipboard") -> str:
     direct    — type it out, for the applications that ignore a synthetic paste
                 (LibreOffice, some Electron apps).
     """
+    if is_macos():
+        return _paste_text_macos(text, mode)
     # Always stash the dictation in the clipboard first, so it is never lost —
     # even if the paste lands on a non-text area — and can be re-pasted by hand.
     copy_text(text)
@@ -71,4 +73,41 @@ def paste_text(text: str, mode: str = "clipboard") -> str:
         "No paste tool found. The dictation was copied to the clipboard — paste it "
         "with Ctrl+V. Install wtype on Wayland or xdotool on X11 for automatic paste."
     )
+
+
+def _paste_text_macos(text: str, mode: str) -> str:
+    """Insert on macOS: pbcopy + Cmd+V (or direct Unicode typing for ``direct``).
+
+    Copy first, in every mode, so the dictation is never lost — even if the
+    keystroke never lands (Accessibility not granted, or an app that ignores a
+    paste). It stays recoverable from the clipboard and from the history written
+    before us.
+
+    CGEvent posts are ignored by macOS without Accessibility trust, and the OS
+    gives no error back — so a missing permission would look like a success. We
+    gate on it explicitly, in three states: trusted → insert; known-denied →
+    walk the user through granting it, then raise; API unreachable → raise with
+    an environment hint (opening Settings there would be noise).
+    """
+    copy_text(text)
+    from . import macos_insert, macos_permissions
+
+    trusted = macos_permissions.accessibility_trusted()
+    if trusted is not True:
+        if trusted is False:
+            macos_permissions.guide_accessibility_once()
+            raise ClipboardError(
+                "Aparté needs Accessibility permission to paste on macOS. System "
+                "Settings was opened at Privacy & Security → Accessibility — enable "
+                "Aparté there, then dictate again. Your text is on the clipboard; "
+                "paste it with Cmd+V in the meantime."
+            )
+        raise ClipboardError(
+            "Could not reach the macOS Accessibility API. Install the macOS extras "
+            "with: pip install '.[macos]'. Your text is on the clipboard."
+        )
+
+    if mode == "direct":
+        return macos_insert.type_unicode(text)
+    return macos_insert.insert_via_paste()
 

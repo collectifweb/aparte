@@ -33,6 +33,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of apt. The checks render in the existing panel with no new UI. Linux
   diagnostics are unchanged. Verified with mocked unit tests on Linux; the PyObjC
   calls are validated later on a Mac.
+- **macOS insertion (M3).** Dictated text can now be inserted into the active app
+  on macOS: a synthetic **Cmd+V** (Quartz CGEvent, paired with `pbcopy`) as the
+  primary path, and direct Unicode typing as the fallback — correct for French
+  characters (`’ « » U+00A0`) that AppleScript keystroke mangles. Insertion is
+  gated on Accessibility trust, with a guided grant flow (prompt + open Settings,
+  once) when it is denied; without it, the dictation is still copied to the
+  clipboard and recoverable. On macOS no HTTP route performs a system effect any
+  more — paste, clipboard copy, and self-update are refused (404), moving to the
+  CLI, the shortcut, and the tray. This wires up `aparte dictate` on macOS;
+  toggle-to-dictate and the global shortcut come later (M4/M5). Linux behaviour is
+  unchanged. Proven with mocked unit tests on Linux; the native CGEvent behaviour
+  is validated later on a Mac.
 
 ## [1.1.1] - 2026-07-23
 

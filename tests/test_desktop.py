@@ -423,5 +423,37 @@ class LivePreviewTest(unittest.TestCase):
         self.assertEqual(Settings.from_env().hotwords, ("Playwright", "Wayland"))
 
 
+class DarwinRouteGuardTest(unittest.TestCase):
+    """On Darwin the resident server holds TCC permissions a browser lacks, so no
+    HTTP route may trigger a system effect: paste, copy and update/apply are 404.
+    The machine here is Linux, so the platform is mocked. The requests are valid
+    for the Origin check — we prove the route guard, not the Origin guard."""
+
+    _OURS = {"Host": "127.0.0.1:8765", "Origin": "http://127.0.0.1:8765"}
+
+    def test_the_three_system_routes_are_404_on_darwin(self):
+        for route in ("/api/paste", "/api/copy", "/api/update/apply"):
+            with mock.patch.object(desktop, "is_macos", return_value=True):
+                res = make_request("POST", route, b'{"text": "coucou"}', dict(self._OURS))
+            self.assertEqual(res["status"], int(HTTPStatus.NOT_FOUND), route)
+
+    def test_the_clipboard_routes_reach_their_handler_off_darwin(self):
+        # Guard absent on Linux: the handler is reached (backends mocked so the
+        # 200 doesn't depend on wl-copy/xclip being installed on the test host).
+        with mock.patch.object(desktop, "is_macos", return_value=False):
+            with mock.patch.object(desktop, "copy_text", return_value="pbcopy") as copy:
+                res = make_request("POST", "/api/copy", b'{"text": "x"}', dict(self._OURS))
+            self.assertEqual(res["status"], int(HTTPStatus.OK))
+            copy.assert_called_once()
+
+            with tempfile.TemporaryDirectory() as directory:
+                env = {"APARTE_CONFIG": str(Path(directory) / "config.json"), "MURMUR_CONFIG": ""}
+                with mock.patch.dict(os.environ, env):
+                    with mock.patch.object(desktop, "paste_text", return_value="xdotool") as paste:
+                        res = make_request("POST", "/api/paste", b'{"text": "x"}', dict(self._OURS))
+            self.assertEqual(res["status"], int(HTTPStatus.OK))
+            paste.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()
