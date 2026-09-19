@@ -25,7 +25,7 @@ from .linux_desktop import (
     uninstall_autostart_entry,
 )
 from .notify import _preview, notify
-from .lifecycle import get_dictation_state, processing_dictation
+from .lifecycle import get_dictation_state, is_processing, processing_dictation
 from .polish import PolishOptions, build_polisher
 from .session import (
     get_active_session, start_toggle_recording, stop_toggle_recording,
@@ -466,6 +466,10 @@ def toggle_dictation(args: argparse.Namespace, settings: Settings) -> str:
         with toggle_session_transition():
             active = get_active_session()
             if not active:
+                if is_processing():
+                    message = "Attends que le texte soit livré, puis réappuie sur le raccourci."
+                    notify("Dictée précédente en cours", message)
+                    raise ToggleSessionError(message)
                 if settings.beep:
                     play_beep("start")
                 try:

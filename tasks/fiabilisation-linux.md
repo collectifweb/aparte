@@ -49,6 +49,11 @@ L'application installée reste sur la release pendant la préparation.
 - [x] Installation de la 1.2.1 vérifiée en lecture seule sur le poste.
 - [ ] Retours d'usage, notamment après veille.
 
+Retour d'Alexandre après la dernière mise à jour : plus d'erreur de transcription
+observée après une période d'inactivité. Le scénario après mise en veille reste
+à essayer. Il s'agit d'un retour d'usage positif, sans nouvelle reproduction
+matérielle par l'agent ni cause de panne déduite de cette amélioration.
+
 La [release GitHub 1.2.1](https://github.com/collectifweb/aparte/releases/tag/v1.2.1)
 est publiée comme dernière version stable, après autorisation d'Alexandre.
 Le tag annoté `v1.2.1` pointe sur `5a5ad64`, accessible depuis `main`.
@@ -132,7 +137,17 @@ aucun débordement ni erreur JavaScript. Le WAV envoyé reste correct même si l
 fermeture du contexte échoue. Contrôle syntaxique JavaScript et détecteur visuel
 mécanique sans erreur. Pas de vérification matérielle du micro ni de l'icône GTK.
 
-## Lot 4 — parcours (à faire)
+## Lot 4 — parcours (en cours)
+
+Branche `fix/linux-dictees-successives`, à la suite du lot 3 non publié.
+
+- [x] Garde-fou des départs successifs au raccourci : refus notifié avant bip et
+      ouverture du micro si un traitement existe ; arrêt d'une capture active
+      toujours possible. Décision et démarrage sous le même verrou de transition.
+      **3 tests ciblés verts**, dont vrai processus A en traitement puis B refusé,
+      livraison de A et nouveau départ autorisé. Pas de micro ni collage réel.
+- [ ] Instrumenter les délais sur le chemin réellement exécuté et vérifier
+      l'absence de contenu dicté dans les mesures.
 
 Historique actualisé/effaçable, réglages immédiats, ponctuation et protection du
 texte édité contre les réponses asynchrones. La validation du retour de veille
@@ -148,14 +163,15 @@ son ordinateur comme chargé. Ces durées et cette charge sont rapportées, pas
 mesurées ici ; leur cause n’est pas établie. Aucune perte sur deux dictées
 successives n’a été signalée : c’est un scénario préventif à vérifier.
 
-- [ ] **Priorité au garde-fou des dictées successives**, à intégrer au lot 4 :
+- [x] **Premier garde-fou des dictées successives**, intégré au lot 4 : refuser
+      un nouveau départ au raccourci tant qu'un traitement reste actif.
+- [ ] **Scénarios complémentaires pour une éventuelle file d'attente** :
       reproduire A en traitement puis capture/arrêt de B, y compris polissage
       lent, erreurs, délégation indisponible et changement d’application cible.
       Vérifier conservation des deux résultats, ordre de livraison et absence de
       collision du presse-papiers. La protection du lot 3 contre Quitter ne
       constitue pas une file d’attente de dictées.
-      Proposition initiale : refuser clairement un nouveau départ tant que la
-      précédente n’est pas livrée, sans couper une capture déjà active. Une
+      Le refus conservateur est implémenté, sans couper une capture déjà active. Une
       véritable file d’attente, si retenue ensuite, devra conserver séparément
       chaque audio/résultat et rendre explicite la destination du collage.
 - [ ] **Mesurer les délais par étape** : attente, chargement à froid,
@@ -174,7 +190,7 @@ successives n’a été signalée : c’est un scénario préventif à vérifier
 - [ ] **Refonte globale de l’interface**, chantier distinct à cadrer ensuite avec
       Alexandre, après les protections et la visibilité du traitement.
 
-Lecture du code du lot 3 : `cli.toggle_dictation` peut redémarrer une capture
+Constat initial avant le garde-fou : `cli.toggle_dictation` pouvait redémarrer une capture
 après retrait de la session précédente, même si son traitement continue.
 `desktop._handle_transcribe` sérialise l’inférence sur son modèle partagé, mais
 `cli.transcribe_path` effectue ensuite le polissage et `_finish_dictation` la

@@ -413,6 +413,12 @@ unknown state. `aparte toggle --status` returns `recording`, `processing`,
 `recoverable`, `idle` or `unknown` (it no longer appends the recording path).
 A recorder that has stopped with audio left behind is recoverable, not recording.
 
+The global shortcut refuses a new recording while processing is still active,
+with a notification to press again once the previous text has been delivered.
+It never opens the microphone or plays the start sound for a refused request.
+Stopping an existing recording remains possible. This is a shortcut safeguard,
+not a queue or a global exclusion of browser tabs and other CLI commands.
+
 **Quit** stops a shortcut recording and saves its audio for recovery for one
 hour, without transcribing or pasting it. If stopping or saving fails, Aparté
 stays open and reports the problem. During processing, wait for completion and

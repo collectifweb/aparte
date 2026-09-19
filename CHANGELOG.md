@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The global shortcut refuses a new recording while a previous dictation is
+  still processing, before opening the microphone or playing the start sound.
+  It remains possible to stop an existing recording.
 - Quitting stops a global shortcut recording and preserves its audio for
   recovery. Failed stopping or saving keeps the app open; active processing
   prevents quitting or updating. SIGINT/SIGTERM use the protected shutdown path,

@@ -159,6 +159,10 @@ phrases voisines.
 
 ### États du micro et fermeture protégée
 
+- Au raccourci, lorsqu'aucune capture n'existe, contrôler `is_processing()` sous
+  la même transition que le démarrage et refuser avant bip/ouverture du micro.
+  Une capture déjà active doit toujours pouvoir s'arrêter. Ce garde-fou n'est
+  pas une file d'attente et n'interdit pas les autres commandes ou onglets.
 - `lifecycle.get_dictation_state()` distingue `recording` (enregistreur vivant),
   `processing`, `recoverable`, `idle`. Les appelants exposent `unknown` si la
   lecture échoue ; ne jamais transformer une erreur de lecture en repos certain.
