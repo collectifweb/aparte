@@ -82,6 +82,16 @@ veille : celui-ci doit être confirmé séparément.
 
 ## Prochaine étape — essai sur le poste
 
+Alexandre propose une mise en service suivie de retours d'usage, sans attendre
+de reproduire tous les scénarios matériels. Version `1.2.0` préparée pour le
+lot 1 (ajout de la récupération), déclarations et changelog alignés. Le périmètre
+installation seule ou installation et publication GitHub est en attente de sa
+réponse. La mise à jour intégrée exige un tag `v1.2.0` accessible depuis `main` ;
+un push de commits sans tag ne sera pas proposé comme nouvelle version.
+Les 17 tests du mécanisme de mise à jour passent après changement de version.
+La commande CI est alignée sur la découverte locale validée (`-t tests`) ; la
+matrice distante Python 3.10–3.13 ne sera confirmée qu'après publication.
+
 Le lot est préparé sur `fix/linux-dictee-fiable`, pas encore fusionné, poussé ni
 installé. `~/murmur` reste à `721b098` ; le portage Mac conserve son code initial.
 
