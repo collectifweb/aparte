@@ -80,13 +80,13 @@ veille : celui-ci doit être confirmé séparément.
 - Documentation mise à jour : README (usage et limites de rétention), CHANGELOG,
   CLAUDE (invariants), DESIGN (panneau), rapport d'audit et présent suivi.
 
-## Prochaine étape — essai sur le poste
+## Mise en service — retours d'usage en cours
 
 Alexandre propose une mise en service suivie de retours d'usage, sans attendre
 de reproduire tous les scénarios matériels. Version `1.2.0` préparée pour le
 lot 1 (ajout de la récupération), déclarations et changelog alignés. La
 publication GitHub a été explicitement autorisée par Alexandre et effectuée.
-L'installation locale sera suivie séparément. La mise à jour intégrée exige un
+L'installation locale a ensuite été mise à jour par Alexandre. La mise à jour intégrée exige un
 tag `v1.2.0` accessible depuis `main` ;
 un push de commits sans tag ne sera pas proposé comme nouvelle version.
 Les 17 tests du mécanisme de mise à jour passent après changement de version.
@@ -101,11 +101,14 @@ locale n'a été effectué lors de cette publication.
 
 Le lot est préparé sur `fix/linux-dictee-fiable`. Les notes destinées à GitHub
 sont dans [`docs/releases/v1.2.0.md`](../docs/releases/v1.2.0.md).
-`~/murmur` reste à `721b098` ; le portage Mac conserve son code initial.
+Installation vérifiée après le retour d'Alexandre : `~/murmur` est à `3f7e0da`,
+module et paquet installés déclarent tous deux **1.2.0**, arbre propre. Le commit
+supplémentaire de `main` est documentaire ; il ne manque aucun correctif de la
+release sur le poste. Aucun essai micro ni retour de veille n'a été effectué
+par l'agent. Le portage Mac conserve son code initial.
 
-1. Installer la branche Linux validée dans une fenêtre sans dictée active et
-   redémarrer le processus résident, en conservant configuration et langue Auto.
-   Garder `721b098` comme point de retour.
+1. Installation 1.2.0 effectuée par Alexandre et vérifiée. Garder `721b098`
+   comme point de retour.
 2. Vérifier une courte dictée depuis le raccourci, son arrêt et son insertion,
    puis le parcours navigateur. Vérifier qu'aucun enregistreur n'est laissé actif.
 3. Après une vraie période d'inactivité puis un retour de veille choisi par
