@@ -10,7 +10,25 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import hallucinations
+from . import hallucinations, performance
+
+
+def _effective_property(model: object, name: str, allowed: set[str]) -> str:
+    """Read runtime metadata without letting an optional property break dictation."""
+    try:
+        value = getattr(model, name, None)
+        return value if isinstance(value, str) and value in allowed else "unknown"
+    except Exception:
+        return "unknown"
+
+
+def _report_execution(backend: str, device: str = "unknown", compute_type: str = "unknown",
+                      model: str | None = None) -> None:
+    try:
+        performance.execution(backend=backend, device=device, compute_type=compute_type, model=model)
+    except Exception:
+        # Diagnostics are never a prerequisite for delivering a dictation.
+        pass
 
 
 class TranscriptionError(RuntimeError):
@@ -64,6 +82,7 @@ class Transcriber:
 
 class TextFileTranscriber(Transcriber):
     def transcribe(self, audio_path: Path) -> Transcript:
+        _report_execution("text")
         return Transcript(audio_path.read_text(encoding="utf-8"), "text")
 
 
@@ -123,7 +142,25 @@ class FasterWhisperTranscriber(Transcriber):
         message = str(exc).lower()
         return any(hint in message for hint in cls._CUDA_ERROR_HINTS)
 
+    def _report_execution(self) -> None:
+        try:
+            # WhisperModel wraps the actual CTranslate2 model. The constructor's
+            # "auto" arguments do not describe the device/type finally selected.
+            engine = getattr(self.model, "model", None)
+        except Exception:
+            engine = None
+        _report_execution(
+            "faster-whisper",
+            _effective_property(engine, "device", {"cpu", "cuda"}),
+            _effective_property(engine, "compute_type", {
+                "float32", "float16", "bfloat16", "int8", "int8_float32",
+                "int8_float16", "int8_bfloat16", "int16",
+            }),
+            self.model_name,
+        )
+
     def transcribe(self, audio_path: Path) -> Transcript:
+        self._report_execution()
         try:
             segments, _info = self.model.transcribe(
                 str(audio_path), language=self.language, hotwords=self.hotwords
@@ -133,7 +170,11 @@ class FasterWhisperTranscriber(Transcriber):
             # CUDA can fail lazily on the first real inference; retry once on CPU.
             if self.device == "cpu" or not self._is_cuda_error(exc):
                 raise TranscriptionError(str(exc)) from exc
-            self.model = self._load_cpu_model()
+            # This reload happens inside transcription, unlike the initial
+            # construction timed by callers. Its duration is a nested stage.
+            with performance.stage("model_load"):
+                self.model = self._load_cpu_model()
+            self._report_execution()
             segments, _info = self.model.transcribe(
                 str(audio_path), language=self.language, hotwords=self.hotwords
             )
@@ -149,10 +190,18 @@ class OpenAIWhisperTranscriber(Transcriber):
         import whisper
 
         self.whisper = whisper
+        self.model_name = model
         self.language = language
         self.model = whisper.load_model(model)
 
     def transcribe(self, audio_path: Path) -> Transcript:
+        try:
+            device = self.model.device
+        except Exception:
+            device = None
+        # Parameter dtype does not prove the type used during inference.
+        _report_execution("openai-whisper", _effective_property(device, "type", {"cpu", "cuda", "mps"}),
+                          model=self.model_name)
         result = self.model.transcribe(str(audio_path), language=self.language)
         return Transcript(hallucinations.strip(str(result.get("text", "")).strip()), "openai-whisper")
 
@@ -164,6 +213,9 @@ class WhisperCppTranscriber(Transcriber):
         self.language = language
 
     def transcribe(self, audio_path: Path) -> Transcript:
+        # The subprocess chooses its own device; its model argument can be a
+        # private path. Neither stdout nor stderr is parsed for diagnostics.
+        _report_execution("whisper.cpp")
         command = [self.executable, "-m", self.model, "-f", str(audio_path), "-nt"]
         if self.language:
             command.extend(["-l", self.language])

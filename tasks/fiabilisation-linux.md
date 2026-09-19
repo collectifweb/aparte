@@ -146,8 +146,22 @@ Branche `fix/linux-dictees-successives`, à la suite du lot 3 non publié.
       toujours possible. Décision et démarrage sous le même verrou de transition.
       **3 tests ciblés verts**, dont vrai processus A en traitement puis B refusé,
       livraison de A et nouveau départ autorisé. Pas de micro ni collage réel.
-- [ ] Instrumenter les délais sur le chemin réellement exécuté et vérifier
-      l'absence de contenu dicté dans les mesures.
+      Commit du jalon : `2408486`.
+- [x] Instrumenter les délais sur le chemin réellement exécuté : délégation,
+      attente, chargement du modèle, transcription, polissage et livraison CLI.
+      Métadonnées effectives, durée WAV et charge moyenne, sans contenu dicté.
+      [Guide d'interprétation et limites](../docs/mesures-performance.md).
+- [x] Validation du jalon mesures : **451 tests Linux verts**, revue indépendante,
+      tests de confidentialité, contexte concurrent, cache chaud/froid, repli CPU
+      tardif et vraie délégation HTTP sur port temporaire. Log isolé :
+      `/tmp/aparte-audit-tests-vjz45g8x/unittest.log`.
+- [ ] Publication des lots 3 et 4 déjà validés, puis relevés sur le poste.
+
+Les événements disque peuvent être perdus en contention : le test d'intégration
+vérifie l'émission et la corrélation sans exiger une conservation exhaustive.
+La revue a aussi fait corriger les erreurs HTTP notées à tort comme succès et
+ajouter les étapes manquantes de la récupération HTTP. Aucun gain de vitesse
+ni diagnostic de saturation du poste n'est encore revendiqué.
 
 Historique actualisé/effaçable, réglages immédiats, ponctuation et protection du
 texte édité contre les réponses asynchrones. La validation du retour de veille
@@ -174,7 +188,7 @@ successives n’a été signalée : c’est un scénario préventif à vérifier
       Le refus conservateur est implémenté, sans couper une capture déjà active. Une
       véritable file d’attente, si retenue ensuite, devra conserver séparément
       chaque audio/résultat et rendre explicite la destination du collage.
-- [ ] **Mesurer les délais par étape** : attente, chargement à froid,
+- [ ] **Analyser les délais observés après livraison de l'instrumentation** : attente, chargement à froid,
       transcription, polissage et livraison ; durée audio, moteur et CPU/GPU
       effectivement utilisés, charge au moment de l’essai. Passer par le parcours
       réel de l’application, comparer à réglages égaux, sans journaliser le texte

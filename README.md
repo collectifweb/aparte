@@ -419,6 +419,13 @@ It never opens the microphone or plays the start sound for a refused request.
 Stopping an existing recording remains possible. This is a shortcut safeguard,
 not a queue or a global exclusion of browser tabs and other CLI commands.
 
+Processing timings are recorded in the same private, bounded technical log:
+delegation, model wait/load, transcription, polishing and CLI delivery. The
+shortcut and local server share a random trace identifier; timing records contain
+no dictated text or audio paths. Available metadata includes effective CPU/GPU,
+WAV duration and system load average. See the [timing guide](docs/mesures-performance.md)
+for interpretation and limits; these measurements do not change the model or language.
+
 **Quit** stops a shortcut recording and saves its audio for recovery for one
 hour, without transcribing or pasting it. If stopping or saving fails, Aparté
 stays open and reports the problem. During processing, wait for completion and

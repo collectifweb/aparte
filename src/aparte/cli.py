@@ -5,7 +5,7 @@ from contextlib import ExitStack
 import sys
 from pathlib import Path
 
-from . import history, recovery, technical_log
+from . import history, recovery, technical_log, performance
 from .audio import RecordingError, play_beep, record_wav
 from .clipboard import copy_text, paste_text
 from .config import Settings, load_config, write_default_config
@@ -291,46 +291,53 @@ def add_polish_args(parser: argparse.ArgumentParser) -> None:
 
 
 def polish_text(text: str, args: argparse.Namespace, settings: Settings) -> str:
-    polisher = build_polisher(settings.polish_backend, settings.ollama_url, settings.ollama_model)
-    return polisher.polish(
-        text,
-        PolishOptions(
-            style=getattr(args, "style", None) or settings.default_style,
-            language=settings.language,
-            cleanup_level=getattr(args, "cleanup_level", None) or settings.cleanup_level,
-            replacements=settings.replacements or {},
-            snippets=settings.snippets or {},
-            nonbreaking_spaces=settings.nonbreaking_spaces,
-            trailing_space=settings.trailing_space,
-            numbers_from=settings.numbers_from,
-            short_text_words=settings.short_text_words,
-        ),
-    )
+    with performance.stage("polish"):
+        polisher = build_polisher(settings.polish_backend, settings.ollama_url, settings.ollama_model)
+        return polisher.polish(
+            text,
+            PolishOptions(
+                style=getattr(args, "style", None) or settings.default_style,
+                language=settings.language,
+                cleanup_level=getattr(args, "cleanup_level", None) or settings.cleanup_level,
+                replacements=settings.replacements or {},
+                snippets=settings.snippets or {},
+                nonbreaking_spaces=settings.nonbreaking_spaces,
+                trailing_space=settings.trailing_space,
+                numbers_from=settings.numbers_from,
+                short_text_words=settings.short_text_words,
+            ),
+        )
 
 
 def transcribe_path(path: Path, args: argparse.Namespace, settings: Settings) -> str:
-    backend = "text" if path.suffix.lower() in {".txt", ".md"} else settings.transcriber
-    # L'application de bureau garde le modèle en mémoire ; ce processus-ci le
-    # rechargerait. Quand elle répond, on lui passe l'audio — sinon rien ne
-    # change et on charge le nôtre, exactement comme avant.
-    transcript = None if backend == "text" else transcribe_via_running_app(path, settings.model)
-    if transcript is None:
-        transcriber = build_transcriber(
-            backend=backend,
-            model=settings.model,
-            language=settings.language,
-            whisper_cpp=settings.whisper_cpp,
-            device=settings.device,
-            compute_type=settings.compute_type,
-            hotwords=settings.hotwords,
-        )
-        transcript = transcriber.transcribe(path).text
-    if getattr(args, "polish", False):
-        try:
-            return polish_text(transcript, args, settings)
-        except Exception as exc:
-            raise _PolishFailure(str(exc), transcript) from exc
-    return transcript
+    with performance.operation("cli"):
+        backend = "text" if path.suffix.lower() in {".txt", ".md"} else settings.transcriber
+        # L'application de bureau garde le modèle en mémoire ; ce processus-ci le
+        # rechargerait. Quand elle répond, on lui passe l'audio — sinon rien ne
+        # change et on charge le nôtre, exactement comme avant.
+        transcript = None
+        if backend != "text":
+            with performance.stage("delegation"):
+                transcript = transcribe_via_running_app(path, settings.model)
+        if transcript is None:
+            with performance.stage("model_load"):
+                transcriber = build_transcriber(
+                    backend=backend,
+                    model=settings.model,
+                    language=settings.language,
+                    whisper_cpp=settings.whisper_cpp,
+                    device=settings.device,
+                    compute_type=settings.compute_type,
+                    hotwords=settings.hotwords,
+                )
+            with performance.stage("transcription"):
+                transcript = transcriber.transcribe(path).text
+        if getattr(args, "polish", False):
+            try:
+                return polish_text(transcript, args, settings)
+            except Exception as exc:
+                raise _PolishFailure(str(exc), transcript) from exc
+        return transcript
 
 
 def dictate_once(args: argparse.Namespace, settings: Settings) -> str:
@@ -352,50 +359,54 @@ class _PolishFailure(RuntimeError):
 
 
 def _finish_dictation(path: Path, args: argparse.Namespace, settings: Settings) -> str:
-    remove_audio = not args.keep_audio
-    try:
-        transcribe_args = argparse.Namespace(
-            polish=not args.no_polish,
-            style=args.style or settings.default_style,
-            cleanup_level=args.cleanup_level or settings.cleanup_level,
-        )
+    source = "shortcut" if getattr(args, "command", None) == "toggle" else "cli"
+    with performance.operation(source):
+        performance.audio_duration(path)
+        remove_audio = not args.keep_audio
         try:
-            output = transcribe_path(path, transcribe_args, settings)
-        except Exception as exc:
+            transcribe_args = argparse.Namespace(
+                polish=not args.no_polish,
+                style=args.style or settings.default_style,
+                cleanup_level=args.cleanup_level or settings.cleanup_level,
+            )
             try:
-                identifier = recovery.save_failure(path, raw_text=getattr(exc, "raw_text", None))
-            except Exception:
-                # A full disk must not turn the fallback into data loss.
-                remove_audio = False
-                notify(
-                    "⚠️ Dictée non traitée",
-                    f"La récupération a échoué. L’audio original est conservé : {path}",
-                    urgency="critical",
-                )
-            else:
-                notify(
-                    "⚠️ Dictée à récupérer",
-                    "Audio récupérable pendant une heure. Ouvre Aparté pour réessayer "
-                    f"ou utilise « aparte recover retry {identifier} ».",
-                    urgency="critical",
-                )
-            raise
-        if not output.strip():
-            _notify_nothing_heard()
+                output = transcribe_path(path, transcribe_args, settings)
+            except Exception as exc:
+                try:
+                    identifier = recovery.save_failure(path, raw_text=getattr(exc, "raw_text", None))
+                except Exception:
+                    # A full disk must not turn the fallback into data loss.
+                    remove_audio = False
+                    notify(
+                        "⚠️ Dictée non traitée",
+                        f"La récupération a échoué. L’audio original est conservé : {path}",
+                        urgency="critical",
+                    )
+                else:
+                    notify(
+                        "⚠️ Dictée à récupérer",
+                        "Audio récupérable pendant une heure. Ouvre Aparté pour réessayer "
+                        f"ou utilise « aparte recover retry {identifier} ».",
+                        urgency="critical",
+                    )
+                raise
+            if not output.strip():
+                _notify_nothing_heard()
+                return output
+            with performance.stage("delivery"):
+                history.record(output, settings.history_persist)
+                _deliver(output, args.target, settings)
             return output
-        history.record(output, settings.history_persist)
-        _deliver(output, args.target, settings)
-        return output
-    finally:
-        if remove_audio:
-            path.unlink(missing_ok=True)
+        finally:
+            if remove_audio:
+                path.unlink(missing_ok=True)
 
 
 def retry_recovery(identifier: str, args: argparse.Namespace, settings: Settings) -> str:
     """Retry once under a claim. Copy by default; never paste automatically."""
     if args.target not in {"copy", "stdout"}:
         raise ValueError("La récupération propose uniquement copier ou afficher le texte.")
-    with processing_dictation(), recovery.claim(identifier) as item:
+    with performance.operation("recovery"), processing_dictation(), recovery.claim(identifier) as item:
         try:
             raw = item.raw_text
             if raw is None:
@@ -404,8 +415,9 @@ def retry_recovery(identifier: str, args: argparse.Namespace, settings: Settings
                 recovery.update_raw(item, raw)
             output = raw if args.no_polish or not raw.strip() else polish_text(raw, args, settings)
             if output.strip():
-                history.record(output, settings.history_persist)
-                _deliver(output, args.target, settings)
+                with performance.stage("delivery"):
+                    history.record(output, settings.history_persist)
+                    _deliver(output, args.target, settings)
             else:
                 _notify_nothing_heard()
             recovery.complete(item)

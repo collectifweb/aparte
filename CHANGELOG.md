@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Private processing timings for delegation, model wait/load, transcription,
+  polishing and CLI delivery, correlated between the shortcut and local server.
+  Effective execution metadata, WAV duration and load average help investigate
+  delays without logging speech, vocabulary, audio paths or exception messages.
+  Timing failures do not prevent delivery; no model or language setting changes.
+
 ### Fixed
 
 - The global shortcut refuses a new recording while a previous dictation is

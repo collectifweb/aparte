@@ -185,6 +185,20 @@ phrases voisines.
 
 ### Raccourci : diagnostic technique sans texte dicté
 
+- `performance.operation` et `stage` mesurent le chemin réel, sans contourner
+  `build_transcriber`. Identifiant aléatoire propagé par HTTP, contextes isolés
+  par thread ; seule l'opération extérieure d'un contexte produit son total.
+  `response_status` rend les erreurs HTTP traitées normalement visibles comme
+  échecs. Les valeurs techniques et classes d'erreurs passent par des listes
+  fermées dans `write_performance`, jamais du texte ni des chemins libres.
+- Mesurer toute la consommation des segments Whisper. Lire le matériel effectif
+  depuis le moteur, pas depuis la configuration `auto`. Un chargement CPU tardif
+  reste inclus dans la transcription : ne pas sommer les étapes imbriquées ni
+  les totaux CLI/HTTP corrélés. Voir [le guide](docs/mesures-performance.md).
+- Les erreurs de mesure ne doivent jamais casser la livraison ni masquer
+  l'exception d'origine. Les événements peuvent être perdus en contention ; les
+  tests d'émission ne doivent pas exiger une trace disque complète en concurrence.
+
 - Les commandes de raccourci utilisent `toggle --hotkey`. Ce mode est réservé
   à un processus CLI autonome : `technical_log.silence_process()` redirige
   définitivement stdout/stderr et les flux Python vers `/dev/null`. Ne pas

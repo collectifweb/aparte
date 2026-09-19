@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
 
-from . import history, recovery
+from . import history, recovery, performance
 from .audio import list_microphones
 from .clipboard import copy_text, paste_text
 from .config import Settings, get_env, load_config, positive_int, update_config
@@ -267,11 +267,14 @@ def transcribe_via_running_app(
         body = audio_path.read_bytes()
     except OSError:
         return None
+    headers = {"Content-Type": "audio/wav"}
+    if performance.current_id() is not None:
+        headers["X-Aparte-Trace"] = performance.current_id()
     request = urllib.request.Request(
         f"{url}/api/transcribe?model={quote(model)}",
         data=body,
         method="POST",
-        headers={"Content-Type": "audio/wav"},
+        headers=headers,
     )
     try:
         with urllib.request.urlopen(request, timeout=DELEGATE_TIMEOUT) as response:
@@ -336,15 +339,16 @@ def handler_factory(settings: Settings, *, closing: threading.Event | None = Non
         with transcriber_lock:
             transcriber = transcriber_cache.get(key)
             if transcriber is None:
-                transcriber = build_transcriber(
-                    backend=active.transcriber,
-                    model=model,
-                    language=active.language,
-                    whisper_cpp=active.whisper_cpp,
-                    device=active.device,
-                    compute_type=active.compute_type,
-                    hotwords=active.hotwords,
-                )
+                with performance.stage("model_load"):
+                    transcriber = build_transcriber(
+                        backend=active.transcriber,
+                        model=model,
+                        language=active.language,
+                        whisper_cpp=active.whisper_cpp,
+                        device=active.device,
+                        compute_type=active.compute_type,
+                        hotwords=active.hotwords,
+                    )
                 transcriber_cache[key] = transcriber
             return transcriber
 
@@ -403,7 +407,11 @@ def handler_factory(settings: Settings, *, closing: threading.Event | None = Non
                     "/api/transcribe", "/api/polish", "/api/recovery/retry",
                     "/api/copy", "/api/paste", "/api/history", "/api/config",
                 }
-                with (processing_dictation(wait=5.0) if critical else nullcontext()):
+                measured = route in {"/api/transcribe", "/api/polish", "/api/recovery/retry"}
+                source = "preview" if route == "/api/transcribe" and self._flag("preview") else "http"
+                with (performance.operation(source, self.headers.get("X-Aparte-Trace"))
+                      if measured else nullcontext()), \
+                        (processing_dictation(wait=5.0) if critical else nullcontext()):
                     if closing is not None and closing.is_set():
                         self._send_json({"error": "Aparté is closing."}, HTTPStatus.SERVICE_UNAVAILABLE)
                         return
@@ -432,21 +440,22 @@ def handler_factory(settings: Settings, *, closing: threading.Event | None = Non
                 text = str(payload.get("text", ""))
                 style = str(payload.get("style", "")) or active.default_style
                 cleanup_level = str(payload.get("cleanupLevel", "")) or active.cleanup_level
-                polisher = build_polisher(active.polish_backend, active.ollama_url, active.ollama_model)
-                output = polisher.polish(
-                    text,
-                    PolishOptions(
-                        style=style,
-                        language=active.language,
-                        cleanup_level=cleanup_level,
-                        replacements=active.replacements or {},
-                        snippets=active.snippets or {},
-                        nonbreaking_spaces=active.nonbreaking_spaces,
-                        trailing_space=active.trailing_space,
-                        numbers_from=active.numbers_from,
-                        short_text_words=active.short_text_words,
-                    ),
-                )
+                with performance.stage("polish"):
+                    polisher = build_polisher(active.polish_backend, active.ollama_url, active.ollama_model)
+                    output = polisher.polish(
+                        text,
+                        PolishOptions(
+                            style=style,
+                            language=active.language,
+                            cleanup_level=cleanup_level,
+                            replacements=active.replacements or {},
+                            snippets=active.snippets or {},
+                            nonbreaking_spaces=active.nonbreaking_spaces,
+                            trailing_space=active.trailing_space,
+                            numbers_from=active.numbers_from,
+                            short_text_words=active.short_text_words,
+                        ),
+                    )
                 self._send_json({"text": output})
                 return
             if self.path.split("?", 1)[0] == "/api/transcribe":
@@ -526,8 +535,15 @@ def handler_factory(settings: Settings, *, closing: threading.Event | None = Non
                     if raw is None:
                         # Never delegate back to our own HTTP server: this is
                         # its cached model, shared with regular transcriptions.
-                        with inference_lock:
-                            raw = get_transcriber(active).transcribe(item.audio_path).text
+                        with performance.stage("queue"):
+                            inference_lock.acquire()
+                        try:
+                            performance.audio_duration(item.audio_path)
+                            transcriber = get_transcriber(active)
+                            with performance.stage("transcription"):
+                                raw = transcriber.transcribe(item.audio_path).text
+                        finally:
+                            inference_lock.release()
                         recovery.update_raw(item, raw)
                     if payload.get("raw") is True or not raw.strip():
                         output = raw
@@ -565,7 +581,9 @@ def handler_factory(settings: Settings, *, closing: threading.Event | None = Non
             # leaving it unread would desynchronise the connection.
             body = self._read_body(length)
             preview = self._flag("preview")
-            if not inference_lock.acquire(blocking=not preview):
+            with performance.stage("queue"):
+                acquired = inference_lock.acquire(blocking=not preview)
+            if not acquired:
                 self._send_json({"text": None, "busy": True})
                 return
             suffix = ".webm"
@@ -582,7 +600,10 @@ def handler_factory(settings: Settings, *, closing: threading.Event | None = Non
                     handle.write(body)
                 uploaded = True
                 active = current_settings()
-                transcript = get_transcriber(active, self._requested_model(active)).transcribe(path).text
+                performance.audio_duration(path)
+                transcriber = get_transcriber(active, self._requested_model(active))
+                with performance.stage("transcription"):
+                    transcript = transcriber.transcribe(path).text
                 self._send_json({"text": transcript})
             except Exception:
                 # Only final browser captures opt in. CLI delegation retains its
@@ -683,6 +704,7 @@ def handler_factory(settings: Settings, *, closing: threading.Event | None = Non
             self._send_json({"ok": True, "config": {key: merged.get(key) for key in EDITABLE_FIELDS}})
 
         def _send_json(self, payload: dict[str, object], status: HTTPStatus = HTTPStatus.OK) -> None:
+            performance.response_status(int(status))
             data = json.dumps(payload).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
