@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Quitting stops a global shortcut recording and preserves its audio for
+  recovery. Failed stopping or saving keeps the app open; active processing
+  prevents quitting or updating. SIGINT/SIGTERM use the protected shutdown path,
+  including without a tray, and updates exclude new captures until restart.
+- Tray, diagnostics and `toggle --status` distinguish a live recorder from
+  processing, recoverable audio and unknown state. A crashed worker cannot leave
+  a permanently active processing marker.
+- Browser recording has explicit opening/stopping states and excludes double
+  starts, audio import and updating in the same tab. Navigation and initialization
+  errors release microphone tracks; late permissions and transcription responses
+  cannot revive an abandoned capture. Captured audio survives a context-close
+  error. Browser microphones remain controlled by their own tabs.
+- Incomplete HTTP request bodies time out so interrupted uploads cannot block
+  application shutdown indefinitely.
+
 ## [1.2.1] - 2026-09-19
 
 ### Fixed

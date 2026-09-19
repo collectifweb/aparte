@@ -499,13 +499,15 @@ def start_toggle_recording(
 
 def stop_toggle_recording(
     timeout: float = 3.0, *, expected_session: RecordingSession | None = None,
+    preserve_session: bool = False,
 ) -> RecordingSession:
     with toggle_session_transition():
-        return _stop_toggle_recording(timeout, expected_session=expected_session)
+        return _stop_toggle_recording(timeout, expected_session=expected_session,
+                                      preserve_session=preserve_session)
 
 
 def _stop_toggle_recording(
-    timeout: float, *, expected_session: RecordingSession | None,
+    timeout: float, *, expected_session: RecordingSession | None, preserve_session: bool = False,
 ) -> RecordingSession:
     session = get_active_session()
     if not session:
@@ -529,7 +531,8 @@ def _stop_toggle_recording(
         # alors que le prochain appui croirait pouvoir démarrer une autre capture.
         raise ToggleSessionError("Le micro ne s’est pas arrêté ; réessayez l’arrêt.")
 
-    get_session_path().unlink(missing_ok=True)
+    if not preserve_session:
+        get_session_path().unlink(missing_ok=True)
     if not session.audio_path.exists():
         raise ToggleSessionError(f"Recording file was not created: {session.audio_path}")
     return session

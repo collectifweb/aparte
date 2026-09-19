@@ -378,6 +378,11 @@ Le seul élément mémorable du système, et le seul autorisé à l'être.
 - **Traitement :** curseur `progress`, aucun pictogramme, l'anneau tourne à 0,8 s
   par tour, le libellé dit « Un instant… ». Les puces d'action passent en
   désactivé pendant ce temps.
+- **Ouverture / arrêt :** même présentation d'attente, avec « Ouverture… » ou
+  « Arrêt… », bouton désactivé et `aria-busy`. Le fil d'état explique la demande
+  d'autorisation du micro. Aucune seconde capture pendant ces transitions.
+  Importer et mettre à jour restent désactivés pendant la capture et son
+  traitement ; la mise à jour désactive à son tour le démarrage du micro.
 
 ### Puces d'action (`.chip`)
 
@@ -387,8 +392,9 @@ Le seul élément mémorable du système, et le seul autorisé à l'être.
 - **Désactivé :** libellé en `ink-disabled`, curseur `not-allowed`, pas de
   survol. Deux situations, et la seconde est la plus fréquente : pendant le
   traitement, et tant que l'éditeur est vide — Polir, Copier et Insérer n'ont
-  alors rien sur quoi travailler. « Importer audio » reste active : c'est elle
-  qui remplit l'éditeur.
+  alors rien sur quoi travailler. « Importer audio » reste active au repos même
+  si l'éditeur est vide ; elle est désactivée pendant ouverture, capture, arrêt,
+  traitement et mise à jour.
 - **Infobulle :** chaque puce porte un `title` traduit qui dit ce qu'elle fait,
   en particulier « Insérer », dont l'effet — écrire dans l'application de
   devant — ne se devine pas depuis le libellé.

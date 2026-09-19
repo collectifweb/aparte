@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import nullcontext
 import json
+import signal
 import socket
 import tempfile
 import threading
+import time
 import urllib.request
 import webbrowser
 from http import HTTPStatus
@@ -18,10 +21,13 @@ from .clipboard import copy_text, paste_text
 from .config import Settings, get_env, load_config, positive_int, update_config
 from .diagnostics import collect_diagnostics
 from .hotkey import migrate_hotkey_logging
+from .lifecycle import processing_dictation, prepare_shutdown, ShutdownError
+from .notify import notify
+from .session import ToggleSessionError
 from .polish import PolishOptions, build_polisher
 from .stale_server import reclaim_port
 from .transcription import build_transcriber
-from .tray import build_tray
+from .tray import build_tray, _labels as tray_labels
 from .update import DONE_MARKER, apply_update, check_update, restart
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
@@ -39,6 +45,14 @@ STATIC_FILES = {
 # other name was aimed at someone else's address that now resolves here — the
 # shape of a DNS rebinding attack — even when its Origin agrees with its Host.
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+# Bound stalled clients, not model execution. A socket timeout only runs while
+# reading/writing the connection; Whisper may still take as long as it needs.
+HTTP_IO_TIMEOUT = 30.0
+
+
+class RequestBodyTimeout(TimeoutError):
+    """An incomplete HTTP upload stopped making progress."""
 
 # Models the desktop UI is allowed to switch to. Restricting this prevents the
 # browser from triggering an arbitrary (possibly huge) model download.
@@ -90,32 +104,74 @@ def run_desktop(host: str, port: int, settings: Settings, open_browser: bool = T
         print(f"Stopped a stale Aparté server (pid {stale}) still holding port {port}.")
 
     port = _available_port(host, port)
-    server = ThreadingHTTPServer((host, port), handler_factory(settings))
+    closing = threading.Event()
+    stopped = threading.Event()
+    server = ThreadingHTTPServer((host, port), handler_factory(settings, closing=closing))
     url = f"http://{host}:{server.server_port}"
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
     print(f"Aparté desktop running at {url}")
-    # The tray icon needs GTK on the main thread, so the server moves off it.
-    # Without the system bindings there is no tray, and nothing changes.
-    tray = build_tray(url, settings, server.shutdown)
+    def stop_server() -> None:
+        # Called under prepare_shutdown(), from a worker rather than the HTTP
+        # loop. New handlers cannot enter processing once this gate is closed.
+        closing.set()
+        server.shutdown()
+        stopped.set()
+
+    tray = build_tray(url, settings, stop_server)
+    quitting = threading.Lock()
+
+    def request_quit(*_) -> None:
+        if tray is not None:
+            tray._quit()
+        else:
+            threading.Thread(target=_quit_without_tray, args=(stop_server, quitting), daemon=True).start()
+
+    # Even without GTK, shutdown must never run on the serve_forever thread.
+    http_thread = threading.Thread(target=server.serve_forever, daemon=True, name="aparte-http")
     cleanup_stop = threading.Event()
     cleanup_thread = threading.Thread(
         target=_maintain_recovery, args=(cleanup_stop,), daemon=True,
         name="aparte-recovery-cleanup",
     )
     cleanup_thread.start()
+    previous_signals = {}
     try:
+        if threading.current_thread() is threading.main_thread():
+            for number in (signal.SIGINT, signal.SIGTERM):
+                previous_signals[number] = signal.signal(number, request_quit)
+        http_thread.start()
         if tray is None:
-            server.serve_forever()
+            stopped.wait()
         else:
-            threading.Thread(target=server.serve_forever, daemon=True).start()
             tray.run()
-    except KeyboardInterrupt:
-        print("\nStopping desktop server.")
     finally:
+        for number, handler in previous_signals.items():
+            signal.signal(number, handler)
         cleanup_stop.set()
         cleanup_thread.join(timeout=1)
+        if http_thread.is_alive():
+            server.shutdown()
+        if http_thread.ident is not None:
+            http_thread.join(timeout=1)
         server.server_close()
+
+
+def _quit_without_tray(on_quit, quitting: threading.Lock) -> None:
+    """The same refusal/preservation policy for SIGINT/SIGTERM without GTK."""
+    if not quitting.acquire(blocking=False):
+        return
+    labels = tray_labels()
+    try:
+        with prepare_shutdown() as identifier:
+            on_quit()
+        if identifier is not None:
+            notify(labels["quit_saved"], labels["quit_saved_detail"])
+    except Exception as exc:
+        reason = exc.reason if isinstance(exc, ShutdownError) else "busy"
+        notify(labels["quit_failed"], labels[f"quit_{reason}"], urgency="critical")
+    finally:
+        quitting.release()
 
 
 def _maintain_recovery(stop: threading.Event, interval: float = 60.0) -> None:
@@ -241,7 +297,7 @@ def _available_port(host: str, preferred_port: int) -> int:
     return 0
 
 
-def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
+def handler_factory(settings: Settings, *, closing: threading.Event | None = None) -> type[BaseHTTPRequestHandler]:
     # The Whisper model is expensive to load, so build each transcriber once and
     # reuse it across requests instead of reloading the model every time. The
     # cache is keyed by model name so the UI can toggle between models (e.g.
@@ -293,6 +349,8 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
             return transcriber
 
     class DesktopHandler(BaseHTTPRequestHandler):
+        timeout = HTTP_IO_TIMEOUT
+
         def do_GET(self) -> None:
             # Reading a private dictation needs the same host validation as an
             # edit. Matching Origin/Host alone does not prevent DNS rebinding.
@@ -338,60 +396,82 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                 self.send_error(HTTPStatus.FORBIDDEN)
                 return
             try:
-                if self.path in {"/api/recovery/retry", "/api/recovery/delete"}:
-                    self._handle_recovery()
-                    return
-                if self.path == "/api/config":
-                    self._handle_save_config()
-                    return
-                if self.path == "/api/polish":
-                    active = current_settings()
-                    payload = self._read_json()
-                    text = str(payload.get("text", ""))
-                    style = str(payload.get("style", "")) or active.default_style
-                    cleanup_level = str(payload.get("cleanupLevel", "")) or active.cleanup_level
-                    polisher = build_polisher(active.polish_backend, active.ollama_url, active.ollama_model)
-                    output = polisher.polish(
-                        text,
-                        PolishOptions(
-                            style=style,
-                            language=active.language,
-                            cleanup_level=cleanup_level,
-                            replacements=active.replacements or {},
-                            snippets=active.snippets or {},
-                            nonbreaking_spaces=active.nonbreaking_spaces,
-                            trailing_space=active.trailing_space,
-                            numbers_from=active.numbers_from,
-                            short_text_words=active.short_text_words,
-                        ),
-                    )
-                    self._send_json({"text": output})
-                    return
-                if self.path.split("?", 1)[0] == "/api/transcribe":
-                    self._handle_transcribe()
-                    return
-                if self.path == "/api/copy":
-                    payload = self._read_json()
-                    backend = copy_text(str(payload.get("text", "")))
-                    self._send_json({"ok": True, "backend": backend})
-                    return
-                if self.path == "/api/paste":
-                    payload = self._read_json()
-                    backend = paste_text(str(payload.get("text", "")), current_settings().paste_mode)
-                    self._send_json({"ok": True, "backend": backend})
-                    return
-                if self.path == "/api/history":
-                    active = current_settings()
-                    payload = self._read_json()
-                    history.record(str(payload.get("text", "")), active.history_persist)
-                    self._send_json({"entries": history.entries(active.history_persist)})
-                    return
-                if self.path == "/api/update/apply":
-                    self._handle_update_apply()
-                    return
-                self.send_error(HTTPStatus.NOT_FOUND)
+                # Register before reading a body or waiting for the model. Quit
+                # must not interrupt an upload, a retry, or its final response.
+                route = self.path.split("?", 1)[0]
+                critical = route in {
+                    "/api/transcribe", "/api/polish", "/api/recovery/retry",
+                    "/api/copy", "/api/paste", "/api/history", "/api/config",
+                }
+                with (processing_dictation(wait=5.0) if critical else nullcontext()):
+                    if closing is not None and closing.is_set():
+                        self._send_json({"error": "Aparté is closing."}, HTTPStatus.SERVICE_UNAVAILABLE)
+                        return
+                    self._dispatch_post()
+            except RequestBodyTimeout:
+                self.close_connection = True
+                self._send_json({"ok": False, "error": "Upload timed out. Retry the request."}, HTTPStatus.REQUEST_TIMEOUT)
+            except ShutdownError as exc:
+                labels = tray_labels()
+                self._send_json({"ok": False, "error": labels[f"quit_{exc.reason}"]}, HTTPStatus.CONFLICT)
+            except ToggleSessionError:
+                self._send_json({"ok": False, "error": "Aparté is opening or closing a capture. Retry shortly."}, HTTPStatus.SERVICE_UNAVAILABLE)
             except Exception as exc:
                 self._send_json({"ok": False, "error": str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+
+        def _dispatch_post(self) -> None:
+            if self.path in {"/api/recovery/retry", "/api/recovery/delete"}:
+                self._handle_recovery()
+                return
+            if self.path == "/api/config":
+                self._handle_save_config()
+                return
+            if self.path == "/api/polish":
+                active = current_settings()
+                payload = self._read_json()
+                text = str(payload.get("text", ""))
+                style = str(payload.get("style", "")) or active.default_style
+                cleanup_level = str(payload.get("cleanupLevel", "")) or active.cleanup_level
+                polisher = build_polisher(active.polish_backend, active.ollama_url, active.ollama_model)
+                output = polisher.polish(
+                    text,
+                    PolishOptions(
+                        style=style,
+                        language=active.language,
+                        cleanup_level=cleanup_level,
+                        replacements=active.replacements or {},
+                        snippets=active.snippets or {},
+                        nonbreaking_spaces=active.nonbreaking_spaces,
+                        trailing_space=active.trailing_space,
+                        numbers_from=active.numbers_from,
+                        short_text_words=active.short_text_words,
+                    ),
+                )
+                self._send_json({"text": output})
+                return
+            if self.path.split("?", 1)[0] == "/api/transcribe":
+                self._handle_transcribe()
+                return
+            if self.path == "/api/copy":
+                payload = self._read_json()
+                backend = copy_text(str(payload.get("text", "")))
+                self._send_json({"ok": True, "backend": backend})
+                return
+            if self.path == "/api/paste":
+                payload = self._read_json()
+                backend = paste_text(str(payload.get("text", "")), current_settings().paste_mode)
+                self._send_json({"ok": True, "backend": backend})
+                return
+            if self.path == "/api/history":
+                active = current_settings()
+                payload = self._read_json()
+                history.record(str(payload.get("text", "")), active.history_persist)
+                self._send_json({"entries": history.entries(active.history_persist)})
+                return
+            if self.path == "/api/update/apply":
+                self._handle_update_apply()
+                return
+            self.send_error(HTTPStatus.NOT_FOUND)
 
         def log_message(self, format: str, *args: object) -> None:
             return
@@ -467,9 +547,15 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
             except ValueError:
                 self._send_json({"error": "Invalid capture identifier."}, HTTPStatus.BAD_REQUEST)
 
+        def _read_body(self, length: int) -> bytes:
+            try:
+                return self.rfile.read(length)
+            except TimeoutError as exc:
+                raise RequestBodyTimeout from exc
+
         def _read_json(self) -> dict[str, object]:
             length = int(self.headers.get("Content-Length", "0"))
-            raw = self.rfile.read(length).decode("utf-8") if length else "{}"
+            raw = self._read_body(length).decode("utf-8") if length else "{}"
             return json.loads(raw)
 
         def _handle_transcribe(self) -> None:
@@ -477,7 +563,7 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
             length = int(self.headers.get("Content-Length", "0"))
             # Always drain the body, even for a preview we are about to drop:
             # leaving it unread would desynchronise the connection.
-            body = self.rfile.read(length)
+            body = self._read_body(length)
             preview = self._flag("preview")
             if not inference_lock.acquire(blocking=not preview):
                 self._send_json({"text": None, "busy": True})
@@ -523,20 +609,41 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
             arrives: `git pull` plus `pip install` can take a minute, and a
             frozen panel looks like a crash.
             """
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            updated = False
-            for line in apply_update():
-                updated = updated or line == DONE_MARKER
-                self.wfile.write(f"{line}\n".encode("utf-8"))
-                self.wfile.flush()
-            if updated:
-                # This process still has the old modules loaded, so it cannot
-                # serve what it just installed. Leave the response time to reach
-                # the browser before replacing ourselves.
-                threading.Timer(1.0, restart).start()
+            # Refuse a running treatment before emitting streaming headers.
+            # Keep starts excluded through install and exec, including the
+            # response delay, rather than reopening a race with a Timer.
+            with prepare_shutdown():
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                updated = False
+                try:
+                    for line in apply_update():
+                        updated = updated or line == DONE_MARKER
+                        self.wfile.write(f"{line}\n".encode("utf-8"))
+                        self.wfile.flush()
+                except Exception:
+                    # The response has started; a second JSON response would
+                    # corrupt the stream. A completed install still restarts if
+                    # the browser disconnected just after the completion marker.
+                    try:
+                        self.wfile.write(b"Update interrupted. Check the installed version.\n")
+                        self.wfile.flush()
+                    except OSError:
+                        pass
+                finally:
+                    if updated:
+                        time.sleep(1.0)
+                        if closing is not None:
+                            closing.set()
+                        try:
+                            restart()
+                        except OSError:
+                            if closing is not None:
+                                closing.clear()
+                            labels = tray_labels()
+                            notify(labels["quit_failed"], labels["quit_busy"], urgency="critical")
 
         def _requested_model(self, active: Settings) -> str:
             query = parse_qs(urlsplit(self.path).query)

@@ -6,6 +6,8 @@ const statusEl = $("#status");
 const recordBtn = $("#record");
 const heroSub = $("#hero-sub");
 let recordingSession = null;
+// Une navigation invalide aussi les permissions et réponses encore en vol.
+let captureGeneration = 0;
 
 /* ---------- i18n ---------- */
 const I18N = window.APARTE_I18N || { en: {}, fr: {} };
@@ -13,6 +15,7 @@ let lang = localStorage.getItem("aparte_lang");
 if (!I18N[lang]) lang = (navigator.language || "en").slice(0, 2);
 if (!I18N[lang]) lang = "en";
 let recordState = "idle";
+let updateBusy = false;
 let setupIncomplete = false;
 let historyPersist = false;
 let livePreview = true;
@@ -62,17 +65,18 @@ async function postJson(path, payload) {
 // Les trois actions travaillent sur le contenu de l'éditeur : sur un éditeur
 // vide elles ne font rien tout en annonçant qu'elles ont réussi, et « Copier »
 // va plus loin — il remplace le presse-papiers par du vide. Elles suivent donc
-// l'éditeur autant que le traitement. « Importer audio » reste actif : c'est
-// lui qui remplit l'éditeur.
+// l'éditeur autant que le traitement. Une capture et un import s'excluent.
 const TEXT_ACTIONS = ["#polish", "#copy", "#paste"];
 
 function syncActionState() {
   // Un aperçu compte comme un traitement en cours : polir, copier ou insérer un
   // texte que la passe suivante va réécrire donnerait une version périmée.
-  const busy = recordState === "processing" || previewing;
+  const busy = recordState !== "idle" || previewing;
   const empty = !editor.value.trim();
   TEXT_ACTIONS.forEach((sel) => { $(sel).disabled = busy || empty; });
-  $("#pick-file").disabled = busy;
+  $("#pick-file").disabled = busy || updateBusy;
+  const apply = $("#update-apply");
+  if (apply) apply.disabled = busy || updateBusy;
   $("#open-recovery").disabled = recordState !== "idle" || previewing;
 }
 
@@ -82,14 +86,16 @@ editor.addEventListener("input", syncActionState);
 function setRecordState(state) {
   recordState = state;
   recordBtn.classList.remove("recording", "processing");
+  recordBtn.disabled = updateBusy || !["idle", "recording"].includes(state);
+  recordBtn.setAttribute("aria-busy", String(recordBtn.disabled));
   syncActionState();
   const label = recordBtn.querySelector(".record-label");
   if (state === "recording") {
     recordBtn.classList.add("recording");
     label.textContent = t("hero.stop");
-  } else if (state === "processing") {
+  } else if (["opening", "stopping", "processing"].includes(state)) {
     recordBtn.classList.add("processing");
-    label.textContent = t("hero.processing");
+    label.textContent = t("hero." + state);
   } else {
     label.textContent = t("hero.talk");
   }
@@ -97,6 +103,7 @@ function setRecordState(state) {
 
 /* ---------- Transcription ---------- */
 async function transcribeBlob(blob) {
+  const generation = captureGeneration;
   const model = $("#model").value;
   setRecordState("processing");
   status(t("st.transcribing", { model }));
@@ -108,55 +115,81 @@ async function transcribeBlob(blob) {
     });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
+    if (generation !== captureGeneration) return;
     editor.value = data.text;
     if ($("#autoPolish").checked && data.text.trim()) {
-      await polishEditor();
+      await polishEditor(() => generation === captureGeneration);
     } else {
       status(data.text.trim() ? t("st.transcript_ready") : t("st.no_speech"));
     }
-    if (editor.value.trim()) recordRecent(editor.value);
+    if (generation === captureGeneration && editor.value.trim()) recordRecent(editor.value);
   } finally {
-    clearPreview();
-    setRecordState("idle");
-    loadRecovery();
+    if (generation === captureGeneration) {
+      clearPreview();
+      setRecordState("idle");
+      loadRecovery();
+    }
   }
 }
 
-async function polishEditor() {
+async function polishEditor(isCurrent = () => true) {
   status(t("st.polishing"));
   const data = await postJson("/api/polish", { text: editor.value });
+  if (!isCurrent()) return;
   editor.value = data.text;
   syncActionState();
   status(t("st.polished"));
 }
 
 /* ---------- Browser WAV recording ---------- */
-async function startWavRecording() {
+async function startWavRecording(isCurrent = () => true) {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  const audioContext = new AudioContext();
-  const source = audioContext.createMediaStreamSource(stream);
-  const processor = audioContext.createScriptProcessor(4096, 1, 1);
-  const chunks = [];
-  processor.onaudioprocess = (event) => {
-    chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
-  };
-  source.connect(processor);
-  processor.connect(audioContext.destination);
-  const sampleRate = audioContext.sampleRate;
-  return {
-    // Une photo de ce qui a été capté jusqu'ici, sans rien interrompre :
-    // l'enregistrement continue de remplir `chunks` derrière.
-    snapshot() {
-      return encodeWav(chunks, sampleRate);
-    },
-    async stop() {
-      processor.disconnect();
-      source.disconnect();
-      stream.getTracks().forEach((tr) => tr.stop());
-      await audioContext.close();
-      return encodeWav(chunks, sampleRate);
-    },
-  };
+  let audioContext, source, processor;
+  let released = false;
+  let closing;
+  // Libérer les pistes est synchrone : ni close() lent, ni disconnect() en
+  // erreur ne doivent garder le micro ouvert. Tous les chemins passent ici.
+  function release() {
+    if (released) return closing;
+    released = true;
+    if (processor) processor.onaudioprocess = null;
+    for (const node of [processor, source]) {
+      try { if (node) node.disconnect(); } catch (_) {}
+    }
+    for (const track of stream.getTracks()) {
+      try { track.stop(); } catch (_) {}
+    }
+    try { closing = audioContext ? Promise.resolve(audioContext.close()) : Promise.resolve(); }
+    catch (err) { closing = Promise.reject(err); }
+    return closing;
+  }
+  if (!isCurrent()) { await release(); return null; }
+  try {
+    audioContext = new AudioContext();
+    source = audioContext.createMediaStreamSource(stream);
+    processor = audioContext.createScriptProcessor(4096, 1, 1);
+    const chunks = [];
+    processor.onaudioprocess = (event) => {
+      if (!released) chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+    };
+    source.connect(processor);
+    processor.connect(audioContext.destination);
+    const sampleRate = audioContext.sampleRate;
+    let stopping;
+    return {
+      snapshot() { return encodeWav(chunks, sampleRate); },
+      stop() {
+        // Les pistes sont déjà arrêtées. Un contexte déjà fermé peut refuser
+        // close(), sans invalider les échantillons capturés avant l'arrêt.
+        if (!stopping) stopping = release().catch(() => {}).then(() => encodeWav(chunks, sampleRate));
+        return stopping;
+      },
+      cancel() { return release(); },
+    };
+  } catch (err) {
+    await release().catch(() => {});
+    throw err;
+  }
 }
 
 function encodeWav(chunks, sampleRate) {
@@ -216,7 +249,7 @@ function startPreviewLoop(session) {
         const data = await res.json();
         // `text` est nul quand le serveur transcrivait déjà : la passe a
         // simplement laissé son tour.
-        if (typeof data.text === "string") showPreview(data.text);
+        if (recordingSession === session && typeof data.text === "string") showPreview(data.text);
       }
     } catch (_) {
       // Un aperçu raté ne dit rien sur la dictée en cours, qui continue. Se
@@ -249,35 +282,78 @@ function clearPreview() {
 
 /* ---------- Record button ---------- */
 recordBtn.addEventListener("click", async () => {
-  if (recordState === "processing") return;
-  if (recordingSession) {
+  if (recordState === "recording" && recordingSession) {
+    const generation = captureGeneration;
     const session = recordingSession;
     recordingSession = null;
     stopPreviewLoop();
-    const blob = await session.stop();
-    try { await transcribeBlob(blob); } catch (err) { status(String(err), "error"); clearPreview(); setRecordState("idle"); }
+    setRecordState("stopping");
+    status(t("st.stopping"));
+    try {
+      const blob = await session.stop();
+      if (generation !== captureGeneration) return;
+      await transcribeBlob(blob);
+    } catch (err) {
+      if (generation !== captureGeneration) return;
+      status(t("st.capture_error") + err, "error");
+      clearPreview();
+      setRecordState("idle");
+    }
     return;
   }
+  if (recordState !== "idle" || updateBusy) return;
+  const generation = ++captureGeneration;
+  // Verrouiller avant la demande de permission, pas après son acceptation.
+  setRecordState("opening");
+  status(t("st.opening"));
   try {
-    recordingSession = await startWavRecording();
+    const session = await startWavRecording(() => generation === captureGeneration);
+    if (generation !== captureGeneration) {
+      if (session) await session.cancel().catch(() => {});
+      return;
+    }
+    recordingSession = session;
     setRecordState("recording");
     status(t("st.recording"));
-    startPreviewLoop(recordingSession);
+    startPreviewLoop(session);
   } catch (err) {
+    if (generation !== captureGeneration) return;
     recordingSession = null;
+    setRecordState("idle");
     status(t("st.mic_error") + err, "error");
   }
+});
+
+window.addEventListener("pagehide", () => {
+  captureGeneration++;
+  stopPreviewLoop();
+  const session = recordingSession;
+  recordingSession = null;
+  if (session) session.cancel().catch(() => {});
+  clearPreview();
+  if (recordState !== "idle") status(t("st.page_left"));
+  setRecordState("idle");
 });
 
 /* ---------- Action chips ---------- */
 $("#polish").addEventListener("click", async () => {
   try { await polishEditor(); } catch (err) { status(String(err), "error"); }
 });
-$("#pick-file").addEventListener("click", () => $("#file").click());
+$("#pick-file").addEventListener("click", () => {
+  if (recordState === "idle" && !updateBusy) $("#file").click();
+});
 $("#file").addEventListener("change", async () => {
   const file = $("#file").files[0];
+  $("#file").value = "";
   if (!file) return;
-  try { await transcribeBlob(file); } catch (err) { status(String(err), "error"); setRecordState("idle"); }
+  // Le sélecteur peut avoir été ouvert avant le début de la capture.
+  if (recordState !== "idle" || updateBusy) {
+    status(t(updateBusy ? "st.update_busy" : "st.import_busy"), "error"); return;
+  }
+  const generation = captureGeneration;
+  try { await transcribeBlob(file); } catch (err) {
+    if (generation === captureGeneration) { status(String(err), "error"); setRecordState("idle"); }
+  }
 });
 $("#copy").addEventListener("click", async () => {
   status(t("st.copying"));
@@ -823,7 +899,6 @@ setInterval(() => { if (!document.hidden) loadRecovery(); }, 30000);
 // Ligne que le serveur écrit seule quand la mise à jour a réussi : elle distingue
 // « le journal s'est arrêté » de « c'est installé ».
 const UPDATE_DONE = "__APARTE_UPDATED__";
-let updateBusy = false;
 
 // Aucune vérification automatique : à l'ouverture du panneau on se contente de ce
 // que git sait déjà en local. Le réseau n'est joint que sur clic.
@@ -869,11 +944,18 @@ function renderUpdate(data) {
   $("#update-check").addEventListener("click", () => loadUpdate(true));
   const apply = $("#update-apply");
   if (apply) apply.addEventListener("click", runUpdate);
+  syncActionState();
+  if (recordState !== "idle") $("#update-note").textContent = t("update.capture_busy");
 }
 
 async function runUpdate() {
   if (updateBusy) return;
+  if (recordState !== "idle") {
+    $("#update-note").textContent = t("update.capture_busy");
+    return;
+  }
   updateBusy = true;
+  setRecordState(recordState);
   const log = $("#update-log");
   const note = $("#update-note");
   const buttons = [$("#update-check"), $("#update-apply")].filter(Boolean);
@@ -902,6 +984,7 @@ async function runUpdate() {
   note.textContent = t(installed ? "update.restarting" : "update.failed");
   if (installed) return waitForRestart(note);
   updateBusy = false;
+  setRecordState(recordState);
   buttons.forEach((b) => (b.disabled = false));
 }
 
@@ -919,6 +1002,7 @@ async function waitForRestart(note) {
   }
   note.textContent = t("update.no_restart");
   updateBusy = false;
+  setRecordState(recordState);
 }
 
 let lastHealth = null;

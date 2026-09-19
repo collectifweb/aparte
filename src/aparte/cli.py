@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import sys
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from .linux_desktop import (
     uninstall_autostart_entry,
 )
 from .notify import _preview, notify
+from .lifecycle import get_dictation_state, processing_dictation
 from .polish import PolishOptions, build_polisher
 from .session import (
     get_active_session, start_toggle_recording, stop_toggle_recording,
@@ -339,7 +341,8 @@ def dictate_once(args: argparse.Namespace, settings: Settings) -> str:
     if settings.beep:
         play_beep("stop")
     notify("⏳ Transcription…", "Aparté traite ta dictée.", urgency="low")
-    return _finish_dictation(path, args, settings)
+    with processing_dictation():
+        return _finish_dictation(path, args, settings)
 
 
 class _PolishFailure(RuntimeError):
@@ -392,7 +395,7 @@ def retry_recovery(identifier: str, args: argparse.Namespace, settings: Settings
     """Retry once under a claim. Copy by default; never paste automatically."""
     if args.target not in {"copy", "stdout"}:
         raise ValueError("La récupération propose uniquement copier ou afficher le texte.")
-    with recovery.claim(identifier) as item:
+    with processing_dictation(), recovery.claim(identifier) as item:
         try:
             raw = item.raw_text
             if raw is None:
@@ -454,44 +457,49 @@ def _notify_inserted(output: str, target: str) -> None:
 
 
 def toggle_dictation(args: argparse.Namespace, settings: Settings) -> str:
-    with toggle_session_transition():
-        active = get_active_session()
-        if args.status:
-            if active:
-                return f"recording {active.audio_path}"
-            return "idle"
-        if not active:
-            if settings.beep:
-                play_beep("start")
-            try:
-                session = start_toggle_recording(
-                    args.sample_rate, settings.microphone, settings.max_recording_seconds
-                )
-            except RecordingError as exc:
-                if getattr(args, "hotkey", False) and isinstance(exc, RecordingStartError):
-                    technical_log.write_event("audio_start_failed", audio_diagnostic=str(exc))
-                # Un raccourci clavier n'a personne pour lire `stderr` — Cinnamon le
-                # jette. Sans cette notification, un démarrage refusé est un appui qui
-                # n'a rien fait : l'appui suivant, celui qui croit arrêter, ne trouve
-                # plus de session et ouvre le micro pour un enregistrement entier.
-                notify(
-                    "⚠️ Dictée non démarrée",
-                    f"{getattr(exc, 'user_message', str(exc))} Rien n'enregistre — réappuie pour réessayer.",
-                    urgency="critical",
-                )
-                raise
-            notify("🎙️ Dictée en cours", "Réappuie sur le raccourci pour arrêter et insérer.")
-            return f"Recording started: {session.audio_path}"
-
+    if args.status:
         try:
-            session = stop_toggle_recording()
-        except ToggleSessionError as exc:
-            notify("⚠️ Arrêt de dictée non confirmé", str(exc), urgency="critical")
-            raise
-    if settings.beep:
-        play_beep("stop")
-    notify("⏳ Transcription…", "Aparté traite ta dictée.", urgency="low")
-    return _finish_dictation(session.audio_path, args, settings)
+            return get_dictation_state()
+        except (OSError, ToggleSessionError):
+            return "unknown"
+    with ExitStack() as processing:
+        with toggle_session_transition():
+            active = get_active_session()
+            if not active:
+                if settings.beep:
+                    play_beep("start")
+                try:
+                    session = start_toggle_recording(
+                        args.sample_rate, settings.microphone, settings.max_recording_seconds
+                    )
+                except RecordingError as exc:
+                    if getattr(args, "hotkey", False) and isinstance(exc, RecordingStartError):
+                        technical_log.write_event("audio_start_failed", audio_diagnostic=str(exc))
+                    # Un raccourci clavier n'a personne pour lire `stderr` — Cinnamon le
+                    # jette. Sans cette notification, un démarrage refusé est un appui qui
+                    # n'a rien fait : l'appui suivant, celui qui croit arrêter, ne trouve
+                    # plus de session et ouvre le micro pour un enregistrement entier.
+                    notify(
+                        "⚠️ Dictée non démarrée",
+                        f"{getattr(exc, 'user_message', str(exc))} Rien n'enregistre — réappuie pour réessayer.",
+                        urgency="critical",
+                    )
+                    raise
+                notify("🎙️ Dictée en cours", "Réappuie sur le raccourci pour arrêter et insérer.")
+                return f"Recording started: {session.audio_path}"
+
+            try:
+                # Publish while the capture transition is still held: Quit must see
+                # either the recorder or its processing, never a gap between them.
+                processing.enter_context(processing_dictation())
+                session = stop_toggle_recording()
+            except ToggleSessionError as exc:
+                notify("⚠️ Arrêt de dictée non confirmé", str(exc), urgency="critical")
+                raise
+        if settings.beep:
+            play_beep("stop")
+        notify("⏳ Transcription…", "Aparté traite ta dictée.", urgency="low")
+        return _finish_dictation(session.audio_path, args, settings)
 
 
 def handle_output(output: str, args: argparse.Namespace, settings: Settings) -> None:
@@ -515,7 +523,7 @@ def print_doctor(settings: Settings) -> None:
         print(f"  {marker:7} {check['label']}")
 
     summary = diagnostics["summary"]
-    print(f"\nstatus  {'recording active' if diagnostics['recording_active'] else 'idle'}")
+    print(f"\nstatus  {diagnostics['dictation_state']}")
     print(f"ready   {'yes' if summary['ready'] else 'no — see fixes below'}")
 
     hotkey = diagnostics["hotkey"]

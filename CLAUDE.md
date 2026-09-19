@@ -157,6 +157,28 @@ phrases voisines.
   propre notification `critical`. L'historique s'écrit **avant** l'insertion :
   c'est le seul filet si le collage casse.
 
+### États du micro et fermeture protégée
+
+- `lifecycle.get_dictation_state()` distingue `recording` (enregistreur vivant),
+  `processing`, `recoverable`, `idle`. Les appelants exposent `unknown` si la
+  lecture échoue ; ne jamais transformer une erreur de lecture en repos certain.
+- Publier `processing_dictation()` avant de relâcher la transition d'arrêt,
+  et le garder jusqu'à la livraison. Les marqueurs privés ne contiennent ni PID
+  ni texte : le `flock` détenu prouve la vivacité, un marqueur abandonné se purge.
+  Les routes HTTP enregistrent leur traitement avant de lire le corps ; cette
+  lecture doit rester bornée pour qu'un client interrompu ne bloque pas Quitter.
+- `prepare_shutdown()` garde la transition jusqu'à l'arrêt du serveur ou son
+  remplacement par `exec`. Refuser pendant un traitement ; sinon arrêter la
+  capture, sauvegarder sa récupération puis retirer l'original. Une panne laisse
+  l'application ouverte et l'original suivi. Ne pas lancer de transcription ou
+  de collage depuis Quitter. SIGINT/SIGTERM passent par ce même chemin.
+- Le menu observe la capture du raccourci, pas les micros détenus par les
+  navigateurs. Ne pas promettre que fermer Python arrête `getUserMedia`.
+- Dans l'onglet, poser `opening`/`stopping` avant le premier `await` ; libérer les
+  pistes avant d'attendre `AudioContext.close()`. La navigation invalide les
+  permissions et réponses en vol, y compris après le décodage JSON. Une fermeture
+  du contexte audio en erreur ne doit pas jeter les échantillons déjà capturés.
+
 ### Raccourci : diagnostic technique sans texte dicté
 
 - Les commandes de raccourci utilisent `toggle --hotkey`. Ce mode est réservé

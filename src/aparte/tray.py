@@ -20,7 +20,8 @@ from pathlib import Path
 from . import history
 from .clipboard import copy_text
 from .config import Settings
-from .session import get_active_session
+from .lifecycle import ShutdownError, get_dictation_state, prepare_shutdown
+from .notify import notify
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 ICON_IDLE = "aparte-tray"
@@ -52,6 +53,17 @@ LABELS = {
         "quit": "Quitter",
         "idle": "Aparté",
         "recording": "Aparté — micro ouvert",
+        "processing": "Aparté — dictée en traitement",
+        "recoverable": "Aparté — dictée à récupérer",
+        "unknown": "Aparté — état du micro indisponible",
+        "quitting": "Fermeture…",
+        "quit_failed": "Aparté reste ouvert",
+        "quit_processing": "Une dictée est en traitement. Réessaie de quitter quand elle est terminée.",
+        "quit_stop": "L’arrêt du micro n’est pas confirmé. Réessaie de quitter.",
+        "quit_save": "Le micro est arrêté, mais la récupération n’a pas pu être enregistrée. Ta capture reste disponible avec le raccourci ; réessaie de quitter ensuite.",
+        "quit_busy": "Une action est déjà en cours. Réessaie de quitter dans un instant.",
+        "quit_saved": "Dictée conservée",
+        "quit_saved_detail": "Micro arrêté. Rouvre Aparté dans l’heure pour récupérer ta dictée, avant de fermer ta session Linux.",
     },
     "en": {
         "open": "Open Aparté",
@@ -60,6 +72,17 @@ LABELS = {
         "quit": "Quit",
         "idle": "Aparté",
         "recording": "Aparté — microphone open",
+        "processing": "Aparté — processing dictation",
+        "recoverable": "Aparté — dictation to recover",
+        "unknown": "Aparté — microphone state unavailable",
+        "quitting": "Closing…",
+        "quit_failed": "Aparté is still open",
+        "quit_processing": "A dictation is being processed. Try quitting again when it finishes.",
+        "quit_stop": "The microphone has not confirmed stopping. Try quitting again.",
+        "quit_save": "The microphone stopped, but recovery could not be saved. Your capture is still available through the shortcut; try quitting again afterwards.",
+        "quit_busy": "An action is already running. Try quitting again in a moment.",
+        "quit_saved": "Dictation saved",
+        "quit_saved_detail": "Microphone stopped. Reopen Aparté within an hour to recover your dictation, before signing out of Linux.",
     },
 }
 
@@ -90,6 +113,8 @@ class Tray:
         self.on_quit = on_quit
         self.labels = _labels()
         self.recording = False
+        self.state = "idle"
+        self.quitting = False
 
         self.indicator = AppIndicator.Indicator.new(
             "aparte",
@@ -113,6 +138,7 @@ class Tray:
             menu.append(item)
         menu.append(Gtk.SeparatorMenuItem())
         quit_item = Gtk.MenuItem(label=self.labels["quit"])
+        self.quit_item = quit_item
         quit_item.connect("activate", self._quit)
         menu.append(quit_item)
         menu.show_all()
@@ -132,25 +158,52 @@ class Tray:
             threading.Thread(target=copy_text, args=(text,), daemon=True).start()
 
     def _quit(self, *_) -> None:
-        self.on_quit()
-        Gtk.main_quit()
+        if self.quitting:
+            return
+        self.quitting = True
+        self.quit_item.set_sensitive(False)
+        self.quit_item.set_label(self.labels["quitting"])
+        threading.Thread(target=self._quit_worker, daemon=True).start()
+
+    def _quit_worker(self) -> None:
+        try:
+            with prepare_shutdown() as identifier:
+                self.on_quit()
+            if identifier is not None:
+                notify(self.labels["quit_saved"], self.labels["quit_saved_detail"])
+        except Exception as exc:
+            reason = exc.reason if isinstance(exc, ShutdownError) else "busy"
+            notify(self.labels["quit_failed"], self.labels[f"quit_{reason}"], urgency="critical")
+            GLib.idle_add(self._quit_finished, False)
+        else:
+            GLib.idle_add(self._quit_finished, True)
+
+    def _quit_finished(self, success: bool) -> bool:
+        if success:
+            Gtk.main_quit()
+        else:
+            self.quitting = False
+            self.quit_item.set_sensitive(True)
+            self.quit_item.set_label(self.labels["quit"])
+            self._refresh()
+        return False
 
     def _refresh(self) -> bool:
         """Follow the recording state set by the global hotkey."""
-        recording = get_active_session() is not None
-        if recording != self.recording:
-            self.recording = recording
+        try:
+            state = get_dictation_state()
+        except (OSError, RuntimeError):
+            state = "unknown"
+        if state != self.state:
+            self.state = state
+            self.recording = state == "recording"
             self.indicator.set_icon_full(
-                ICON_RECORDING if recording else ICON_IDLE,
-                self.labels["recording" if recording else "idle"],
+                ICON_RECORDING if self.recording else ICON_IDLE,
+                self.labels[state],
             )
-            self.indicator.set_title(self.labels["recording" if recording else "idle"])
+            self.indicator.set_title(self.labels[state])
         return True
 
     def run(self) -> None:
-        import signal
-
-        # PyGObject swallows Ctrl+C once the GTK loop owns the main thread.
-        signal.signal(signal.SIGINT, signal.SIG_DFL)
         GLib.timeout_add_seconds(POLL_SECONDS, self._refresh)
         Gtk.main()

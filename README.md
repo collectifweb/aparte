@@ -405,8 +405,28 @@ Polish backends:
 ### System tray icon
 
 Running the desktop app puts an Aparté icon in the system tray: three bars at
-rest, a filled disc while the microphone is open, and a menu to open the app,
+rest, a filled disc while the global shortcut's microphone is open, and a menu to open the app,
 copy the last dictation, jump to Settings, or quit.
+
+The menu distinguishes recording, processing, audio awaiting recovery, idle and
+unknown state. `aparte toggle --status` returns `recording`, `processing`,
+`recoverable`, `idle` or `unknown` (it no longer appends the recording path).
+A recorder that has stopped with audio left behind is recoverable, not recording.
+
+**Quit** stops a shortcut recording and saves its audio for recovery for one
+hour, without transcribing or pasting it. If stopping or saving fails, Aparté
+stays open and reports the problem. During processing, wait for completion and
+quit again. SIGINT/SIGTERM use the same protection, including without the tray;
+forced termination cannot provide this guarantee. Updates also wait until work
+is finished and exclude new shortcut captures until the process restarts.
+
+Browser recording belongs to its tab: use **Stop** or close that tab to release
+its microphone. The tray does not track browser microphones, and quitting the
+desktop process cannot stop them. Within one tab, opening and stopping have
+explicit waiting states, double clicks cannot start a second capture, and audio
+import and application update cannot overlap a recording. Navigation releases
+capture resources and discards late permission grants and transcription results.
+Separate tabs are not coordinated.
 
 It relies on PyGObject and the AppIndicator typelib, which are system packages
 rather than pip ones:

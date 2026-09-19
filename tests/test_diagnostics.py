@@ -1,14 +1,35 @@
+import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from aparte import diagnostics
+from aparte import diagnostics, session
 from aparte.config import Settings
 from aparte.diagnostics import collect_checks, collect_diagnostics, walled_venv_config
 
 
 class DiagnosticsTest(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        env = {
+            "APARTE_CONFIG": str(self.root / "config.json"),
+            "APARTE_RUNTIME_DIR": str(self.root),
+            **{key: str(self.root / key.lower()) for key in (
+                "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME",
+                "XDG_RUNTIME_DIR", "XDG_CACHE_HOME",
+            )},
+        }
+        environment = mock.patch.dict(os.environ, env)
+        environment.start()
+        self.addCleanup(environment.stop)
+        hotkey = mock.patch.object(diagnostics, "hotkey_info", return_value={})
+        hotkey.start()
+        self.addCleanup(hotkey.stop)
+
     def test_essential_checks_are_present(self):
         keys = {c.key for c in collect_checks(Settings())}
         self.assertIn("whisper_backend", keys)
@@ -27,6 +48,42 @@ class DiagnosticsTest(unittest.TestCase):
         # ready implies every essential check passed
         essentials = [c for c in data["checks"] if c["essential"]]
         self.assertEqual(data["summary"]["ready"], all(c["ok"] for c in essentials))
+
+    def test_only_a_live_capture_reports_an_open_microphone(self):
+        for state in ("recording", "processing", "recoverable", "idle"):
+            with self.subTest(state=state), mock.patch.object(
+                diagnostics, "get_dictation_state", return_value=state,
+            ):
+                data = collect_diagnostics(Settings())
+            self.assertEqual(data["recording_active"], state == "recording")
+            self.assertEqual(data["dictation_state"], state)
+
+    def test_stopped_capture_is_recoverable_without_an_open_microphone(self):
+        audio = self.root / "toggle-synthetic.wav"
+        audio.write_bytes(b"\x00" * (44 + 16000))
+        session_path = session.get_session_path()
+        session_path.write_text(json.dumps({
+            "pid": -1,  # No real process or microphone belongs to this fixture.
+            "audio_path": str(audio),
+            "sample_rate": 16000,
+            "started_at": 1.0,
+        }), encoding="utf-8")
+
+        data = collect_diagnostics(Settings())
+
+        self.assertFalse(data["recording_active"])
+        self.assertEqual(data["dictation_state"], "recoverable")
+        self.assertTrue(session_path.exists())
+        self.assertTrue(audio.exists())
+
+    def test_unreadable_or_transitioning_state_does_not_claim_microphone_closed(self):
+        for error in (OSError("runtime unavailable"), session.ToggleSessionError("transition")):
+            with self.subTest(error=type(error).__name__), mock.patch.object(
+                diagnostics, "get_dictation_state", side_effect=error,
+            ):
+                data = collect_diagnostics(Settings())
+            self.assertEqual(data["dictation_state"], "unknown")
+            self.assertIsNone(data["recording_active"])
 
 
 class TrayFixTest(unittest.TestCase):

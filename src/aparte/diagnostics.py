@@ -9,7 +9,8 @@ from pathlib import Path
 
 from .config import Settings
 from .hotkey import hotkey_info
-from .session import get_active_session
+from .lifecycle import get_dictation_state
+from .session import ToggleSessionError
 
 
 @dataclass(frozen=True)
@@ -206,7 +207,12 @@ def collect_diagnostics(settings: Settings) -> dict:
     can_record = by_key["recorder"].ok
     can_insert = by_key["paste"].ok or by_key["clipboard"].ok
     essentials_ok = all(c.ok for c in checks if c.essential)
-    active = get_active_session()
+    try:
+        state = get_dictation_state()
+    except (OSError, ToggleSessionError):
+        # A concurrent transition or inaccessible runtime does not prove the
+        # microphone is closed. Keep that uncertainty visible to consumers.
+        state = "unknown"
     return {
         "checks": [asdict(c) for c in checks],
         "summary": {
@@ -215,6 +221,9 @@ def collect_diagnostics(settings: Settings) -> dict:
             "can_record": can_record,
             "can_insert": can_insert,
         },
-        "recording_active": bool(active),
+        # A stopped recorder can still have a session carrying recoverable
+        # speech. Its presence does not mean the microphone remains open.
+        "recording_active": None if state == "unknown" else state == "recording",
+        "dictation_state": state,
         "hotkey": hotkey_info(),
     }
