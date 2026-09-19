@@ -1,5 +1,10 @@
 # Fiabilisation Linux — septembre 2026
 
+> Installation ensuite effectuée par Alexandre et vérifiée : `~/murmur` est
+> au commit de release `3f7e0da`, module et paquet **1.2.0**, arbre propre.
+> Les retours de dictée réelle et après veille restent à recueillir. Le prochain
+> chantier prévu est le lot 2 (journal privé, réglages et historique fiables).
+
 > Mise à jour du 19 septembre : la [release GitHub v1.2.0](https://github.com/collectifweb/aparte/releases/tag/v1.2.0)
 > est publiée comme dernière version stable, tag `v1.2.0` sur `3f7e0da`.
 > La [CI Python 3.10–3.13](https://github.com/collectifweb/aparte/actions/runs/35455930154)
