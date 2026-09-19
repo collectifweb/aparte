@@ -27,12 +27,30 @@ la préparation. Pas de capture réelle ni de mise en veille automatique du post
 - [ ] Validation du correctif sur le poste puis après veille (distincte des
       tests synthétiques ; à coordonner avec l'usage du micro).
 
+## Lot 2 — protection des données (en cours)
+
+Travail autorisé par Alexandre après installation de la version 1.2.0. Branche
+`fix/linux-donnees-fiables`, toujours dans `/tmp/aparte-linux-fiabilisation`.
+L'application installée reste sur la release pendant la préparation.
+
+- [x] Ancien journal local `/tmp/aparte-toggle.log` protégé : permissions 0664
+      devenues 0600 après vérification du propriétaire et du type de fichier,
+      sans lecture ni suppression de son contenu. Le raccourci 1.2.0 y écrit
+      encore ; ce changement de permissions ne corrige pas à lui seul la collecte.
+- [ ] Journal technique privé et borné, sans texte dicté ; migration conservatrice
+      du raccourci connu sans déplacer sa touche ni toucher les autres commandes.
+- [ ] Réglages : écriture atomique, fusion protégée entre processus, anciennes
+      données préservées en cas d'erreur de sauvegarde.
+- [ ] Historique : écritures/effacement coordonnés, fichier privé dès sa création,
+      attente bornée pour ne pas suspendre la livraison de la dictée.
+- [ ] Tests isolés avec concurrence réelle, revue croisée, documentation et
+      commits à chaque jalon. Publication et installation du lot à suivre.
+
+La protection Host des lectures HTTP et le déblocage de la transcription après
+erreur disque ont déjà été livrés dans la version 1.2.0.
+
 ## Lots suivants
 
-2. Protéger les données et le programme résident : journal du raccourci,
-   configuration et historique atomiques/coordonnés. La validation Host des
-   lectures HTTP et la libération du verrou de transcription en cas d'erreur
-   disque ont été avancées dans le lot 1, nécessaires à la récupération.
 3. États cohérents du micro : quitter, capture à récupérer, ouvertures navigateur
    et import audio incompatibles.
 4. Parcours : historique actualisé/effaçable, réglages immédiats, ponctuation,
