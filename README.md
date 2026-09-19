@@ -340,6 +340,12 @@ global-hotkey flow.
 
 ## Configuration
 
+Settings saves replace the file only after the new JSON has been fully written
+and synchronized. Concurrent Aparté saves coordinate their changes; a failed
+write preserves the previous file. Invalid existing JSON is reported instead
+of silently replaced. If another save holds the lock for more than five seconds,
+retry after that operation finishes. External editors do not use this lock.
+
 Environment variables:
 
 ```bash
@@ -417,6 +423,12 @@ instead, in a file only you can read.
 Every Aparté process shares that one store, so a dictation made through the
 global hotkey shows up in the app, and vice versa, without either one having to
 be running for the other.
+
+History writes and deletion are coordinated across processes. Files are private
+from creation and replaced atomically. History remains best effort: if its lock
+stays busy for half a second, or its storage fails, that history operation is
+skipped so the dictation can still be delivered. This may leave a missing entry;
+the half-second limit applies to waiting for the lock, not to filesystem I/O.
 
 Insertion modes (`paste_mode` in the config, or **How to insert** under
 **Hardware** in the desktop app). Every mode copies the dictation to the

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Settings updates, initialization and legacy migration coordinate concurrent
+  writers and publish complete private files atomically. Write failures preserve
+  the previous settings, and malformed JSON is reported without overwriting it.
+- History writes and deletion share a bounded cross-process lock. Concurrent
+  dictations no longer overwrite one another during normal operation; temporary
+  files are private from creation. Storage failures do not prevent delivery.
+
 ## [1.2.0] - 2026-09-19
 
 ### Added

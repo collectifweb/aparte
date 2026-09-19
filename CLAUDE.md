@@ -157,6 +157,27 @@ phrases voisines.
   propre notification `critical`. L'historique s'écrit **avant** l'insertion :
   c'est le seul filet si le collage casse.
 
+### Réglages et historique : publier un fichier complet
+
+- `config.py` verrouille toute fusion, initialisation et migration avec un
+  `flock` sur un fichier stable, jamais effacé. Attente maximale de cinq secondes,
+  puis erreur explicite ; les lecteurs voient l'ancienne ou la nouvelle version.
+- Un chemin de configuration en lien symbolique est résolu pour partager le
+  verrou de sa cible. Le verrou lui-même refuse liens et fichiers spéciaux.
+  Ne pas écraser silencieusement un JSON invalide lors d'une mise à jour.
+- `history.py` couvre lecture-modification-écriture et effacement avec son
+  propre verrou stable. Attente plafonnée à 0,5 s : en cas de contention ou panne,
+  l'opération d'historique peut être perdue, jamais la livraison bloquée par cette
+  attente. Ce délai ne borne pas un système de fichiers lui-même bloqué.
+- Les temporaires sont uniques, mode 0600 dès création, voisins de leur cible,
+  synchronisés avant remplacement. Ne jamais tronquer la cible en place ni
+  réutiliser un nom temporaire partagé. L'atomicité applicative ne promet pas la
+  persistance du renommage après coupure électrique du répertoire.
+- Après publication d'une migration Murmur, un retrait impossible de l'ancienne
+  copie ne doit pas faire échouer la lecture de la nouvelle configuration.
+  Les écritures externes et les anciennes versions sans verrou restent hors de
+  cette coordination ; redémarrer le programme résident après mise à jour.
+
 ### Récupération des dictées en échec
 
 - `recovery.py` conserve les captures dans le runtime privé pendant une heure,

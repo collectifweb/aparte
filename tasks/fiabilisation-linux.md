@@ -39,15 +39,25 @@ L'application installée reste sur la release pendant la préparation.
       encore ; ce changement de permissions ne corrige pas à lui seul la collecte.
 - [ ] Journal technique privé et borné, sans texte dicté ; migration conservatrice
       du raccourci connu sans déplacer sa touche ni toucher les autres commandes.
-- [ ] Réglages : écriture atomique, fusion protégée entre processus, anciennes
+- [x] Réglages : écriture atomique, fusion protégée entre processus, anciennes
       données préservées en cas d'erreur de sauvegarde.
-- [ ] Historique : écritures/effacement coordonnés, fichier privé dès sa création,
+- [x] Historique : écritures/effacement coordonnés, fichier privé dès sa création,
       attente bornée pour ne pas suspendre la livraison de la dictée.
 - [ ] Tests isolés avec concurrence réelle, revue croisée, documentation et
       commits à chaque jalon. Publication et installation du lot à suivre.
 
 La protection Host des lectures HTTP et le déblocage de la transcription après
 erreur disque ont déjà été livrés dans la version 1.2.0.
+
+Jalon stockage : **24 tests réglages et 22 tests historique verts**, incluant
+vrais processus concurrents, lecteurs pendant publication, pannes disque,
+initialisation/migration et effacement concurrents. Revue croisée effectuée ;
+le faux échec possible après publication a été supprimé. L'ancien fichier reste
+intact sur les pannes avant remplacement. Verrous bornés à cinq secondes pour
+les réglages et une demi-seconde pour l'historique ; ce dernier peut abandonner
+une opération pour préserver la livraison. Tests d'historique en `spawn`, sans
+fork d'un processus ayant déjà des threads HTTP. Les garanties ne couvrent ni
+les anciennes versions ni les outils externes qui ignorent ces verrous.
 
 ## Lots suivants
 
