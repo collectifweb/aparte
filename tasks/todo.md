@@ -1,5 +1,10 @@
 # Plan — renommage en Aparté + reprises inspirées de Murmure
 
+**Reprise du 19 septembre 2026 :** priorité à la fiabilisation du produit Linux,
+suivie dans [fiabilisation-linux.md](fiabilisation-linux.md). Le portage macOS
+reste hors du périmètre de cette reprise. Chaque jalon validé est documenté et
+commité.
+
 Positionnement retenu : **application de dictée vocale pour Linux, centrée sur le
 français**. Tout arbitrage se tranche avec ces deux mots-clés. Une fonctionnalité
 qui sert le français ou l'intégration Linux passe devant une fonctionnalité
