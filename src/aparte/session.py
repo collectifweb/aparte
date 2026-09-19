@@ -1,20 +1,35 @@
 from __future__ import annotations
 
 import json
+import fcntl
 import os
+import re
 import shutil
 import signal
+import stat
 import subprocess
 import tempfile
 import time
+import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterator, BinaryIO
 
 from .audio import RecordingError
 
 
 class ToggleSessionError(RuntimeError):
     pass
+
+
+class RecordingStartError(RecordingError):
+    """Un résumé affichable et le diagnostic technique destiné au journal."""
+
+    def __init__(self, user_message: str, diagnostic: str):
+        super().__init__(diagnostic)
+        self.user_message = user_message
 
 
 @dataclass(frozen=True)
@@ -46,6 +61,37 @@ _START_POLL_SECONDS = 0.02
 _ORPHAN_GRACE_SECONDS = 2.0
 # Ce qu'on laisse à un enregistreur ramassé pour rendre le micro.
 _ORPHAN_EXIT_SECONDS = 1.0
+_DIAGNOSTIC_BYTES = 4096
+_transition_state = threading.local()
+
+
+@contextmanager
+def toggle_session_transition() -> Iterator[None]:
+    """Décider et effectuer un démarrage/arrêt sans attendre un autre appui.
+
+    Attendre transformerait un deuxième arrêt en un nouveau démarrage. Le
+    verrou est réentrant pour que le CLI protège la décision et les fonctions
+    start/stop protègent aussi leurs appelants directs. Il ne couvre jamais la
+    transcription. Ne pas supprimer son fichier : flock verrouille un inode.
+    """
+    path = get_runtime_dir() / "toggle-transition.lock"
+    key = (os.getpid(), path)
+    if getattr(_transition_state, "key", None) == key:
+        yield
+        return
+    fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_CLOEXEC, 0o600)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise ToggleSessionError("Une ouverture ou un arrêt du micro est déjà en cours.") from exc
+        _transition_state.key = key
+        try:
+            yield
+        finally:
+            _transition_state.key = None
+    finally:
+        os.close(fd)
 
 
 def get_runtime_dir() -> Path:
@@ -60,10 +106,18 @@ def get_runtime_dir() -> Path:
     last_error: OSError | None = None
     for path in candidates:
         try:
-            path.mkdir(parents=True, exist_ok=True)
-            probe = path / ".write-test"
-            probe.write_text("", encoding="utf-8")
-            probe.unlink(missing_ok=True)
+            path.mkdir(parents=True, exist_ok=True, mode=0o700)
+            info = path.lstat()
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+                raise PermissionError(f"Runtime directory must belong to this user and not be a symlink: {path}")
+            if info.st_mode & 0o077:
+                if override:
+                    # Un override peut désigner n'importe quel dossier : ne pas
+                    # changer ses permissions à la place de l'utilisateur.
+                    raise PermissionError(f"Runtime directory must be private (mode 700): {path}")
+                path.chmod(0o700)
+            with tempfile.TemporaryFile(dir=path):
+                pass
             return path
         except OSError as exc:
             last_error = exc
@@ -100,18 +154,26 @@ def _recorder_alive(session: RecordingSession) -> bool:
     distingue même deux arecord lancés en même temps.
     """
     try:
-        cmdline = Path(f"/proc/{session.pid}/cmdline").read_bytes()
+        process_dir = Path(f"/proc/{session.pid}")
+        if process_dir.stat().st_uid != os.getuid():
+            return False
+        argv = (process_dir / "cmdline").read_bytes().split(b"\x00")
     except OSError:
         return False
-    return b"arecord" in cmdline and os.fsencode(session.audio_path) in cmdline
+    return (
+        any(os.path.basename(arg) == b"arecord" for arg in argv[:2])
+        and os.fsencode(session.audio_path) in argv
+    )
 
 
 def get_active_session() -> RecordingSession | None:
     path = get_session_path()
     if not path.exists():
         return None
+    contents = None
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        contents = path.read_bytes()
+        data = json.loads(contents)
         session = RecordingSession(
             pid=int(data["pid"]),
             audio_path=Path(str(data["audio_path"])),
@@ -122,7 +184,7 @@ def get_active_session() -> RecordingSession | None:
         # L'écriture passe par `_claim_session`, donc un fichier illisible n'est
         # plus un état transitoire : c'est de la corruption. Le supprimer est la
         # récupération — le garder bloquerait toute dictée future.
-        path.unlink(missing_ok=True)
+        _discard_session_snapshot(path, contents)
         return None
     if _recorder_alive(session):
         return session
@@ -132,9 +194,23 @@ def get_active_session() -> RecordingSession | None:
     # l'utilisateur appuie pour le récupérer.
     if _captured_seconds(session) >= MIN_TRANSCRIBABLE_SECONDS:
         return session
-    path.unlink(missing_ok=True)
-    session.audio_path.unlink(missing_ok=True)
+    if _discard_session_snapshot(path, contents):
+        session.audio_path.unlink(missing_ok=True)
     return None
+
+
+def _discard_session_snapshot(path: Path, contents: bytes | None) -> bool:
+    """Un lecteur ancien (tray) ne doit pas supprimer une nouvelle session."""
+    if contents is None:
+        return False
+    try:
+        with toggle_session_transition():
+            if path.read_bytes() != contents:
+                return False
+            path.unlink()
+            return True
+    except (ToggleSessionError, OSError):
+        return False
 
 
 def _claim_session(session: RecordingSession) -> bool:
@@ -146,19 +222,16 @@ def _claim_session(session: RecordingSession) -> bool:
     supprimer la session d'un enregistrement bien vivant.
     """
     path = get_session_path()
-    temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
-    temporary.write_text(
-        json.dumps(
-            {
+    fd, name = tempfile.mkstemp(prefix=f"{path.name}.", suffix=".tmp", dir=path.parent)
+    temporary = Path(name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump({
                 "pid": session.pid,
                 "audio_path": str(session.audio_path),
                 "sample_rate": session.sample_rate,
                 "started_at": session.started_at,
-            }
-        ),
-        encoding="utf-8",
-    )
-    try:
+            }, handle)
         os.link(temporary, path)
         return True
     except FileExistsError:
@@ -222,23 +295,25 @@ def _forgotten_recorders() -> list[tuple[int, Path]]:
     `toggle-<horodatage>.wav` que nous seuls produisons. L'horodatage donne leur
     âge sans consulter `/proc/<pid>/stat` et ses jiffies.
     """
-    prefix = os.fsencode(get_runtime_dir() / "toggle-")
+    runtime = get_runtime_dir()
     cutoff = time.time() - _ORPHAN_GRACE_SECONDS
     forgotten: list[tuple[int, Path]] = []
     for entry in Path("/proc").iterdir():
         if not entry.name.isdigit():
             continue
         try:
-            cmdline = (entry / "cmdline").read_bytes()
+            if entry.stat().st_uid != os.getuid():
+                continue
+            argv = (entry / "cmdline").read_bytes().rstrip(b"\x00").split(b"\x00")
         except OSError:
             continue  # sorti entre l'énumération et la lecture
-        if b"arecord" not in cmdline or prefix not in cmdline:
+        if not any(os.path.basename(arg) == b"arecord" for arg in argv[:2]):
             continue
-        audio_path = Path(os.fsdecode(cmdline.rstrip(b"\x00").rsplit(b"\x00", 1)[-1]))
-        try:
-            started_at = int(audio_path.stem.rsplit("-", 1)[-1]) / 1000
-        except ValueError:
+        audio_path = Path(os.fsdecode(argv[-1]))
+        match = re.fullmatch(r"toggle-(\d+)(?:-[a-z0-9_]+)?\.wav", audio_path.name)
+        if audio_path.parent != runtime or match is None:
             continue
+        started_at = int(match[1]) / 1000
         if started_at <= cutoff:
             forgotten.append((int(entry.name), audio_path))
     return forgotten
@@ -261,7 +336,9 @@ def _reap_forgotten_recorders() -> int:
     forgotten = _forgotten_recorders()
     if not forgotten:
         return 0
-    for pid, _ in forgotten:
+    for pid, audio_path in forgotten:
+        if not _recorder_alive(RecordingSession(pid, audio_path, 16000, 0)):
+            continue
         try:
             # Le PID seul, pas son groupe : on vise un processus qu'on vient
             # d'identifier par sa ligne de commande, rien de ce qui l'entoure.
@@ -280,7 +357,7 @@ def _reap_forgotten_recorders() -> int:
     return len(forgotten)
 
 
-def start_toggle_recording(
+def _start_toggle_recording(
     sample_rate: int = 16000,
     device: str | None = None,
     max_seconds: int = 300,
@@ -293,7 +370,11 @@ def start_toggle_recording(
     _clear_stale_temporaries()
     reaped = _reap_forgotten_recorders()
 
-    audio_path = get_runtime_dir() / f"toggle-{int(time.time() * 1000)}.wav"
+    fd, name = tempfile.mkstemp(
+        prefix=f"toggle-{int(time.time() * 1000)}-", suffix=".wav", dir=get_runtime_dir()
+    )
+    os.close(fd)
+    audio_path = Path(name)
     command = [
         executable,
         "-q",
@@ -312,56 +393,141 @@ def start_toggle_recording(
         str(max_seconds),
         str(audio_path),
     ]
-    process = subprocess.Popen(
-        command,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
-    session = RecordingSession(
-        pid=process.pid,
-        audio_path=audio_path,
-        sample_rate=sample_rate,
-        started_at=time.time(),
-    )
-    if not _claim_session(session):
-        # Un autre appui a gagné la course. Abandonner le nôtre ici, ce serait
-        # laisser un arecord que plus aucune session ne référence — donc que
-        # plus aucun appui ne peut arrêter.
-        _stop_recorder(session)
-        audio_path.unlink(missing_ok=True)
-        raise ToggleSessionError("Recording is already active.")
-    if not _capture_confirmed(session):
-        # Gagner la course avec un enregistreur déjà mort annoncerait une dictée
-        # qui n'a jamais commencé. arecord écrit son refus sur une sortie qu'on
-        # jette : c'est ici, et seulement ici, qu'il peut devenir visible.
-        get_session_path().unlink(missing_ok=True)
-        audio_path.unlink(missing_ok=True)
-        # Quatre fois sur quatre, l'application qui tenait le micro était Aparté.
-        # Accuser un tiers quand on vient soi-même de fermer un résidu envoie
-        # chercher la panne à l'endroit où elle n'est pas.
-        raise RecordingError(
-            "Could not start recording: the microphone was still busy just after "
-            "closing a recorder Aparté had left open."
-            if reaped
-            else "Could not start recording. Another application may be holding the microphone."
-        )
-    return session
+    # Anonyme et privé : le fils détaché garde ce descripteur après la sortie
+    # du lanceur. Une pipe perdrait son lecteur et pourrait casser arecord.
+    # Seule la lecture du diagnostic est bornée ; limiter RLIMIT_FSIZE limiterait
+    # aussi le WAV. Aucun journal persistant ni contenu dicté ici.
+    with tempfile.TemporaryFile(dir=get_runtime_dir()) as errors:
+        process = None
+        session = None
+        claimed = False
+        try:
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=errors,
+                start_new_session=True,
+                env={**os.environ, "LC_ALL": "C"},
+            )
+            session = RecordingSession(
+                pid=process.pid,
+                audio_path=audio_path,
+                sample_rate=sample_rate,
+                started_at=time.time(),
+            )
+            claimed = _claim_session(session)
+            if not claimed:
+                raise ToggleSessionError("Recording is already active.")
+            if not _capture_confirmed(session):
+                try:
+                    process.wait(timeout=0.2)
+                except subprocess.TimeoutExpired:
+                    pass
+                raise _recording_failure(errors, process.returncode, device, reaped)
+            return session
+        except BaseException:
+            # Toute exception après Popen, y compris une erreur disque dans
+            # _claim_session, doit rendre le micro avant de quitter le lanceur.
+            if process is not None:
+                _close_failed_recorder(process, session)
+            if claimed:
+                get_session_path().unlink(missing_ok=True)
+            # Ne pas détruire de parole captée pendant un démarrage anormal.
+            if session is None or _captured_seconds(session) < MIN_TRANSCRIBABLE_SECONDS:
+                audio_path.unlink(missing_ok=True)
+            raise
 
 
-def stop_toggle_recording(timeout: float = 3.0) -> RecordingSession:
+def _recording_failure(
+    errors: BinaryIO, returncode: int | None, device: str | None, reaped: int,
+) -> RecordingStartError:
+    errors.seek(0)
+    raw = errors.read(_DIAGNOSTIC_BYTES + 1)
+    detail = raw[:_DIAGNOSTIC_BYTES].decode("utf-8", errors="replace")
+    detail = " ".join(detail.split())
+    if len(raw) > _DIAGNOSTIC_BYTES:
+        detail += "…"
+    lowered = detail.lower()
+    if "device or resource busy" in lowered:
+        reason = "Le périphérique audio est occupé (signalé par ALSA)."
+    elif any(text in lowered for text in (
+        "no such device", "no such file or directory", "cannot find card", "unknown pcm",
+        "input/output error", "device disconnected",
+    )):
+        reason = "Le périphérique audio est indisponible (signalé par ALSA)."
+    else:
+        reason = "Le démarrage audio a échoué ; la cause n’est pas identifiée."
+    stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    metadata = json.dumps({"utc": stamp, "exit": returncode, "device": device or "default",
+                           "closed_recorders": reaped}, ensure_ascii=False)
+    return RecordingStartError(
+        reason,
+        f"Dictée non démarrée. {reason} {metadata} ALSA: {detail or 'aucun diagnostic reçu'}",
+    )
+
+
+def _close_failed_recorder(process: subprocess.Popen, session: RecordingSession | None) -> None:
+    # Ce Popen est notre fils, donc wait()/terminate() ne ciblent pas un PID
+    # emprunté à un vieux fichier de session. Récolter le fils évite un zombie.
+    try:
+        if session is not None:
+            _stop_recorder(session)
+        else:
+            process.send_signal(signal.SIGINT)
+    except (OSError, ToggleSessionError):
+        # Même si la première tentative échoue, terminer et récolter notre fils.
+        pass
+    try:
+        process.wait(timeout=0.5)
+    except subprocess.TimeoutExpired:
+        process.terminate()
+        try:
+            process.wait(timeout=0.5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=0.5)
+
+
+def start_toggle_recording(
+    sample_rate: int = 16000,
+    device: str | None = None,
+    max_seconds: int = 300,
+) -> RecordingSession:
+    with toggle_session_transition():
+        return _start_toggle_recording(sample_rate, device, max_seconds)
+
+
+def stop_toggle_recording(
+    timeout: float = 3.0, *, expected_session: RecordingSession | None = None,
+) -> RecordingSession:
+    with toggle_session_transition():
+        return _stop_toggle_recording(timeout, expected_session=expected_session)
+
+
+def _stop_toggle_recording(
+    timeout: float, *, expected_session: RecordingSession | None,
+) -> RecordingSession:
     session = get_active_session()
     if not session:
         raise ToggleSessionError("No active toggle recording.")
+    if expected_session is not None and session != expected_session:
+        raise ToggleSessionError("La session d’enregistrement a changé ; cet arrêt est ignoré.")
 
     # Une session peut déjà être terminée — plafond atteint — auquel cas il n'y
     # a rien à signaler : `_stop_recorder` le voit et ne touche à rien.
     _stop_recorder(session)
 
-    deadline = time.time() + timeout
-    while time.time() < deadline and _recorder_alive(session):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and _recorder_alive(session):
         time.sleep(0.05)
     _stop_recorder(session, signal.SIGTERM)
+    deadline = time.monotonic() + 0.5
+    while _recorder_alive(session) and time.monotonic() < deadline:
+        time.sleep(0.02)
+    if _recorder_alive(session):
+        # Garder le suivi : déclarer l'arrêt ici laisserait le micro ouvert
+        # alors que le prochain appui croirait pouvoir démarrer une autre capture.
+        raise ToggleSessionError("Le micro ne s’est pas arrêté ; réessayez l’arrêt.")
 
     get_session_path().unlink(missing_ok=True)
     if not session.audio_path.exists():

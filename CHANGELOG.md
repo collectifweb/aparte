@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Linux recording failures now retain ALSA's actual startup diagnostic, with
+  timestamp, exit code and selected device. Notifications keep a short summary;
+  a missing device is no longer described as a microphone held by another app.
+- Failed session publication closes its recorder. Start/stop transitions are
+  exclusive across processes, and audio filenames remain unique even within the
+  same millisecond. An unconfirmed stop keeps the active session tracked.
+- Runtime recordings and session files are private to their owner. An explicit
+  runtime directory must already be private if it exists.
 - Corrections and dictated snippets containing backslashes (for example `\s+`)
   are treated as literal text. An unused vocabulary entry can no longer break
   every dictation by being interpreted as a regular-expression replacement.

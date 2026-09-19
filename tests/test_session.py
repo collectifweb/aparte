@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import threading
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
@@ -31,6 +32,7 @@ def _started_recorder(directory: str, pid: int = 4242, alive: bool = True):
                 with mock.patch.object(session, "_START_CONFIRMATION_SECONDS", 0.0):
                     with mock.patch.object(session.subprocess, "Popen") as popen:
                         popen.return_value.pid = pid
+                        popen.return_value.returncode = 1
                         yield popen
 
 
@@ -112,7 +114,7 @@ class StartRecordingTest(unittest.TestCase):
             with _started_recorder(directory) as popen:
                 with mock.patch.object(session, "_START_CONFIRMATION_SECONDS", 0.1):
                     with mock.patch.object(
-                        session, "_recorder_alive", side_effect=[True, False]
+                        session, "_recorder_alive", side_effect=[True, False, False]
                     ):
                         with self.assertRaises(session.RecordingError):
                             session.start_toggle_recording()
@@ -142,7 +144,8 @@ def _recorder_in_proc(audio_path: Path):
     simuler l'un ou l'autre laisserait le ramassage sans preuve.
     """
     process = subprocess.Popen(
-        [sys.executable, "-c", "import time; time.sleep(60)", "arecord", str(audio_path)],
+        ["arecord", "-c", "import time; time.sleep(60)", str(audio_path)],
+        executable=sys.executable,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
@@ -229,15 +232,17 @@ class ForgottenRecorderTest(unittest.TestCase):
                 with mock.patch.object(session, "_reap_forgotten_recorders", return_value=1):
                     with self.assertRaises(session.RecordingError) as raised:
                         session.start_toggle_recording()
-        self.assertIn("Aparté had left open", str(raised.exception))
+        self.assertIn('"closed_recorders": 1', str(raised.exception))
+        self.assertNotIn("occupé", str(raised.exception))
 
-    def test_the_failure_still_names_a_third_party_when_nothing_was_reaped(self):
+    def test_the_failure_does_not_blame_a_third_party_without_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             with _started_recorder(directory, alive=False):
                 with mock.patch.object(session, "_reap_forgotten_recorders", return_value=0):
                     with self.assertRaises(session.RecordingError) as raised:
                         session.start_toggle_recording()
-        self.assertIn("Another application", str(raised.exception))
+        self.assertIn("cause n’est pas identifiée", str(raised.exception))
+        self.assertNotIn("Another application", str(raised.exception))
 
 
 class ClaimSessionTest(unittest.TestCase):
@@ -435,6 +440,244 @@ class ToggleSessionTest(unittest.TestCase):
                         self.assertEqual(session.get_runtime_dir(), Path(temp_dir) / f"aparte-{os.getuid()}")
             finally:
                 read_only.chmod(0o700)
+
+
+class RecordingSafetyTest(unittest.TestCase):
+    def _fake_arecord(self, directory: str, body: str) -> Path:
+        executable = Path(directory) / "arecord"
+        executable.write_text(f"#!{sys.executable}\n" + body, encoding="utf-8")
+        executable.chmod(0o700)
+        return executable
+
+    def test_runtime_override_is_not_silently_chmodded_or_followed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            unsafe = Path(directory) / "shared"
+            unsafe.mkdir(mode=0o755)
+            with mock.patch.dict(os.environ, {"APARTE_RUNTIME_DIR": str(unsafe)}):
+                with self.assertRaises(session.ToggleSessionError):
+                    session.get_runtime_dir()
+            self.assertEqual(unsafe.stat().st_mode & 0o777, 0o755)
+            link = Path(directory) / "link"
+            link.symlink_to(Path(directory), target_is_directory=True)
+            with mock.patch.dict(os.environ, {"APARTE_RUNTIME_DIR": str(link)}):
+                with self.assertRaises(session.ToggleSessionError):
+                    session.get_runtime_dir()
+
+    def test_actual_audio_errors_are_preserved_and_distinguished(self):
+        cases = (
+            ("Device or resource busy", "occupé"),
+            ("No such device", "indisponible"),
+            ("Unknown PCM plughw:CARD=Removed", "indisponible"),
+            ("Permission denied", "cause n’est pas identifiée"),
+        )
+        for stderr, expected in cases:
+            with self.subTest(stderr=stderr), tempfile.TemporaryDirectory() as directory:
+                executable = self._fake_arecord(
+                    directory, f"import sys, time\ntime.sleep(0.04)\n"
+                    f"print({stderr!r}, file=sys.stderr)\nsys.exit(17)\n",
+                )
+                with mock.patch.dict(os.environ, {"APARTE_RUNTIME_DIR": directory}):
+                    with mock.patch.object(session.shutil, "which", return_value=str(executable)):
+                        with self.assertRaises(session.RecordingError) as raised:
+                            session.start_toggle_recording(device="plughw:CARD=Removed")
+                    self.assertFalse(session.get_session_path().exists())
+                message = str(raised.exception)
+                self.assertIsInstance(raised.exception, session.RecordingStartError)
+                self.assertIn(expected, raised.exception.user_message)
+                for technical in ('"exit"', '"utc"', '"device"', "plughw:", "{", "17"):
+                    self.assertNotIn(technical, raised.exception.user_message)
+                self.assertIn(expected, message)
+                self.assertIn(stderr, message)
+                self.assertIn('"exit": 17', message)
+                self.assertIn('"device": "plughw:CARD=Removed"', message)
+                self.assertRegex(message, r'"utc": "[^" ]+\+00:00"')
+                self.assertFalse(list(Path(directory).glob("*.wav")))
+                self.assertFalse(list(Path(directory).glob("*.log")))
+
+    def test_diagnostic_is_bounded_and_does_not_capture_stdout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = self._fake_arecord(
+                directory, "import sys\nprint('private audio placeholder')\n"
+                "sys.stderr.write('x' * 20000)\nsys.exit(2)\n",
+            )
+            with mock.patch.dict(os.environ, {"APARTE_RUNTIME_DIR": directory}):
+                with mock.patch.object(session.shutil, "which", return_value=str(executable)):
+                    with self.assertRaises(session.RecordingError) as raised:
+                        session.start_toggle_recording()
+            message = str(raised.exception)
+            self.assertLess(len(message), session._DIAGNOSTIC_BYTES + 400)
+            self.assertIn("…", message)
+            self.assertNotIn("private audio placeholder", message)
+
+    def test_claim_disk_error_reaps_the_real_child(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = self._fake_arecord(directory, "import time\ntime.sleep(60)\n")
+            children = []
+            popen = subprocess.Popen
+
+            def launch(*args, **kwargs):
+                process = popen(*args, **kwargs)
+                children.append(process)
+                return process
+
+            try:
+                with mock.patch.dict(os.environ, {"APARTE_RUNTIME_DIR": directory}):
+                    with mock.patch.object(session.shutil, "which", return_value=str(executable)):
+                        with mock.patch.object(session.subprocess, "Popen", side_effect=launch):
+                            with mock.patch.object(session.os, "link", side_effect=OSError("disk full")):
+                                with self.assertRaisesRegex(OSError, "disk full"):
+                                    session.start_toggle_recording()
+                self.assertEqual(len(children), 1)
+                self.assertIsNotNone(children[0].poll())
+                self.assertFalse(list(Path(directory).glob("*.wav")))
+                self.assertFalse(list(Path(directory).glob("*.tmp")))
+            finally:
+                for process in children:
+                    if process.poll() is None:
+                        process.kill()
+                    process.wait(timeout=5)
+
+    def test_detached_recorder_can_write_stderr_after_start_has_returned(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = self._fake_arecord(
+                directory, "import pathlib, sys, time\n"
+                "path = pathlib.Path(sys.argv[-1])\n"
+                "path.write_bytes(b'0' * 32044)\n"
+                "time.sleep(0.15)\n"
+                "sys.stderr.write('later ALSA diagnostic\\n')\nsys.stderr.flush()\n"
+                "with path.open('ab') as out: out.write(b'1')\n"
+                "time.sleep(60)\n",
+            )
+            recording = None
+            children = []
+            popen = subprocess.Popen
+
+            def launch(*args, **kwargs):
+                process = popen(*args, **kwargs)
+                children.append(process)
+                return process
+
+            with mock.patch.dict(os.environ, {"APARTE_RUNTIME_DIR": directory}):
+                try:
+                    with mock.patch.object(session.shutil, "which", return_value=str(executable)):
+                        with mock.patch.object(session.subprocess, "Popen", side_effect=launch):
+                            recording = session.start_toggle_recording()
+                    deadline = time.monotonic() + 3
+                    while recording.audio_path.stat().st_size == 32044 and time.monotonic() < deadline:
+                        time.sleep(0.01)
+                    self.assertEqual(recording.audio_path.stat().st_size, 32045)
+                    self.assertTrue(session._recorder_alive(recording))
+                    self.assertEqual(session.stop_toggle_recording(), recording)
+                finally:
+                    if recording is not None:
+                        session._stop_recorder(recording, session.signal.SIGKILL)
+                    for process in children:
+                        process.wait(timeout=5)
+
+    def test_two_starts_at_same_millisecond_use_different_private_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with _started_recorder(directory):
+                with mock.patch.object(session.time, "time", return_value=1234567.0):
+                    first = session.start_toggle_recording()
+                    first.audio_path.write_bytes(b"first capture must survive")
+                    session.get_session_path().unlink()
+                    second = session.start_toggle_recording()
+            self.assertNotEqual(first.audio_path, second.audio_path)
+            self.assertEqual(first.audio_path.read_bytes(), b"first capture must survive")
+            self.assertEqual(second.audio_path.stat().st_mode & 0o777, 0o600)
+
+    def test_stale_reader_cannot_remove_the_next_session(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.dict(os.environ, {"APARTE_RUNTIME_DIR": directory}):
+                path = session.get_session_path()
+                path.write_bytes(b"new session")
+                self.assertFalse(session._discard_session_snapshot(path, b"old session"))
+                self.assertEqual(path.read_bytes(), b"new session")
+
+    def test_an_old_stop_request_cannot_consume_a_new_session(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.dict(os.environ, {"APARTE_RUNTIME_DIR": directory}):
+                audio_path = Path(directory) / "capture.wav"
+                _wav_with_placeholder_header(audio_path, 32000)
+                current = session.RecordingSession(DEAD_PID, audio_path, 16000, 2)
+                old = session.RecordingSession(DEAD_PID, Path(directory) / "old.wav", 16000, 1)
+                session._claim_session(current)
+                with self.assertRaisesRegex(session.ToggleSessionError, "changé"):
+                    session.stop_toggle_recording(expected_session=old)
+                self.assertEqual(session.get_active_session(), current)
+                self.assertTrue(audio_path.exists())
+
+    def test_a_concurrent_stop_is_rejected_without_waiting_or_consuming_audio(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.dict(os.environ, {"APARTE_RUNTIME_DIR": directory}):
+                audio_path = Path(directory) / "capture.wav"
+                _wav_with_placeholder_header(audio_path, 32000)
+                recording = session.RecordingSession(DEAD_PID, audio_path, 16000, 1)
+                session._claim_session(recording)
+                entered = threading.Event()
+                release = threading.Event()
+                result = []
+
+                def delayed_stop(*args):
+                    entered.set()
+                    if not release.wait(5):
+                        raise TimeoutError("test did not release stop")
+
+                def stop():
+                    try:
+                        result.append(session.stop_toggle_recording())
+                    except BaseException as exc:
+                        result.append(exc)
+
+                with mock.patch.object(session, "_stop_recorder", side_effect=delayed_stop):
+                    worker = threading.Thread(target=stop)
+                    worker.start()
+                    try:
+                        self.assertTrue(entered.wait(5))
+                        with self.assertRaisesRegex(session.ToggleSessionError, "déjà en cours"):
+                            session.stop_toggle_recording()
+                        self.assertTrue(session.get_session_path().exists())
+                    finally:
+                        release.set()
+                        worker.join(5)
+                self.assertEqual(result, [recording])
+                self.assertTrue(audio_path.exists())
+                self.assertFalse(session.get_session_path().exists())
+
+    def test_transition_lock_excludes_another_process_and_is_reentrant(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.dict(os.environ, {"APARTE_RUNTIME_DIR": directory}):
+                with session.toggle_session_transition():
+                    with session.toggle_session_transition():
+                        script = (
+                            "from aparte.session import toggle_session_transition, ToggleSessionError\n"
+                            "try:\n"
+                            "    with toggle_session_transition(): pass\n"
+                            "except ToggleSessionError:\n"
+                            "    raise SystemExit(23)\n"
+                        )
+                        result = subprocess.run([sys.executable, "-c", script], timeout=5)
+                        self.assertEqual(result.returncode, 23)
+                result = subprocess.run([sys.executable, "-c", script], timeout=5)
+                self.assertEqual(result.returncode, 0)
+
+    def test_new_unique_names_are_reaped_but_adjacent_directories_are_not(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = Path(directory) / "runtime"
+            runtime.mkdir(mode=0o700)
+            timestamp = int((time.time() - 120) * 1000)
+            audio_path = runtime / f"toggle-{timestamp}-random_1.wav"
+            with _recorder_in_proc(audio_path) as process:
+                with mock.patch.dict(os.environ, {"APARTE_RUNTIME_DIR": str(runtime)}):
+                    self.assertEqual(session._reap_forgotten_recorders(), 1)
+                self.assertIsNotNone(process.poll())
+            adjacent = Path(directory) / "runtime-extra"
+            adjacent.mkdir()
+            audio_path = adjacent / f"toggle-{timestamp}-random_2.wav"
+            with _recorder_in_proc(audio_path) as process:
+                with mock.patch.dict(os.environ, {"APARTE_RUNTIME_DIR": str(runtime)}):
+                    self.assertEqual(session._reap_forgotten_recorders(), 0)
+                self.assertIsNone(process.poll())
 
 
 if __name__ == "__main__":

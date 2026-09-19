@@ -16,9 +16,9 @@ la préparation. Pas de capture réelle ni de mise en veille automatique du post
 
 - [x] Audit, consignes communes et reproductions documentés.
 - [x] Branche Linux isolée, base vérifiée et suite de référence exécutée.
-- [ ] Diagnostic audio réel et borné, sans texte dicté dans les journaux.
-- [ ] Nettoyage garanti de l'enregistreur si publication de session impossible.
-- [ ] Arrêt exclusif : une capture ne peut être traitée deux fois en parallèle.
+- [x] Diagnostic audio réel, lecture bornée, sans texte dicté dans le diagnostic.
+- [x] Nettoyage garanti de l'enregistreur si publication de session impossible.
+- [x] Arrêt exclusif : une capture ne peut être traitée deux fois en parallèle.
 - [x] Valeurs de Corrections/Raccourcis traitées comme texte littéral.
 - [ ] Capture en échec récupérable dans un dossier privé pendant une heure :
       réessayer, supprimer et expiration explicite ; texte brut récupérable
@@ -55,3 +55,7 @@ veille : celui-ci doit être confirmé séparément.
   Suite initiale : **264 tests verts** (la suite du portage Mac en comptait 597).
 - Vocabulaire littéral : cas sans déclencheur et insertion par correction ou
   raccourci couverts ; aucune modification de la configuration utilisateur.
+- Sessions : **39 tests ciblés verts**, avec vrais enfants simulateurs (sans
+  micro), erreur disque de publication et concurrence interprocessus. Diagnostic
+  détaillé séparé du résumé utilisateur, fin du fils confirmée avant retrait du
+  suivi. La cause matérielle après veille n'est toujours pas affirmée.

@@ -159,6 +159,19 @@ phrases voisines.
 
 ### Session d'enregistrement : la course qui laissait un micro ouvert
 
+- **La décision démarrer/arrêter est sous `toggle_session_transition()`** : verrou
+  interprocessus non bloquant, libéré avant transcription. Ne jamais effacer le
+  fichier de verrou (`flock` protège son inode). Les appels directs à start/stop
+  prennent aussi ce verrou ; un arrêt non confirmé conserve la session.
+- **Le diagnostic ALSA n'est plus jeté au démarrage.** Le fils hérite d'un fichier
+  anonyme privé, pas d'une pipe qui perdrait son lecteur lorsque le lanceur quitte.
+  La lecture d'erreur est plafonnée à 4 Kio ; le fichier lui-même n'est pas plafonné.
+  `RecordingStartError.user_message` est destiné à la notification, `str(exc)`
+  garde les détails techniques pour stderr. Ne pas afficher les 4 Kio à l'écran.
+- **Toute exception après Popen nettoie le fils**, même une panne disque pendant
+  publication. Les WAV possèdent maintenant un suffixe aléatoire après l'horodatage.
+  Le ramassage doit reconnaître l'ancien et le nouveau format.
+
 - **`_claim_session()` publie par `os.link()`**, qui est atomique *et* échoue si
   la cible existe. Ne jamais revenir à `write_text()` : il tronque puis écrit,
   donc le tray — qui sonde chaque seconde — pouvait lire un JSON coupé, ne pas
