@@ -85,15 +85,17 @@ veille : celui-ci doit être confirmé séparément.
 Alexandre propose une mise en service suivie de retours d'usage, sans attendre
 de reproduire tous les scénarios matériels. Version `1.2.0` préparée pour le
 lot 1 (ajout de la récupération), déclarations et changelog alignés. Le périmètre
-installation seule ou installation et publication GitHub est en attente de sa
-réponse. La mise à jour intégrée exige un tag `v1.2.0` accessible depuis `main` ;
+publication GitHub a été explicitement autorisé par Alexandre ; sa préparation
+est terminée et la publication est en cours. L'installation locale sera suivie
+séparément. La mise à jour intégrée exige un tag `v1.2.0` accessible depuis `main` ;
 un push de commits sans tag ne sera pas proposé comme nouvelle version.
 Les 17 tests du mécanisme de mise à jour passent après changement de version.
 La commande CI est alignée sur la découverte locale validée (`-t tests`) ; la
 matrice distante Python 3.10–3.13 ne sera confirmée qu'après publication.
 
-Le lot est préparé sur `fix/linux-dictee-fiable`, pas encore fusionné, poussé ni
-installé. `~/murmur` reste à `721b098` ; le portage Mac conserve son code initial.
+Le lot est préparé sur `fix/linux-dictee-fiable`. Les notes destinées à GitHub
+sont dans [`docs/releases/v1.2.0.md`](../docs/releases/v1.2.0.md).
+`~/murmur` reste à `721b098` ; le portage Mac conserve son code initial.
 
 1. Installer la branche Linux validée dans une fenêtre sans dictée active et
    redémarrer le processus résident, en conservant configuration et langue Auto.
