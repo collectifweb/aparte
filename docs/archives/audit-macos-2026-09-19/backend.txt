@@ -1,0 +1,6 @@
+MODULE /home/alexandre/Apps-coding/Aparte/src/aparte/desktop.py VERSION 1.1.3
+LOCK_FAILURE {'status': 500, 'body': '{"ok": false, "error": "[Errno 28] No space left on device"}'} NEXT_PREVIEW {'status': 200, 'body': '{"text": null, "busy": true}'}
+FOREIGN_HOST_HISTORY_GET {'status': 200, 'body': '{"entries": [{"text": "synthetic confidential dictation", "at": 1789852617.1769288}]}'} POST {'status': 403, 'body': ''}
+CONFIG_READ_DURING_SAVE ['JSONDecodeError']
+CONFIG_AFTER_WRITE_FAILURE ''
+HISTORY_CONCURRENT_WRITES []

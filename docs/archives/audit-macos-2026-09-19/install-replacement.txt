@@ -1,0 +1,2 @@
+REPLACEMENT FAILURE: simulated cross-device copy failure
+OLD BUNDLE STILL PRESENT: False

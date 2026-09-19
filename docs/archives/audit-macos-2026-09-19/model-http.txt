@@ -1,0 +1,9 @@
+GET_HISTORY_FOREIGN_HOST {'status': 200, 'headers': {'Content-Type': 'application/json', 'Content-Length': '47'}, 'body': b'{"entries": [{"text": "AUDIT-SYNTHETIC-ONLY"}]}'}
+MAC_PASTE_STATUS 404
+DISK_FULL {'status': 500, 'headers': {'Content-Type': 'application/json', 'Content-Length': '60'}, 'body': b'{"ok": false, "error": "[Errno 28] No space left on device"}'}
+PREVIEW_AFTER_DISK_FAILURE {'status': 200, 'headers': {'Content-Type': 'application/json', 'Content-Length': '28'}, 'body': b'{"text": null, "busy": true}'}
+EMPTY_CACHE {'state': 'ready', 'model': 'small', 'repo': 'Systran/faster-whisper-small'} THREAD_STARTED False DOCTOR_READY True
+OPENAI_BACKEND_WITH_ONLY_EMPTY_HF_CACHE True
+EMPTY_LOCAL_DIRECTORY_READY True
+ONLY_EMPTY_SMALL_EN_DIR: model=small READY= True
+NATIVE_WHILE_DOWNLOADING {'state': 'downloading', 'model': 'small'} RECORDER_STATE recording STREAM_STARTED True

@@ -1,5 +1,11 @@
 # Plan — renommage en Aparté + reprises inspirées de Murmure
 
+**Audit macOS demandé ensuite le 19 septembre 2026 :** état actuel et anomalies
+dans [l'audit macOS](../docs/audit-macos-2026-09-19.md), corrections proposées
+dans [fiabilisation-macos.md](fiabilisation-macos.md). Aucun correctif Mac ni
+déploiement réalisé pendant cet audit ; les lots ci-dessous restent l'historique
+du portage et ne remplacent pas ces constats actuels.
+
 **Reprise du 19 septembre 2026 :** priorité à la fiabilisation du produit Linux,
 suivie dans [fiabilisation-linux.md](fiabilisation-linux.md). Le portage macOS
 reste hors du périmètre de cette reprise. Chaque jalon validé est documenté et

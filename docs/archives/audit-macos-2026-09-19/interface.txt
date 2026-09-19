@@ -1,0 +1,3 @@
+working {"case":"double click starts","getUserMediaRequests":2,"liveStreamsAfterStop":1,"recordState":"idle","sessionIsNull":true}
+working {"case":"import while recording","importEnabled":true,"liveStreamsAfterImport":1,"recordState":"idle","sessionIsNull":false}
+working {"case":"save disable preview","checkbox":false,"livePreview":true}

@@ -1,0 +1,42 @@
+...........................................................................................................................................................................................................................................................aparte: dictation shortcut failed: boom
+......................................................................................aparte: could not register the shortcut 'ctrl+opt+d': taken
+.aparte: could not register the shortcut 'ctrl+opt+d': taken
+.....aparte: teardown step hotkey failed: carbon says no
+............aparte: could not build the menu-bar icon: no status bar
+...................aparte: startup hook failed: boom
+....aparte: could not refresh the menu bar: boom
+...........................................................................................................................................................................................................................
+----------------------------------------------------------------------
+Ran 597 tests in 6.965s
+
+OK
+Aparté desktop running at http://127.0.0.1:8765
+Aparté desktop running at http://127.0.0.1:8765
+
+Stopping desktop server.
+
+Stopping desktop server.
+
+Stopping desktop server.
+
+Stopping desktop server.
+
+Stopping desktop server.
+
+Stopping desktop server.
+
+Stopping desktop server.
+
+Stopping desktop server.
+
+Stopping desktop server.
+
+Stopping desktop server.
+
+Stopping desktop server.
+
+Stopping desktop server.
+
+Stopping desktop server.
+
+Stopping desktop server.

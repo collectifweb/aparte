@@ -1,0 +1,5 @@
+TRANSCRIBE_FAILURE {'state': 'error', 'wav_exists': False, 'capture_kept': False, 'delivery_calls': 0}
+OVERFLOW {'flag': True, 'state': 'idle', 'delivery_calls': 1, 'notifications': 0}
+SHUTDOWN_DURING_TRANSCRIBE {'shutdown_return': True, 'state_after': 'processing', 'worker_still_alive': True, 'worker_daemon': True}
+UNICODE {'passed_length': 3, 'utf16_units': 4}
+TRAY_WITHOUT_POSIX_LOCALE Ready to dictate
