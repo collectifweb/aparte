@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-09-19
+
 ### Fixed
 
 - Global shortcuts use a private, size-limited technical log instead of console
@@ -612,7 +614,8 @@ First public release — a local-first dictation app for Linux.
 - MIT license, contributing guide, and CI running the test suite on Python
   3.10–3.13.
 
-[Unreleased]: https://github.com/collectifweb/aparte/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/collectifweb/aparte/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/collectifweb/aparte/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/collectifweb/aparte/compare/v1.1.5...v1.2.0
 [1.1.5]: https://github.com/collectifweb/aparte/compare/v1.1.4...v1.1.5
 [1.1.4]: https://github.com/collectifweb/aparte/compare/v1.1.3...v1.1.4

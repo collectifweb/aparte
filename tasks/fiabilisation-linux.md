@@ -27,7 +27,7 @@ la préparation. Pas de capture réelle ni de mise en veille automatique du post
 - [ ] Validation du correctif sur le poste puis après veille (distincte des
       tests synthétiques ; à coordonner avec l'usage du micro).
 
-## Lot 2 — protection des données (implémenté, non publié)
+## Lot 2 — protection des données (publication 1.2.1 en cours)
 
 Travail autorisé par Alexandre après installation de la version 1.2.0. Branche
 `fix/linux-donnees-fiables`, toujours dans `/tmp/aparte-linux-fiabilisation`.
@@ -46,6 +46,11 @@ L'application installée reste sur la release pendant la préparation.
 - [x] Tests isolés avec concurrence réelle, revue croisée, documentation et
       commits à chaque jalon.
 - [ ] Publication et installation du lot (1.2.0 reste installée).
+
+Publication 1.2.1 autorisée par Alexandre. Les
+[notes de version](../docs/releases/v1.2.1.md), les deux déclarations de version
+et le changelog sont préparés. Le tag sera publié après validation de la CI
+sur le commit de release ; la mise à jour du poste reste une étape séparée.
 
 La protection Host des lectures HTTP et le déblocage de la transcription après
 erreur disque ont déjà été livrés dans la version 1.2.0.
