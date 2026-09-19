@@ -27,7 +27,7 @@ la préparation. Pas de capture réelle ni de mise en veille automatique du post
 - [ ] Validation du correctif sur le poste puis après veille (distincte des
       tests synthétiques ; à coordonner avec l'usage du micro).
 
-## Lot 2 — protection des données (publication 1.2.1 en cours)
+## Lot 2 — protection des données (publié en 1.2.1)
 
 Travail autorisé par Alexandre après installation de la version 1.2.0. Branche
 `fix/linux-donnees-fiables`, toujours dans `/tmp/aparte-linux-fiabilisation`.
@@ -45,12 +45,16 @@ L'application installée reste sur la release pendant la préparation.
       attente bornée pour ne pas suspendre la livraison de la dictée.
 - [x] Tests isolés avec concurrence réelle, revue croisée, documentation et
       commits à chaque jalon.
-- [ ] Publication et installation du lot (1.2.0 reste installée).
+- [x] Publication de la release 1.2.1.
+- [ ] Installation de la 1.2.1 sur le poste et retours d'usage à confirmer.
 
-Publication 1.2.1 autorisée par Alexandre. Les
-[notes de version](../docs/releases/v1.2.1.md), les deux déclarations de version
-et le changelog sont préparés. Le tag sera publié après validation de la CI
-sur le commit de release ; la mise à jour du poste reste une étape séparée.
+La [release GitHub 1.2.1](https://github.com/collectifweb/aparte/releases/tag/v1.2.1)
+est publiée comme dernière version stable, après autorisation d'Alexandre.
+Le tag annoté `v1.2.1` pointe sur `5a5ad64`, accessible depuis `main`.
+Les [notes de version](../docs/releases/v1.2.1.md), les deux déclarations et le
+changelog sont alignés. Les 17 tests de mise à jour passent après changement de
+version ; la [CI Python 3.10–3.13](https://github.com/collectifweb/aparte/actions/runs/35462467495)
+est verte sur le commit publié. La mise à jour du poste reste une étape séparée.
 
 La protection Host des lectures HTTP et le déblocage de la transcription après
 erreur disque ont déjà été livrés dans la version 1.2.0.
@@ -79,9 +83,9 @@ Lecture seule sur le poste : la commande Cinnamon du slot `custom3`, touche
 `<Super>space`, est reconnue ; la migration propose
 `/home/alexandre/murmur/.venv/bin/python -m aparte toggle --target paste --hotkey`.
 Aucune modification du raccourci ni ouverture du micro pendant ce contrôle.
-Le remplacement du wrapper ne prendra effet qu'au lancement de la future
-version ; l'ancien journal, maintenant privé, reste conservé. Aucun test réel
-après veille ni publication de ce lot n'est revendiqué.
+Le remplacement du wrapper prendra effet au lancement de la version 1.2.1 sur
+le poste ; l'ancien journal, maintenant privé, reste conservé. Aucun test réel
+après veille n'est revendiqué.
 
 ## Lots suivants
 
