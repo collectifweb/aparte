@@ -4,6 +4,26 @@ from aparte.polish import NBSP, HeuristicPolisher, PolishOptions, resolve_langua
 
 
 class HeuristicPolisherTest(unittest.TestCase):
+    def test_unused_vocabulary_with_backslashes_does_not_break_dictation(self):
+        for field in ("replacements", "snippets"):
+            for value in (r"\s+", r"\1", r"\g<name>"):
+                with self.subTest(field=field, value=value):
+                    options = PolishOptions(language="fr", **{field: {"code": value}})
+                    self.assertEqual(
+                        HeuristicPolisher().polish("bonjour tout le monde", options),
+                        "Bonjour tout le monde.",
+                    )
+
+    def test_vocabulary_inserts_backslashes_literally(self):
+        for field, trigger in (("replacements", "code"), ("snippets", "slash code"),
+                               ("snippets", "insert code")):
+            with self.subTest(field=field, trigger=trigger):
+                options = PolishOptions(language="fr", **{field: {"code": r"\s+"}})
+                self.assertEqual(
+                    HeuristicPolisher().polish(f"utilise {trigger}", options),
+                    r"Utilise \s+.",
+                )
+
     def test_polish_capitalizes_and_punctuates(self):
         polisher = HeuristicPolisher()
         self.assertEqual(

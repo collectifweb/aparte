@@ -15,11 +15,11 @@ la préparation. Pas de capture réelle ni de mise en veille automatique du post
 ## Lot 1 — dictée fiable (en cours)
 
 - [x] Audit, consignes communes et reproductions documentés.
-- [ ] Branche Linux isolée, base vérifiée et suite de référence exécutée.
+- [x] Branche Linux isolée, base vérifiée et suite de référence exécutée.
 - [ ] Diagnostic audio réel et borné, sans texte dicté dans les journaux.
 - [ ] Nettoyage garanti de l'enregistreur si publication de session impossible.
 - [ ] Arrêt exclusif : une capture ne peut être traitée deux fois en parallèle.
-- [ ] Valeurs de Corrections/Raccourcis traitées comme texte littéral.
+- [x] Valeurs de Corrections/Raccourcis traitées comme texte littéral.
 - [ ] Capture en échec récupérable dans un dossier privé pendant une heure :
       réessayer, supprimer et expiration explicite ; texte brut récupérable
       lorsque seule la mise en forme échoue.
@@ -49,3 +49,9 @@ veille : celui-ci doit être confirmé séparément.
 
 - 19 septembre : préparation enregistrée dans le dépôt d'origine : audit,
   consignes importées, scripts synthétiques et plan de mise en œuvre.
+- Base Linux : `7ac99bc` (distante `Murmur/main`), code identique à l'installation
+  `721b098` ; seul un complément documentaire les sépare. Copie isolée :
+  `/tmp/aparte-linux-fiabilisation`, branche `fix/linux-dictee-fiable`.
+  Suite initiale : **264 tests verts** (la suite du portage Mac en comptait 597).
+- Vocabulaire littéral : cas sans déclencheur et insertion par correction ou
+  raccourci couverts ; aucune modification de la configuration utilisateur.

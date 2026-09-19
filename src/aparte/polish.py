@@ -230,15 +230,17 @@ class HeuristicPolisher(Polisher):
         for raw, replacement in replacements.items():
             if not raw:
                 continue
-            text = re.sub(rf"\b{re.escape(raw)}\b", replacement, text, flags=re.IGNORECASE)
+            # User values are literal text, not re.sub replacement templates:
+            # even an unused entry containing "\s" otherwise breaks a dictation.
+            text = re.sub(rf"\b{re.escape(raw)}\b", lambda _: replacement, text, flags=re.IGNORECASE)
         return text
 
     def _apply_snippets(self, text: str, snippets: dict[str, str]) -> str:
         for name, value in snippets.items():
             if not name:
                 continue
-            text = re.sub(rf"\bslash {re.escape(name)}\b", value, text, flags=re.IGNORECASE)
-            text = re.sub(rf"\binsert {re.escape(name)}\b", value, text, flags=re.IGNORECASE)
+            text = re.sub(rf"\bslash {re.escape(name)}\b", lambda _: value, text, flags=re.IGNORECASE)
+            text = re.sub(rf"\binsert {re.escape(name)}\b", lambda _: value, text, flags=re.IGNORECASE)
         return text
 
 

@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- Corrections and dictated snippets containing backslashes (for example `\s+`)
+  are treated as literal text. An unused vocabulary entry can no longer break
+  every dictation by being interpreted as a regular-expression replacement.
 
 ## [1.1.5] - 2026-08-01
 

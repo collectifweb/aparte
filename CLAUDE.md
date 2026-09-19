@@ -220,6 +220,11 @@ phrases voisines.
 
 ### Typographie
 
+- Les valeurs de Corrections/Raccourcis sont du **texte littéral**. Toujours
+  fournir une fonction de remplacement à `re.sub`, jamais directement la valeur
+  utilisateur : une entrée `\s+` faisait échouer même les dictées qui ne la
+  déclenchaient pas. Les vrais retours à la ligne restent autorisés.
+
 - La typographie française s'applique **après** les remplacements et les
   raccourcis de `polish.py`. L'inverse casse leur correspondance par mot, parce
   que l'apostrophe courbe ’ n'est pas une frontière de mot.
