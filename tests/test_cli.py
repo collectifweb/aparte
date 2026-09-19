@@ -1,4 +1,7 @@
 import argparse
+import contextlib
+import os
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -22,6 +25,11 @@ def _toggle_args(target: str = "paste") -> argparse.Namespace:
 
 class StopDictationTest(unittest.TestCase):
     """Ce que le raccourci fait du texte, une fois la transcription finie."""
+
+    def setUp(self):
+        transition = mock.patch.object(cli, "toggle_session_transition", side_effect=contextlib.nullcontext)
+        transition.start()
+        self.addCleanup(transition.stop)
 
     def _run(self, transcript: str, target: str = "paste", paste_raises: Exception | None = None):
         recording = mock.Mock(audio_path=Path("/tmp/aparte-test.wav"))
@@ -83,6 +91,11 @@ class StopDictationTest(unittest.TestCase):
 
 class StartDictationTest(unittest.TestCase):
     """Ce que le raccourci annonce quand il ouvre le micro — et quand il échoue."""
+
+    def setUp(self):
+        transition = mock.patch.object(cli, "toggle_session_transition", side_effect=contextlib.nullcontext)
+        transition.start()
+        self.addCleanup(transition.stop)
 
     def _run(self, start_raises: Exception | None = None):
         recording = mock.Mock(audio_path=Path("/tmp/aparte-test.wav"))
@@ -156,6 +169,139 @@ class CliParserTest(unittest.TestCase):
         args = build_parser().parse_args(["install-hotkey", "--key", "<Control><Alt>d", "--remove"])
         self.assertEqual(args.key, "<Control><Alt>d")
         self.assertTrue(args.remove)
+
+
+class FailedDictationRecoveryTest(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.base = Path(temporary.name)
+        self.source = self.base / "synthetic.wav"
+        self.source.write_bytes(b"synthetic capture")
+        env = mock.patch.dict(os.environ, {"APARTE_RUNTIME_DIR": str(self.base)})
+        env.start()
+        self.addCleanup(env.stop)
+        self.stack = contextlib.ExitStack()
+        self.addCleanup(self.stack.close)
+        self.notify = self.stack.enter_context(mock.patch.object(cli, "notify"))
+        self.history = self.stack.enter_context(mock.patch.object(cli.history, "record"))
+        self.copy = self.stack.enter_context(mock.patch.object(cli, "copy_text"))
+        self.paste = self.stack.enter_context(mock.patch.object(cli, "paste_text"))
+        self.stack.enter_context(mock.patch.object(cli, "record_wav", return_value=self.source))
+        self.stack.enter_context(mock.patch.object(cli, "toggle_session_transition", side_effect=contextlib.nullcontext))
+        recording = mock.Mock(audio_path=self.source)
+        self.stack.enter_context(mock.patch.object(cli, "get_active_session", return_value=recording))
+        self.stack.enter_context(mock.patch.object(cli, "stop_toggle_recording", return_value=recording))
+
+    def test_both_dictation_paths_retain_processing_failures(self):
+        for command, handler in (("dictate", cli.dictate_once), ("toggle", cli.toggle_dictation)):
+            with self.subTest(command=command):
+                self.source.write_bytes(b"synthetic capture")
+                args = build_parser().parse_args([command])
+                with mock.patch.object(cli, "transcribe_path", side_effect=RuntimeError("backend unavailable")):
+                    with self.assertRaisesRegex(RuntimeError, "backend unavailable"):
+                        handler(args, Settings())
+                entry = cli.recovery.entries()[0]
+                with cli.recovery.claim(entry["id"]) as item:
+                    self.assertEqual(item.audio_path.read_bytes(), b"synthetic capture")
+                self.assertFalse(self.source.exists())
+                self.assertIn("une heure", self.notify.call_args.args[1])
+                cli.recovery.discard(entry["id"])
+        self.copy.assert_not_called()
+        self.paste.assert_not_called()
+        self.history.assert_not_called()
+
+    def test_polish_failure_preserves_real_transcription_and_raw_retry(self):
+        with mock.patch.object(cli, "transcribe_via_running_app", return_value="texte brut"):
+            with mock.patch.object(cli, "polish_text", side_effect=RuntimeError("polish unavailable")):
+                with self.assertRaisesRegex(RuntimeError, "polish unavailable"):
+                    cli.dictate_once(build_parser().parse_args(["dictate"]), Settings())
+        entry = cli.recovery.entries()[0]
+        self.assertTrue(entry["has_text"])
+        args = build_parser().parse_args(["recover", "retry", entry["id"], "--no-polish"])
+        with mock.patch.object(cli, "transcribe_path") as transcribe:
+            self.assertEqual(cli.retry_recovery(entry["id"], args, Settings()), "texte brut")
+        transcribe.assert_not_called()
+        self.copy.assert_called_once_with("texte brut")
+        self.paste.assert_not_called()
+        self.assertEqual(cli.recovery.entries(), [])
+        with self.assertRaises(cli.recovery.RecoveryNotFound):
+            cli.retry_recovery(entry["id"], args, Settings())
+        self.copy.assert_called_once()
+
+    def test_failed_recovery_keeps_new_raw_text_without_renewing_expiry(self):
+        identifier = cli.recovery.save_failure(self.source)
+        expiry = cli.recovery.entries()[0]["expires_at"]
+        args = build_parser().parse_args(["recover", "retry", identifier])
+        with mock.patch.object(cli, "transcribe_path", return_value="transcrit une fois"):
+            with mock.patch.object(cli, "polish_text", side_effect=RuntimeError("offline")):
+                with self.assertRaises(RuntimeError):
+                    cli.retry_recovery(identifier, args, Settings())
+        entry = cli.recovery.entries()[0]
+        self.assertTrue(entry["has_text"])
+        self.assertEqual(entry["expires_at"], expiry)
+        self.assertEqual(entry["id"], identifier)
+
+    def test_silent_recovery_skips_polisher_and_clipboard(self):
+        identifier = cli.recovery.save_failure(self.source, raw_text="  \n")
+        args = build_parser().parse_args(["recover", "retry", identifier])
+        with mock.patch.object(cli, "polish_text", side_effect=RuntimeError("unavailable")) as polish:
+            self.assertEqual(cli.retry_recovery(identifier, args, Settings()), "  \n")
+        polish.assert_not_called()
+        self.copy.assert_not_called()
+        self.paste.assert_not_called()
+        self.history.assert_not_called()
+        self.assertEqual(cli.recovery.entries(), [])
+
+    def test_save_failure_keeps_original_audio(self):
+        args = build_parser().parse_args(["dictate"])
+        with mock.patch.object(cli, "transcribe_path", side_effect=RuntimeError("backend")):
+            with mock.patch.object(cli.recovery, "save_failure", side_effect=OSError("disk full")):
+                with self.assertRaisesRegex(RuntimeError, "backend"):
+                    cli.dictate_once(args, Settings())
+        self.assertTrue(self.source.exists())
+        self.assertIn("audio original", self.notify.call_args.args[1])
+
+    def test_success_and_silence_leave_no_recovery(self):
+        for output in ("bonjour", "   "):
+            with self.subTest(output=output):
+                self.source.write_bytes(b"synthetic capture")
+                args = build_parser().parse_args(["dictate"])
+                with mock.patch.object(cli, "transcribe_path", return_value=output):
+                    self.assertEqual(cli.dictate_once(args, Settings()), output)
+                self.assertFalse(self.source.exists())
+                self.assertEqual(cli.recovery.entries(), [])
+
+    def test_failed_stop_is_visible_without_claiming_microphone_closed(self):
+        args = build_parser().parse_args(["toggle"])
+        with mock.patch.object(cli, "stop_toggle_recording", side_effect=cli.ToggleSessionError("micro toujours actif")):
+            with mock.patch.object(cli, "transcribe_path") as transcribe:
+                with self.assertRaises(cli.ToggleSessionError):
+                    cli.toggle_dictation(args, Settings())
+        self.assertIn("non confirmé", self.notify.call_args.args[0])
+        self.assertEqual(self.notify.call_args.kwargs["urgency"], "critical")
+        self.assertTrue(self.source.exists())
+        transcribe.assert_not_called()
+
+    def test_capture_transition_is_released_before_transcription(self):
+        in_transition = False
+
+        @contextlib.contextmanager
+        def transition():
+            nonlocal in_transition
+            in_transition = True
+            try:
+                yield
+            finally:
+                in_transition = False
+
+        def transcribe(*args):
+            self.assertFalse(in_transition)
+            return "texte"
+
+        with mock.patch.object(cli, "toggle_session_transition", side_effect=transition):
+            with mock.patch.object(cli, "transcribe_path", side_effect=transcribe):
+                cli.toggle_dictation(build_parser().parse_args(["toggle"]), Settings())
 
 
 if __name__ == "__main__":

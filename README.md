@@ -429,6 +429,38 @@ unexpected:
   (LibreOffice, some Electron apps). Slower, and a stray click mid-insertion can
   scatter it.
 
+### Recovering a failed dictation
+
+If transcription fails after a shortcut, `dictate`, or final browser recording,
+Aparté saves the audio locally for recovery. If CLI formatting alone fails, it
+also saves the raw transcript. **Dictées à récupérer / Failed dictations** in
+the desktop app offers retry, raw text when available, and deletion. The result
+opens separately: replacing existing editor text requires confirmation, and
+recovery never pastes into another application automatically.
+
+```bash
+aparte recover list
+aparte recover retry ID                 # copies the recovered text
+aparte recover retry ID --no-polish --target stdout
+aparte recover delete ID
+```
+
+Captures are recoverable for **one hour from the original failure**; retries do
+not extend that deadline. They live under the private runtime directory's
+`recovery/` folder (directories `0700`, files `0600`), independently of the
+history setting. The desktop app removes expired, inactive captures every
+minute; with the app closed, cleanup runs on the next desktop launch, dictation
+or recovery command. An active retry may finish after its deadline. Interrupted
+writes and invalid metadata are cleaned up too.
+
+A successful CLI retry removes its capture. The browser keeps it until deletion
+or expiry, so losing an HTTP response does not destroy it. Browser previews are
+not retained. If recovery storage itself fails, the original audio is kept as
+a last resort, outside this expiry mechanism; the CLI notification gives its
+path. Browser upload fallbacks use the temporary `aparte-upload-*` files and
+require manual cleanup once retrieved. `--keep-audio` also keeps the original
+outside automatic expiry.
+
 ### Choosing a microphone
 
 **Input device**, under **Hardware** in Settings, lists what ALSA can capture

@@ -41,6 +41,7 @@ function applyI18n() {
   if (lastHealth) updateHealthDot(lastHealth);
   if (!$("#health-overlay").hidden) loadHealth();
   renderRecent(recentEntries);
+  renderRecovery();
 }
 
 function status(message, kind) {
@@ -72,6 +73,7 @@ function syncActionState() {
   const empty = !editor.value.trim();
   TEXT_ACTIONS.forEach((sel) => { $(sel).disabled = busy || empty; });
   $("#pick-file").disabled = busy;
+  $("#open-recovery").disabled = recordState !== "idle" || previewing;
 }
 
 // Texte tapé ou collé à la main dans l'éditeur : les actions se rallument.
@@ -99,7 +101,7 @@ async function transcribeBlob(blob) {
   setRecordState("processing");
   status(t("st.transcribing", { model }));
   try {
-    const res = await fetch("/api/transcribe?model=" + encodeURIComponent(model), {
+    const res = await fetch("/api/transcribe?recover=1&model=" + encodeURIComponent(model), {
       method: "POST",
       headers: { "Content-Type": blob.type || "application/octet-stream" },
       body: blob,
@@ -116,6 +118,7 @@ async function transcribeBlob(blob) {
   } finally {
     clearPreview();
     setRecordState("idle");
+    loadRecovery();
   }
 }
 
@@ -659,6 +662,163 @@ function relativeTime(at) {
   return t("time.hours", { n: Math.round(seconds / 3600) });
 }
 
+/* ---------- Récupération après un échec ---------- */
+let recoveryEntries = [];
+let recoveryResult = null;
+let recoveryBusy = false;
+let recoveryLoading = false;
+let recoveryVersion = 0;
+let recoveryMessage = "";
+let recoveryError = false;
+
+function recoveryNotice(key, error = false) {
+  recoveryMessage = key;
+  recoveryError = error;
+  $("#recovery-status").textContent = key ? t("recovery." + key) : "";
+  $("#recovery").hidden = !recoveryEntries.length && !recoveryResult && !error;
+}
+
+function recoveryTime(at) {
+  return new Date(at * 1000).toLocaleString(lang, {
+    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function renderRecovery() {
+  const list = $("#recovery-list");
+  const focused = list.contains(document.activeElement) ? document.activeElement : null;
+  list.replaceChildren();
+  for (const entry of recoveryEntries) {
+    const item = document.createElement("li");
+    item.className = "recovery-item";
+    const meta = document.createElement("div");
+    meta.className = "recovery-meta";
+    const label = t("recovery.capture", { time: recoveryTime(entry.created_at) });
+    meta.textContent = label;
+    const expiry = document.createElement("small");
+    expiry.textContent = t("recovery.expires", { time: recoveryTime(entry.expires_at) });
+    meta.appendChild(expiry);
+    item.appendChild(meta);
+    for (const action of (entry.has_text ? ["retry", "raw", "delete"] : ["retry", "delete"])) {
+      const button = document.createElement("button");
+      button.className = "chip" + (action === "delete" ? " ghost" : "");
+      button.textContent = t("recovery." + action);
+      button.setAttribute("aria-label", t("recovery." + action) + " — " + label);
+      button.disabled = recoveryBusy || entry.busy === true;
+      button.dataset.recoveryId = entry.id;
+      button.dataset.recoveryAction = action;
+      button.addEventListener("click", () => actOnRecovery(action, entry.id));
+      item.appendChild(button);
+    }
+    list.appendChild(item);
+  }
+  if (focused) {
+    const next = Array.from(list.querySelectorAll("button")).find((button) =>
+      button.dataset.recoveryId === focused.dataset.recoveryId && button.dataset.recoveryAction === focused.dataset.recoveryAction);
+    if (next && !next.disabled) next.focus();
+  }
+  $("#refresh-recovery").disabled = recoveryBusy || recoveryLoading;
+  $("#dismiss-recovery").disabled = recoveryBusy;
+  $("#recovery-result").hidden = !recoveryResult;
+  $("#recovery-text").value = recoveryResult ? recoveryResult.text : "";
+  recoveryNotice(recoveryMessage, recoveryError);
+}
+
+async function loadRecovery() {
+  if (recoveryLoading || recoveryBusy) return;
+  recoveryLoading = true;
+  $("#refresh-recovery").disabled = true;
+  const version = recoveryVersion;
+  try {
+    const res = await fetch("/api/recovery", { cache: "no-store" });
+    if (!res.ok) throw new Error("recovery unavailable");
+    const data = await res.json();
+    if (!Array.isArray(data.entries)) throw new Error("invalid recovery response");
+    // Une lecture déjà en vol ne doit pas ressusciter une entrée supprimée.
+    if (version !== recoveryVersion) return;
+    recoveryEntries = data.entries;
+    if (recoveryMessage === "load_failed") recoveryNotice("");
+  } catch (_) {
+    if (version === recoveryVersion) recoveryNotice("load_failed", true);
+  } finally {
+    recoveryLoading = false;
+    // Ne pas redessiner les boutons pendant qu'une action est en cours.
+    if (!recoveryBusy) renderRecovery();
+  }
+}
+
+async function actOnRecovery(action, id) {
+  if (recoveryBusy) return;
+  if (action === "delete" && !window.confirm(t("recovery.delete_confirm"))) return;
+  const retry = action !== "delete";
+  if (retry && recoveryResult && !window.confirm(t("recovery.discard_confirm"))) return;
+  recoveryBusy = true;
+  recoveryVersion++;
+  recoveryNotice(retry ? "retrying" : "deleting");
+  renderRecovery();
+  try {
+    const res = await fetch("/api/recovery/" + (retry ? "retry" : "delete"), {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(action === "raw" ? { id, raw: true } : { id }),
+    });
+    if (!res.ok) {
+      const key = { 409: "busy", 410: "expired", 400: "invalid" }[res.status]
+        || (action === "delete" ? "delete_failed" : "failed");
+      if (res.status === 410) recoveryEntries = recoveryEntries.filter((entry) => entry.id !== id);
+      recoveryNotice(key, true);
+      return;
+    }
+    if (retry) {
+      const data = await res.json();
+      if (typeof data.text !== "string") throw new Error("invalid recovery response");
+      // Aucun passage par l'éditeur, le presse-papiers ou le collage ici : les
+      // modifications faites pendant l'inférence restent intactes.
+      recoveryResult = data.text.trim() ? { id, text: data.text } : null;
+      recoveryNotice(recoveryResult ? "ready" : "no_speech");
+      loadRecent();
+    } else {
+      recoveryEntries = recoveryEntries.filter((entry) => entry.id !== id);
+      if (recoveryResult && recoveryResult.id === id) recoveryResult = null;
+      recoveryNotice("deleted");
+    }
+  } catch (_) {
+    // Ne pas afficher la réponse brute : elle peut contenir du texte privé.
+    recoveryNotice(action === "delete" ? "delete_failed" : "failed", true);
+  } finally {
+    recoveryBusy = false;
+    renderRecovery();
+    // Les boutons de liste ont été reconstruits : rendre le focus à un point
+    // stable, sauf si la personne est en train d'écrire dans l'éditeur.
+    if (document.activeElement === document.body && !$("#recovery").hidden) $("#recovery-title").focus();
+    loadRecovery();
+  }
+}
+
+$("#refresh-recovery").addEventListener("click", loadRecovery);
+$("#open-recovery").addEventListener("click", () => {
+  if (!recoveryResult) return;
+  if (recordState !== "idle" || previewing) { recoveryNotice("editor_busy", true); return; }
+  if (editor.value.trim() && !window.confirm(t("recovery.replace_confirm"))) return;
+  editor.value = recoveryResult.text;
+  recoveryResult = null;
+  syncActionState();
+  renderRecovery();
+  editor.focus();
+  status(t("recovery.opened"));
+});
+$("#dismiss-recovery").addEventListener("click", () => {
+  if (!recoveryResult || !window.confirm(t("recovery.discard_confirm"))) return;
+  recoveryResult = null;
+  recoveryNotice("");
+  renderRecovery();
+  if (!$("#recovery").hidden) $("#recovery-title").focus();
+  else editor.focus();
+});
+window.addEventListener("focus", loadRecovery);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) loadRecovery(); });
+// Actualise aussi les expirations et les échecs du raccourci lorsque l'onglet
+// reste au premier plan. Aucun audio ni texte n'est chargé par cette lecture.
+setInterval(() => { if (!document.hidden) loadRecovery(); }, 30000);
+
 /* ---------- Mise à jour ---------- */
 // Ligne que le serveur écrit seule quand la mise à jour a réussi : elle distingue
 // « le journal s'est arrêté » de « c'est installé ».
@@ -794,6 +954,7 @@ applyI18n();
   } catch (_) {}
   // Après le diagnostic : l'état vide affiche le raccourci qu'il vient d'y lire.
   loadRecent();
+  loadRecovery();
   // Entrée « Réglages » du menu de la barre système : elle ouvre cette page
   // avec le tiroir déjà déplié.
   if (location.hash === "#settings") openOverlay("#settings-overlay");

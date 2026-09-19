@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import socket
 import tempfile
@@ -11,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
 
-from . import history
+from . import history, recovery
 from .audio import list_microphones
 from .clipboard import copy_text, paste_text
 from .config import Settings, get_env, load_config, positive_int, update_config
@@ -93,6 +94,12 @@ def run_desktop(host: str, port: int, settings: Settings, open_browser: bool = T
     # The tray icon needs GTK on the main thread, so the server moves off it.
     # Without the system bindings there is no tray, and nothing changes.
     tray = build_tray(url, settings, server.shutdown)
+    cleanup_stop = threading.Event()
+    cleanup_thread = threading.Thread(
+        target=_maintain_recovery, args=(cleanup_stop,), daemon=True,
+        name="aparte-recovery-cleanup",
+    )
+    cleanup_thread.start()
     try:
         if tray is None:
             server.serve_forever()
@@ -102,7 +109,21 @@ def run_desktop(host: str, port: int, settings: Settings, open_browser: bool = T
     except KeyboardInterrupt:
         print("\nStopping desktop server.")
     finally:
+        cleanup_stop.set()
+        cleanup_thread.join(timeout=1)
         server.server_close()
+
+
+def _maintain_recovery(stop: threading.Event, interval: float = 60.0) -> None:
+    """Expire failed captures while the app runs, even with its page closed."""
+    while not stop.is_set():
+        try:
+            recovery.sweep()
+        except (OSError, RuntimeError):
+            # A temporary filesystem failure must not end future cleanup passes.
+            pass
+        if stop.wait(interval):
+            return
 
 
 def already_running(host: str, port: int, timeout: float = 2.0) -> str | None:
@@ -269,6 +290,11 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
 
     class DesktopHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
+            # Reading a private dictation needs the same host validation as an
+            # edit. Matching Origin/Host alone does not prevent DNS rebinding.
+            if not self._host_is_ours():
+                self.send_error(HTTPStatus.FORBIDDEN)
+                return
             route = self.path.split("?", 1)[0]
             if route == "/" or self.path.startswith("/?"):
                 self._serve_static("/")
@@ -286,6 +312,12 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                 active = current_settings()
                 self._send_json({"entries": history.entries(active.history_persist)})
                 return
+            if route == "/api/recovery":
+                try:
+                    self._send_json({"entries": recovery.entries()})
+                except (OSError, RuntimeError):
+                    self._send_json({"error": "Recovery storage is unavailable."}, HTTPStatus.SERVICE_UNAVAILABLE)
+                return
             if route == "/api/microphones":
                 self._send_json({"devices": list_microphones()})
                 return
@@ -302,6 +334,9 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                 self.send_error(HTTPStatus.FORBIDDEN)
                 return
             try:
+                if self.path in {"/api/recovery/retry", "/api/recovery/delete"}:
+                    self._handle_recovery()
+                    return
                 if self.path == "/api/config":
                     self._handle_save_config()
                     return
@@ -370,6 +405,13 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
             127.0.0.1 arrives with a matching Host and Origin, both its own. So
             the address we were reached under has to be one of ours too.
             """
+            if not self._host_is_ours():
+                return False
+            host = self.headers.get("Host", "")
+            origin = self.headers.get("Origin")
+            return origin is None or origin == f"http://{host}"
+
+        def _host_is_ours(self) -> bool:
             host = self.headers.get("Host", "")
             try:
                 hostname = urlsplit(f"//{host}").hostname
@@ -381,8 +423,45 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
             # there is nothing left to compare against.
             if bound not in {"0.0.0.0", "::"} and hostname not in LOOPBACK_HOSTS and hostname != bound:
                 return False
-            origin = self.headers.get("Origin")
-            return origin is None or origin == f"http://{host}"
+            return bool(hostname)
+
+        def _handle_recovery(self) -> None:
+            payload = self._read_json()
+            if not isinstance(payload, dict) or not isinstance(payload.get("id"), str):
+                self._send_json({"error": "A capture identifier is required."}, HTTPStatus.BAD_REQUEST)
+                return
+            identifier = payload["id"]
+            try:
+                if self.path == "/api/recovery/delete":
+                    recovery.discard(identifier)
+                    self._send_json({"ok": True})
+                    return
+                with recovery.claim(identifier) as item:
+                    active = current_settings()
+                    raw = item.raw_text
+                    if raw is None:
+                        # Never delegate back to our own HTTP server: this is
+                        # its cached model, shared with regular transcriptions.
+                        with inference_lock:
+                            raw = get_transcriber(active).transcribe(item.audio_path).text
+                        recovery.update_raw(item, raw)
+                    if payload.get("raw") is True or not raw.strip():
+                        output = raw
+                    else:
+                        from .cli import polish_text
+
+                        output = polish_text(raw, argparse.Namespace(), active)
+                    if output.strip():
+                        history.record(output, active.history_persist)
+                    # Keep the capture until explicit deletion/expiry. A lost
+                    # response must not destroy the only recoverable dictation.
+                    self._send_json({"text": output})
+            except recovery.RecoveryBusy:
+                self._send_json({"error": "This capture is already being recovered."}, HTTPStatus.CONFLICT)
+            except recovery.RecoveryNotFound:
+                self._send_json({"error": "This capture has expired or was deleted."}, HTTPStatus.GONE)
+            except ValueError:
+                self._send_json({"error": "Invalid capture identifier."}, HTTPStatus.BAD_REQUEST)
 
         def _read_json(self) -> dict[str, object]:
             length = int(self.headers.get("Content-Length", "0"))
@@ -404,17 +483,34 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
                 suffix = ".wav"
             elif "audio/mpeg" in content_type:
                 suffix = ".mp3"
-            handle = tempfile.NamedTemporaryFile(prefix="aparte-upload-", suffix=suffix, delete=False)
-            path = Path(handle.name)
-            handle.write(body)
-            handle.close()
+            path = None
+            uploaded = False
+            transcript = None
             try:
+                with tempfile.NamedTemporaryFile(prefix="aparte-upload-", suffix=suffix, delete=False) as handle:
+                    path = Path(handle.name)
+                    handle.write(body)
+                uploaded = True
                 active = current_settings()
                 transcript = get_transcriber(active, self._requested_model(active)).transcribe(path).text
                 self._send_json({"text": transcript})
+            except Exception:
+                # Only final browser captures opt in. CLI delegation retains its
+                # original itself, and previews are disposable snapshots.
+                if uploaded and not preview and self._flag("recover"):
+                    try:
+                        recovery.save_failure(path, raw_text=transcript)
+                    except (OSError, RuntimeError):
+                        # If storage itself failed, keep the upload as a last
+                        # resort rather than deleting the only remaining audio.
+                        path = None
+                raise
             finally:
-                path.unlink(missing_ok=True)
-                inference_lock.release()
+                try:
+                    if path is not None:
+                        path.unlink(missing_ok=True)
+                finally:
+                    inference_lock.release()
 
         def _handle_update_apply(self) -> None:
             """Stream the update log line by line, then restart if it worked.
@@ -480,6 +576,7 @@ def handler_factory(settings: Settings) -> type[BaseHTTPRequestHandler]:
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(data)
 

@@ -393,6 +393,18 @@ Le seul élément mémorable du système, et le seul autorisé à l'être.
   en particulier « Insérer », dont l'effet — écrire dans l'application de
   devant — ne se devine pas depuis le libellé.
 
+### Dictées à récupérer
+
+Le panneau utilise la zone défilante des dictées récentes et les puces existantes,
+sans nouveau jeton ni aplat saturé. Chaque capture affiche sa date et sa limite
+de récupération. Réessayer, Texte brut (si disponible) et Supprimer restent des
+actions explicites ; la suppression se confirme.
+
+Le résultat est un champ en lecture seule, en sérif comme tout texte dicté.
+« Ouvrir dans l'éditeur » confirme le remplacement si celui-ci contient déjà du
+texte, même modifié pendant la récupération. Les messages d'état sont annoncés
+aux technologies d'assistance. Les libellés existent en français et en anglais.
+
 ### Boutons (`.btn`, `.ghost-btn`)
 
 - **Primaire :** aplat carmin, texte blanc 600, rayon 10 px. Un seul par tiroir.

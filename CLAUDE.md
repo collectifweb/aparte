@@ -157,6 +157,27 @@ phrases voisines.
   propre notification `critical`. L'historique s'écrit **avant** l'insertion :
   c'est le seul filet si le collage casse.
 
+### Récupération des dictées en échec
+
+- `recovery.py` conserve les captures dans le runtime privé pendant une heure,
+  indépendamment de l'historique. Ne supprimer l'original qu'après sauvegarde
+  réussie ; une panne du stockage conserve l'original hors expiration automatique.
+- Le `flock` porte sur le dossier, y compris avant écriture des métadonnées.
+  Réessai, suppression et purge s'excluent. Le fichier `lock` est uniquement un
+  horodatage stable pour les sauvegardes incomplètes, pas un second verrou.
+- L'expiration initiale ne se prolonge jamais. La purge tourne chaque minute
+  dans le processus résident, et opportunément en CLI ; sans processus actif,
+  l'effacement attend le prochain lancement. Une récupération engagée peut finir.
+- L'API utilise directement le modèle partagé sous `inference_lock` ; jamais
+  de délégation HTTP vers elle-même. Les captures finales du navigateur demandent
+  `recover=1`, les aperçus et la délégation CLI ne le font pas.
+- Sauvegarder le brut avant polissage. Le résultat navigateur reste séparé de
+  l'éditeur ; son remplacement se confirme. Aucun collage automatique. Une
+  réponse HTTP réussie ne détruit pas la capture, contrairement à une livraison
+  CLI réussie : une réponse réseau peut se perdre.
+- Valider aussi le Host des lectures HTTP privées. Libérer `inference_lock`
+  même si la création, l'écriture ou la suppression du temporaire échoue.
+
 ### Session d'enregistrement : la course qui laissait un micro ouvert
 
 - **La décision démarrer/arrêter est sous `toggle_session_transition()`** : verrou

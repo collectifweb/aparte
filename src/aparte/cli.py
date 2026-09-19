@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import history
+from . import history, recovery
 from .audio import RecordingError, play_beep, record_wav
 from .clipboard import copy_text, paste_text
 from .config import Settings, load_config, write_default_config
@@ -25,7 +25,10 @@ from .linux_desktop import (
 )
 from .notify import _preview, notify
 from .polish import PolishOptions, build_polisher
-from .session import get_active_session, start_toggle_recording, stop_toggle_recording
+from .session import (
+    get_active_session, start_toggle_recording, stop_toggle_recording,
+    toggle_session_transition, ToggleSessionError,
+)
 from .transcription import build_transcriber
 
 
@@ -33,6 +36,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     settings = Settings.from_env()
+
+    # Purge even when the desktop app is closed. A cleanup failure must not
+    # prevent diagnostics or a new dictation from being used.
+    if args.command in {"dictate", "toggle", "recover"}:
+        try:
+            recovery.sweep()
+        except (OSError, RuntimeError):
+            pass
 
     try:
         if args.command == "polish":
@@ -56,6 +67,17 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "toggle":
             output = toggle_dictation(args, settings)
             print(output)
+            return 0
+        if args.command == "recover":
+            recovery.sweep()
+            if args.recovery_command == "list":
+                import json
+
+                print(json.dumps(recovery.entries(), ensure_ascii=False))
+            elif args.recovery_command == "delete":
+                recovery.discard(args.id)
+            else:
+                print(retry_recovery(args.id, args, settings))
             return 0
         if args.command == "last":
             text = history.last(settings.history_persist)
@@ -146,6 +168,17 @@ def build_parser() -> argparse.ArgumentParser:
     toggle.add_argument("--keep-audio", action="store_true", help="Keep the temporary recording file.")
     toggle.add_argument("--status", action="store_true", help="Print whether a toggle recording is active.")
     add_polish_args(toggle)
+
+    recover = subparsers.add_parser("recover", help="Récupérer une dictée en échec (une heure).")
+    recovery_commands = recover.add_subparsers(dest="recovery_command", required=True)
+    recovery_commands.add_parser("list", help="Lister les dictées récupérables, sans leur contenu.")
+    retry = recovery_commands.add_parser("retry", help="Réessayer une dictée, sans collage automatique.")
+    retry.add_argument("id")
+    retry.add_argument("--target", choices=["copy", "stdout"], default="copy")
+    retry.add_argument("--no-polish", action="store_true", help="Récupérer le texte brut.")
+    add_polish_args(retry)
+    delete = recovery_commands.add_parser("delete", help="Supprimer définitivement une capture.")
+    delete.add_argument("id")
 
     last = subparsers.add_parser(
         "last",
@@ -262,7 +295,10 @@ def transcribe_path(path: Path, args: argparse.Namespace, settings: Settings) ->
         )
         transcript = transcriber.transcribe(path).text
     if getattr(args, "polish", False):
-        return polish_text(transcript, args, settings)
+        try:
+            return polish_text(transcript, args, settings)
+        except Exception as exc:
+            raise _PolishFailure(str(exc), transcript) from exc
     return transcript
 
 
@@ -274,27 +310,82 @@ def dictate_once(args: argparse.Namespace, settings: Settings) -> str:
     if settings.beep:
         play_beep("stop")
     notify("⏳ Transcription…", "Aparté traite ta dictée.", urgency="low")
+    return _finish_dictation(path, args, settings)
+
+
+class _PolishFailure(RuntimeError):
+    def __init__(self, message: str, raw_text: str):
+        super().__init__(message)
+        self.raw_text = raw_text
+
+
+def _finish_dictation(path: Path, args: argparse.Namespace, settings: Settings) -> str:
+    remove_audio = not args.keep_audio
     try:
         transcribe_args = argparse.Namespace(
             polish=not args.no_polish,
             style=args.style or settings.default_style,
             cleanup_level=args.cleanup_level or settings.cleanup_level,
         )
-        output = transcribe_path(path, transcribe_args, settings)
+        try:
+            output = transcribe_path(path, transcribe_args, settings)
+        except Exception as exc:
+            try:
+                identifier = recovery.save_failure(path, raw_text=getattr(exc, "raw_text", None))
+            except Exception:
+                # A full disk must not turn the fallback into data loss.
+                remove_audio = False
+                notify(
+                    "⚠️ Dictée non traitée",
+                    f"La récupération a échoué. L’audio original est conservé : {path}",
+                    urgency="critical",
+                )
+            else:
+                notify(
+                    "⚠️ Dictée à récupérer",
+                    "Audio récupérable pendant une heure. Ouvre Aparté pour réessayer "
+                    f"ou utilise « aparte recover retry {identifier} ».",
+                    urgency="critical",
+                )
+            raise
         if not output.strip():
-            # Ni copie ni collage : `paste_text` passe d'abord par le
-            # presse-papiers, et une dictée vide y écraserait ce que
-            # l'utilisateur gardait.
             _notify_nothing_heard()
             return output
-        # L'historique avant l'insertion : si le collage casse, le texte reste
-        # rattrapable par `aparte last`.
         history.record(output, settings.history_persist)
         _deliver(output, args.target, settings)
         return output
     finally:
-        if not args.keep_audio:
+        if remove_audio:
             path.unlink(missing_ok=True)
+
+
+def retry_recovery(identifier: str, args: argparse.Namespace, settings: Settings) -> str:
+    """Retry once under a claim. Copy by default; never paste automatically."""
+    if args.target not in {"copy", "stdout"}:
+        raise ValueError("La récupération propose uniquement copier ou afficher le texte.")
+    with recovery.claim(identifier) as item:
+        try:
+            raw = item.raw_text
+            if raw is None:
+                transcribe_args = argparse.Namespace(polish=False)
+                raw = transcribe_path(item.audio_path, transcribe_args, settings)
+                recovery.update_raw(item, raw)
+            output = raw if args.no_polish or not raw.strip() else polish_text(raw, args, settings)
+            if output.strip():
+                history.record(output, settings.history_persist)
+                _deliver(output, args.target, settings)
+            else:
+                _notify_nothing_heard()
+            recovery.complete(item)
+            return output
+        except Exception:
+            notify(
+                "⚠️ Récupération interrompue",
+                "La dictée reste disponible jusqu’à son expiration initiale. "
+                "Tu peux aussi récupérer le texte brut s’il est disponible.",
+                urgency="critical",
+            )
+            raise
 
 
 def _deliver(output: str, target: str, settings: Settings) -> None:
@@ -334,52 +425,42 @@ def _notify_inserted(output: str, target: str) -> None:
 
 
 def toggle_dictation(args: argparse.Namespace, settings: Settings) -> str:
-    active = get_active_session()
-    if args.status:
-        if active:
-            return f"recording {active.audio_path}"
-        return "idle"
-    if not active:
-        if settings.beep:
-            play_beep("start")
-        try:
-            session = start_toggle_recording(
-                args.sample_rate, settings.microphone, settings.max_recording_seconds
-            )
-        except RecordingError as exc:
-            # Un raccourci clavier n'a personne pour lire `stderr` — Cinnamon le
-            # jette. Sans cette notification, un démarrage refusé est un appui qui
-            # n'a rien fait : l'appui suivant, celui qui croit arrêter, ne trouve
-            # plus de session et ouvre le micro pour un enregistrement entier.
-            notify(
-                "⚠️ Dictée non démarrée",
-                f"{exc} Rien n'enregistre — réappuie pour réessayer.",
-                urgency="critical",
-            )
-            raise
-        notify("🎙️ Dictée en cours", "Réappuie sur le raccourci pour arrêter et insérer.")
-        return f"Recording started: {session.audio_path}"
+    with toggle_session_transition():
+        active = get_active_session()
+        if args.status:
+            if active:
+                return f"recording {active.audio_path}"
+            return "idle"
+        if not active:
+            if settings.beep:
+                play_beep("start")
+            try:
+                session = start_toggle_recording(
+                    args.sample_rate, settings.microphone, settings.max_recording_seconds
+                )
+            except RecordingError as exc:
+                # Un raccourci clavier n'a personne pour lire `stderr` — Cinnamon le
+                # jette. Sans cette notification, un démarrage refusé est un appui qui
+                # n'a rien fait : l'appui suivant, celui qui croit arrêter, ne trouve
+                # plus de session et ouvre le micro pour un enregistrement entier.
+                notify(
+                    "⚠️ Dictée non démarrée",
+                    f"{getattr(exc, 'user_message', str(exc))} Rien n'enregistre — réappuie pour réessayer.",
+                    urgency="critical",
+                )
+                raise
+            notify("🎙️ Dictée en cours", "Réappuie sur le raccourci pour arrêter et insérer.")
+            return f"Recording started: {session.audio_path}"
 
-    session = stop_toggle_recording()
+        try:
+            session = stop_toggle_recording()
+        except ToggleSessionError as exc:
+            notify("⚠️ Arrêt de dictée non confirmé", str(exc), urgency="critical")
+            raise
     if settings.beep:
         play_beep("stop")
     notify("⏳ Transcription…", "Aparté traite ta dictée.", urgency="low")
-    try:
-        transcribe_args = argparse.Namespace(
-            polish=not args.no_polish,
-            style=args.style or settings.default_style,
-            cleanup_level=args.cleanup_level or settings.cleanup_level,
-        )
-        output = transcribe_path(session.audio_path, transcribe_args, settings)
-        if not output.strip():
-            _notify_nothing_heard()
-            return output
-        history.record(output, settings.history_persist)
-        _deliver(output, args.target, settings)
-        return output
-    finally:
-        if not args.keep_audio:
-            session.audio_path.unlink(missing_ok=True)
+    return _finish_dictation(session.audio_path, args, settings)
 
 
 def handle_output(output: str, args: argparse.Namespace, settings: Settings) -> None:

@@ -1,5 +1,8 @@
 # Audit du produit Linux — 19 septembre 2026
 
+> Ce rapport décrit l'état initial, avant correctifs. Leur avancement et leurs
+> validations sont consignés dans le [plan de fiabilisation](../tasks/fiabilisation-linux.md).
+
 **Conclusion : plusieurs défauts du produit Linux sont reproductibles, dont des
 pertes de dictée et des captures laissées ouvertes. Le message « micro occupé »
 est trompeur ; la cause exacte des incidents après inactivité reste à établir.**

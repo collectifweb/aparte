@@ -7,8 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Failed dictations can be recovered locally for one hour from the desktop app
+  or `aparte recover`: retry, retrieve available raw text, or delete. Recovery
+  preserves editor work and never automatically pastes into another app.
+  Private captures expire without renewing their deadline on retry; desktop
+  cleanup also handles interrupted writes and malformed metadata.
+
 ### Fixed
 
+- Private HTTP reads now validate the request host, and JSON responses are not
+  cached. Temporary upload creation, writing and cleanup failures always release
+  the transcription lock, allowing subsequent dictations to proceed.
 - Linux recording failures now retain ALSA's actual startup diagnostic, with
   timestamp, exit code and selected device. Notifications keep a short summary;
   a missing device is no longer described as a microphone held by another app.

@@ -62,7 +62,27 @@
     <!-- La zone réservée sous la barre d'actions (DESIGN.md § Plan de travail) :
          une liste, jamais des cartes, aucun aplat de couleur, et elle défile
          elle-même plutôt que de pousser le disque et l'éditeur hors de l'écran. -->
-    <section class="recent" id="recent" data-i18n-aria="recent.label"></section>
+    <div class="recent">
+      <section id="recovery" class="recovery" aria-labelledby="recovery-title" hidden>
+        <div class="recovery-heading">
+          <h2 id="recovery-title" tabindex="-1" data-i18n="recovery.title">Dictées à récupérer</h2>
+          <button id="refresh-recovery" class="chip ghost" data-i18n="recovery.refresh">Actualiser</button>
+        </div>
+        <p class="recovery-help" data-i18n="recovery.help">Après un échec, les captures restent sur cet ordinateur pendant une heure. Réessaie avant leur expiration.</p>
+        <p id="recovery-status" class="recovery-status" role="status" aria-live="polite"></p>
+        <ul id="recovery-list" class="recovery-list"></ul>
+        <div id="recovery-result" hidden>
+          <label for="recovery-text" data-i18n="recovery.result">Texte récupéré</label>
+          <textarea id="recovery-text" readonly rows="3" aria-describedby="recovery-result-help"></textarea>
+          <p id="recovery-result-help" class="recovery-help" data-i18n="recovery.result_help">Ton texte actuel reste intact. Ouvre ce résultat dans l’éditeur pour le copier ou l’insérer.</p>
+          <div class="recovery-actions">
+            <button id="open-recovery" class="chip" data-i18n="recovery.open">Ouvrir dans l’éditeur</button>
+            <button id="dismiss-recovery" class="chip ghost" data-i18n="recovery.dismiss">Fermer le résultat</button>
+          </div>
+        </div>
+      </section>
+      <section id="recent" data-i18n-aria="recent.label"></section>
+    </div>
   </main>
 
   <!-- Settings drawer -->
