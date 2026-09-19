@@ -46,7 +46,8 @@ L'application installée reste sur la release pendant la préparation.
 - [x] Tests isolés avec concurrence réelle, revue croisée, documentation et
       commits à chaque jalon.
 - [x] Publication de la release 1.2.1.
-- [ ] Installation de la 1.2.1 sur le poste et retours d'usage à confirmer.
+- [x] Installation de la 1.2.1 vérifiée en lecture seule sur le poste.
+- [ ] Retours d'usage, notamment après veille.
 
 La [release GitHub 1.2.1](https://github.com/collectifweb/aparte/releases/tag/v1.2.1)
 est publiée comme dernière version stable, après autorisation d'Alexandre.
@@ -54,7 +55,9 @@ Le tag annoté `v1.2.1` pointe sur `5a5ad64`, accessible depuis `main`.
 Les [notes de version](../docs/releases/v1.2.1.md), les deux déclarations et le
 changelog sont alignés. Les 17 tests de mise à jour passent après changement de
 version ; la [CI Python 3.10–3.13](https://github.com/collectifweb/aparte/actions/runs/35462467495)
-est verte sur le commit publié. La mise à jour du poste reste une étape séparée.
+est verte sur le commit publié. L'installation `~/murmur` a ensuite été vérifiée
+en lecture seule : module 1.2.1, arbre propre ; seul un complément documentaire
+de `main` lui manque. Aucun test matériel n'a été effectué par l'agent.
 
 La protection Host des lectures HTTP et le déblocage de la transcription après
 erreur disque ont déjà été livrés dans la version 1.2.0.
@@ -87,12 +90,54 @@ Le remplacement du wrapper prendra effet au lancement de la version 1.2.1 sur
 le poste ; l'ancien journal, maintenant privé, reste conservé. Aucun test réel
 après veille n'est revendiqué.
 
-## Lots suivants
+## Lot 3 — états du micro et fermeture (validé localement, non publié)
 
-3. États cohérents du micro : quitter, capture à récupérer, ouvertures navigateur
-   et import audio incompatibles.
-4. Parcours : historique actualisé/effaçable, réglages immédiats, ponctuation,
-   protection du texte édité.
+Branche `fix/linux-etats-micro`, base `76db28c`, dans la copie isolée
+`/tmp/aparte-linux-fiabilisation`. L'installation utilisée reste inchangée.
+
+- [x] Distinguer au repos, capture réellement vivante, traitement, audio à
+      récupérer et état inconnu ; même source pour le menu, le diagnostic et
+      `toggle --status`.
+- [x] Quitter arrête la capture du raccourci puis conserve son audio dans la
+      récupération d'une heure. Aucune transcription ni insertion au départ.
+      Si l'arrêt ou la sauvegarde échoue, l'application reste ouverte ; si un
+      traitement est actif, elle demande d'attendre.
+- [x] Les traitements CLI/HTTP sont suivis par des verrous vivants, sans texte,
+      audio ni PID dans leurs marqueurs. Un processus mort ne bloque pas la
+      fermeture. La mise à jour garde l'exclusion jusqu'au redémarrage.
+- [x] SIGINT/SIGTERM suivent la fermeture protégée, avec ou sans barre système.
+- [x] Un corps HTTP bloqué sans progression expire après 30 secondes et libère
+      son traitement ; ce délai réseau ne limite pas le temps du modèle.
+- [x] Navigateur : ouverture/arrêt explicites, doubles clics exclus, import et
+      capture incompatibles, ressources libérées après erreur ou navigation,
+      permissions et réponses tardives ignorées après navigation.
+- [x] La mise à jour et la capture du même onglet s'excluent.
+- [x] Revue croisée et vérifications ciblées : vrais processus synthétiques,
+      HTTP sur port éphémère, signaux envoyés uniquement à des processus de test.
+- [x] Validation finale : **419 tests Linux verts**, documentation actualisée
+      dans le même jalon. Log isolé :
+      `/tmp/aparte-audit-tests-xwhmpxvu/unittest.log`.
+- [ ] Publication d'une version contenant ce lot, puis validation sur le poste.
+
+**Limite de responsabilité :** l'icône et « Quitter » suivent la capture du
+raccourci. Le micro du navigateur appartient à l'onglet : utiliser Arrêter ou
+fermer cet onglet. Quitter le programme Python ne ferme pas les micros d'autres
+onglets. Aucun protocole de coordination entre onglets n'est ajouté ici. Une
+interruption forcée (SIGKILL/crash) ne passe pas par la fermeture protégée.
+
+Chromium vérifié en français clair sur bureau (1000 px) et en anglais sombre
+sur mobile (375 px), API et audio simulés : ouverture lente, arrêt différé,
+absence de double capture, pistes libérées avant fermeture du contexte audio,
+aucun débordement ni erreur JavaScript. Le WAV envoyé reste correct même si la
+fermeture du contexte échoue. Contrôle syntaxique JavaScript et détecteur visuel
+mécanique sans erreur. Pas de vérification matérielle du micro ni de l'icône GTK.
+
+## Lot 4 — parcours (à faire)
+
+Historique actualisé/effaçable, réglages immédiats, ponctuation et protection du
+texte édité contre les réponses asynchrones. La validation du retour de veille
+reste menée en parallèle par les retours d'usage, sans diagnostic matériel
+présumé.
 
 ## Règles de validation
 
@@ -183,7 +228,10 @@ aussi explicitement un original. Ces exceptions sont documentées dans le README
 
 ## Repère depuis la branche macOS
 
-Le lot 2 est publié sur `main` dans la release `v1.2.1`, commit `5a5ad64`.
-La copie `/tmp/aparte-linux-fiabilisation` reste sur `fix/linux-donnees-fiables`.
-Le portage ne reçoit que ce suivi documentaire. La mise à jour du poste vers
-1.2.1 reste à confirmer ; les lots 3 et 4 constituent la suite prévue.
+Le lot 3 Linux est validé localement dans le commit `37d5286`, sur
+`fix/linux-etats-micro`, dans `/tmp/aparte-linux-fiabilisation` : 419 tests verts,
+documentation et revue croisée terminées. Il n'est pas encore publié.
+L'installation utilisée a été vérifiée en version 1.2.1 ; elle n'a pas été
+modifiée pendant ce lot. Le portage ne reçoit que ce suivi documentaire.
+Prochaine livraison : publier le lot 3, puis poursuivre le lot 4 et recueillir
+les retours d'usage, en particulier après veille.
