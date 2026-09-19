@@ -55,7 +55,7 @@ observée après une période d'inactivité. Le scénario après mise en veille 
 matérielle par l'agent ni cause de panne déduite de cette amélioration.
 
 La [release GitHub 1.2.1](https://github.com/collectifweb/aparte/releases/tag/v1.2.1)
-est publiée comme dernière version stable, après autorisation d'Alexandre.
+a été publiée comme dernière version stable à sa sortie, après autorisation d'Alexandre.
 Le tag annoté `v1.2.1` pointe sur `5a5ad64`, accessible depuis `main`.
 Les [notes de version](../docs/releases/v1.2.1.md), les deux déclarations et le
 changelog sont alignés. Les 17 tests de mise à jour passent après changement de
@@ -95,7 +95,7 @@ Le remplacement du wrapper prendra effet au lancement de la version 1.2.1 sur
 le poste ; l'ancien journal, maintenant privé, reste conservé. Aucun test réel
 après veille n'est revendiqué.
 
-## Lot 3 — états du micro et fermeture (validé localement, non publié)
+## Lot 3 — états du micro et fermeture (publié en 1.3.0)
 
 Branche `fix/linux-etats-micro`, base `76db28c`, dans la copie isolée
 `/tmp/aparte-linux-fiabilisation`. L'installation utilisée reste inchangée.
@@ -122,7 +122,8 @@ Branche `fix/linux-etats-micro`, base `76db28c`, dans la copie isolée
 - [x] Validation finale : **419 tests Linux verts**, documentation actualisée
       dans le même jalon. Log isolé :
       `/tmp/aparte-audit-tests-xwhmpxvu/unittest.log`.
-- [ ] Publication d'une version contenant ce lot, puis validation sur le poste.
+- [x] Publication dans la version 1.3.0.
+- [ ] Installation et validation sur le poste.
 
 **Limite de responsabilité :** l'icône et « Quitter » suivent la capture du
 raccourci. Le micro du navigateur appartient à l'onglet : utiliser Arrêter ou
@@ -139,7 +140,7 @@ mécanique sans erreur. Pas de vérification matérielle du micro ni de l'icône
 
 ## Lot 4 — parcours (en cours)
 
-Branche `fix/linux-dictees-successives`, à la suite du lot 3 non publié.
+Branche `fix/linux-dictees-successives`, à la suite du lot 3.
 
 - [x] Garde-fou des départs successifs au raccourci : refus notifié avant bip et
       ouverture du micro si un traitement existe ; arrêt d'une capture active
@@ -155,7 +156,8 @@ Branche `fix/linux-dictees-successives`, à la suite du lot 3 non publié.
       tests de confidentialité, contexte concurrent, cache chaud/froid, repli CPU
       tardif et vraie délégation HTTP sur port temporaire. Log isolé :
       `/tmp/aparte-audit-tests-vjz45g8x/unittest.log`.
-- [ ] Publication des lots 3 et 4 déjà validés, puis relevés sur le poste.
+- [x] Publication du lot 3 et des deux premiers jalons du lot 4 dans la 1.3.0.
+- [ ] Installation puis relevés des délais sur le poste.
 
 Les événements disque peuvent être perdus en contention : le test d'intégration
 vérifie l'émission et la corrélation sans exiger une conservation exhaustive.
@@ -211,6 +213,22 @@ après retrait de la session précédente, même si son traitement continue.
 livraison dans chaque processus CLI. Ce verrou ne garantit donc pas l’ordre de
 bout en bout. Ce constat est une lecture du code, pas une reproduction matérielle
 ni une preuve que la première dictée serait systématiquement perdue.
+
+## Publication 1.3.0 — effectuée
+
+Alexandre a autorisé la suite après les jalons `2408486` et `aa52609`.
+La version 1.3.0 regroupe le lot 3, le garde-fou et les mesures de délais.
+Les deux déclarations, le changelog et les [notes de version](../docs/releases/v1.3.0.md)
+sont alignés ; les 17 tests de mise à jour passent après changement de version.
+Revue indépendante : aucune incompatibilité syntaxique Python 3.10 détectée
+dans les fichiers modifiés, aucun enregistrement ou journal temporaire commité.
+La [CI Python 3.10–3.13](https://github.com/collectifweb/aparte/actions/runs/35468188560)
+est verte sur le commit de version `ea4381c`. Le tag annoté `v1.3.0` pointe sur
+ce commit, accessible depuis `main`. La [release GitHub](https://github.com/collectifweb/aparte/releases/tag/v1.3.0)
+est publiée comme dernière version stable, ni brouillon ni préversion ; état
+vérifié après publication. L'installation utilisée n'a pas été modifiée.
+Mettre à jour après la fin de la dictée en cours, puis recueillir les mesures
+en usage réel et confirmer le retour de veille.
 
 ## Règles de validation
 
@@ -269,7 +287,7 @@ La commande CI est alignée sur la découverte locale validée (`-t tests`). La
 est verte sur le commit de version `3f7e0da`.
 
 La [release GitHub v1.2.0](https://github.com/collectifweb/aparte/releases/tag/v1.2.0)
-est publiée comme dernière version stable, avec notes françaises et tag annoté
+a été publiée comme dernière version stable à sa sortie, avec notes françaises et tag annoté
 sur `3f7e0da`, accessible depuis `main`. Aucun changement de l'installation
 locale n'a été effectué lors de cette publication.
 
@@ -301,12 +319,11 @@ aussi explicitement un original. Ces exceptions sont documentées dans le README
 
 ## Repère depuis la branche macOS
 
-Le lot 3 est validé localement (`37d5286`). Les premiers jalons du lot 4 sont
-également implémentés sur `fix/linux-dictees-successives`, dans
-`/tmp/aparte-linux-fiabilisation` : garde-fou (`2408486`) et mesures des délais (`aa52609`),
-451 tests verts. Ces changements ne sont pas encore publiés.
-L'installation utilisée n'a pas été modifiée. Alexandre rapporte ne plus avoir
-d'erreur après inactivité depuis sa dernière mise à jour ; retour de veille à
-vérifier. Le portage ne reçoit que la documentation de suivi.
-Prochaine étape : livrer les correctifs validés, recueillir les mesures en usage
-réel, puis poursuivre les parcours du lot 4 et l'indicateur flottant.
+La release Linux `v1.3.0` est publiée sur `main`, tag sur `ea4381c`, CI Python
+3.10–3.13 verte. Elle inclut le lot 3, le garde-fou des dictées successives et les
+mesures de délais. Suivi documentaire distant : `7f2f41c`.
+La copie `/tmp/aparte-linux-fiabilisation` reste sur `fix/linux-dictees-successives`.
+Le portage ne reçoit que ce suivi, le guide et les notes de version ; son code
+reste inchangé. Installation 1.3.0 à faire par Alexandre, puis retours d'usage,
+mesures des lenteurs et validation après veille. La suite produit reste les
+parcours du lot 4 et l'indicateur flottant.
