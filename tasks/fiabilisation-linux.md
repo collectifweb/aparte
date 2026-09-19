@@ -1,17 +1,5 @@
 # Fiabilisation Linux — septembre 2026
 
-> Installation ensuite effectuée par Alexandre et vérifiée : `~/murmur` est
-> au commit de release `3f7e0da`, module et paquet **1.2.0**, arbre propre.
-> Les retours de dictée réelle et après veille restent à recueillir. Le prochain
-> chantier prévu est le lot 2 (journal privé, réglages et historique fiables).
-
-> Mise à jour du 19 septembre : la [release GitHub v1.2.0](https://github.com/collectifweb/aparte/releases/tag/v1.2.0)
-> est publiée comme dernière version stable, tag `v1.2.0` sur `3f7e0da`.
-> La [CI Python 3.10–3.13](https://github.com/collectifweb/aparte/actions/runs/35455930154)
-> est verte. Le suivi actualisé est sur `main`, commit documentaire `e658ce7`.
-> Les mentions « pas encore publié » plus bas sont l'état du jalon précédent.
-> L'installation `~/murmur` n'a pas été modifiée par cette publication.
-
 Plan accepté par Alexandre le 19 septembre, après l'audit
 [`docs/audit-linux-2026-09-19.md`](../docs/audit-linux-2026-09-19.md).
 Un commit par étape validée, documentation tenue à jour au même moment.
@@ -39,12 +27,59 @@ la préparation. Pas de capture réelle ni de mise en veille automatique du post
 - [ ] Validation du correctif sur le poste puis après veille (distincte des
       tests synthétiques ; à coordonner avec l'usage du micro).
 
+## Lot 2 — protection des données (implémenté, non publié)
+
+Travail autorisé par Alexandre après installation de la version 1.2.0. Branche
+`fix/linux-donnees-fiables`, toujours dans `/tmp/aparte-linux-fiabilisation`.
+L'application installée reste sur la release pendant la préparation.
+
+- [x] Ancien journal local `/tmp/aparte-toggle.log` protégé : permissions 0664
+      devenues 0600 après vérification du propriétaire et du type de fichier,
+      sans lecture ni suppression de son contenu. Le raccourci 1.2.0 y écrit
+      encore ; ce changement de permissions ne corrige pas à lui seul la collecte.
+- [x] Journal technique privé et borné, sans texte dicté ; migration conservatrice
+      du raccourci connu sans déplacer sa touche ni toucher les autres commandes.
+- [x] Réglages : écriture atomique, fusion protégée entre processus, anciennes
+      données préservées en cas d'erreur de sauvegarde.
+- [x] Historique : écritures/effacement coordonnés, fichier privé dès sa création,
+      attente bornée pour ne pas suspendre la livraison de la dictée.
+- [x] Tests isolés avec concurrence réelle, revue croisée, documentation et
+      commits à chaque jalon.
+- [ ] Publication et installation du lot (1.2.0 reste installée).
+
+La protection Host des lectures HTTP et le déblocage de la transcription après
+erreur disque ont déjà été livrés dans la version 1.2.0.
+
+Jalon stockage : **24 tests réglages et 22 tests historique verts**, incluant
+vrais processus concurrents, lecteurs pendant publication, pannes disque,
+initialisation/migration et effacement concurrents. Revue croisée effectuée ;
+le faux échec possible après publication a été supprimé. L'ancien fichier reste
+intact sur les pannes avant remplacement. Verrous bornés à cinq secondes pour
+les réglages et une demi-seconde pour l'historique ; ce dernier peut abandonner
+une opération pour préserver la livraison. Tests d'historique en `spawn`, sans
+fork d'un processus ayant déjà des threads HTTP. Les garanties ne couvrent ni
+les anciennes versions ni les outils externes qui ignorent ces verrous.
+Commit du jalon stockage : `cd96aef`.
+
+Jalon journal et intégration : **370 tests Linux verts**, log isolé
+`/tmp/aparte-audit-tests-90iiwxpj/unittest.log`. Les tests couvrent les sorties
+Python, natives, enfants et `atexit`, les pannes disque et les commandes
+personnalisées. La revue indépendante a reproduit une fuite après restauration
+des sorties, puis confirmé sa disparition avec le silence permanent du
+processus de raccourci. Les tests d'intégration vérifient aussi qu'une erreur
+d'historique n'empêche pas la copie et qu'un refus de sauvegarde est signalé par
+l'API sans perdre les réglages précédents.
+
+Lecture seule sur le poste : la commande Cinnamon du slot `custom3`, touche
+`<Super>space`, est reconnue ; la migration propose
+`/home/alexandre/murmur/.venv/bin/python -m aparte toggle --target paste --hotkey`.
+Aucune modification du raccourci ni ouverture du micro pendant ce contrôle.
+Le remplacement du wrapper ne prendra effet qu'au lancement de la future
+version ; l'ancien journal, maintenant privé, reste conservé. Aucun test réel
+après veille ni publication de ce lot n'est revendiqué.
+
 ## Lots suivants
 
-2. Protéger les données et le programme résident : journal du raccourci,
-   configuration et historique atomiques/coordonnés. La validation Host des
-   lectures HTTP et la libération du verrou de transcription en cas d'erreur
-   disque ont été avancées dans le lot 1, nécessaires à la récupération.
 3. États cohérents du micro : quitter, capture à récupérer, ouvertures navigateur
    et import audio incompatibles.
 4. Parcours : historique actualisé/effaçable, réglages immédiats, ponctuation,
@@ -92,14 +127,35 @@ veille : celui-ci doit être confirmé séparément.
 - Documentation mise à jour : README (usage et limites de rétention), CHANGELOG,
   CLAUDE (invariants), DESIGN (panneau), rapport d'audit et présent suivi.
 
-## Prochaine étape — essai sur le poste
+## Mise en service — retours d'usage en cours
 
-Le lot est préparé sur `fix/linux-dictee-fiable`, pas encore fusionné, poussé ni
-installé. `~/murmur` reste à `721b098` ; le portage Mac conserve son code initial.
+Alexandre propose une mise en service suivie de retours d'usage, sans attendre
+de reproduire tous les scénarios matériels. Version `1.2.0` préparée pour le
+lot 1 (ajout de la récupération), déclarations et changelog alignés. La
+publication GitHub a été explicitement autorisée par Alexandre et effectuée.
+L'installation locale a ensuite été mise à jour par Alexandre. La mise à jour intégrée exige un
+tag `v1.2.0` accessible depuis `main` ;
+un push de commits sans tag ne sera pas proposé comme nouvelle version.
+Les 17 tests du mécanisme de mise à jour passent après changement de version.
+La commande CI est alignée sur la découverte locale validée (`-t tests`). La
+[matrice distante Python 3.10–3.13](https://github.com/collectifweb/aparte/actions/runs/35455930154)
+est verte sur le commit de version `3f7e0da`.
 
-1. Installer la branche Linux validée dans une fenêtre sans dictée active et
-   redémarrer le processus résident, en conservant configuration et langue Auto.
-   Garder `721b098` comme point de retour.
+La [release GitHub v1.2.0](https://github.com/collectifweb/aparte/releases/tag/v1.2.0)
+est publiée comme dernière version stable, avec notes françaises et tag annoté
+sur `3f7e0da`, accessible depuis `main`. Aucun changement de l'installation
+locale n'a été effectué lors de cette publication.
+
+Le lot est préparé sur `fix/linux-dictee-fiable`. Les notes destinées à GitHub
+sont dans [`docs/releases/v1.2.0.md`](../docs/releases/v1.2.0.md).
+Installation vérifiée après le retour d'Alexandre : `~/murmur` est à `3f7e0da`,
+module et paquet installés déclarent tous deux **1.2.0**, arbre propre. Le commit
+supplémentaire de `main` est documentaire ; il ne manque aucun correctif de la
+release sur le poste. Aucun essai micro ni retour de veille n'a été effectué
+par l'agent. Le portage Mac conserve son code initial.
+
+1. Installation 1.2.0 effectuée par Alexandre et vérifiée. Garder `721b098`
+   comme point de retour.
 2. Vérifier une courte dictée depuis le raccourci, son arrêt et son insertion,
    puis le parcours navigateur. Vérifier qu'aucun enregistreur n'est laissé actif.
 3. Après une vraie période d'inactivité puis un retour de veille choisi par
@@ -118,8 +174,8 @@ aussi explicitement un original. Ces exceptions sont documentées dans le README
 
 ## Repère depuis la branche macOS
 
-Le lot 1 Linux est enregistré jusqu’au commit `12b9662` sur
-`fix/linux-dictee-fiable` (copie de travail `/tmp/aparte-linux-fiabilisation`).
-Cette branche partage le dépôt Git : ses commits restent disponibles même si
-la copie temporaire est supprimée. Les changements fonctionnels et leur
-documentation détaillée sont sur cette branche, sans fusion dans le portage.
+Le lot 2 est enregistré jusqu’au commit `e92ef4e` sur
+`fix/linux-donnees-fiables`, copie de travail `/tmp/aparte-linux-fiabilisation`.
+Les commits sont conservés dans le dépôt partagé même si cette copie temporaire
+est supprimée. Le portage ne reçoit que ce suivi documentaire. Le lot 2 reste
+non publié ; la release Linux installée est toujours la 1.2.0.
