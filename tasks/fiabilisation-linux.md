@@ -139,6 +139,49 @@ texte édité contre les réponses asynchrones. La validation du retour de veill
 reste menée en parallèle par les retours d'usage, sans diagnostic matériel
 présumé.
 
+## Compléments d’usage — retour du 19 septembre 2026 (à réaliser)
+
+Alexandre souhaite traiter ultérieurement la refonte de l’interface et un
+indicateur flottant visible depuis l’application où il dicte. Il rapporte des
+traitements pouvant durer 60 à 80 secondes, utilise le modèle `small` et décrit
+son ordinateur comme chargé. Ces durées et cette charge sont rapportées, pas
+mesurées ici ; leur cause n’est pas établie. Aucune perte sur deux dictées
+successives n’a été signalée : c’est un scénario préventif à vérifier.
+
+- [ ] **Priorité au garde-fou des dictées successives**, à intégrer au lot 4 :
+      reproduire A en traitement puis capture/arrêt de B, y compris polissage
+      lent, erreurs, délégation indisponible et changement d’application cible.
+      Vérifier conservation des deux résultats, ordre de livraison et absence de
+      collision du presse-papiers. La protection du lot 3 contre Quitter ne
+      constitue pas une file d’attente de dictées.
+      Proposition initiale : refuser clairement un nouveau départ tant que la
+      précédente n’est pas livrée, sans couper une capture déjà active. Une
+      véritable file d’attente, si retenue ensuite, devra conserver séparément
+      chaque audio/résultat et rendre explicite la destination du collage.
+- [ ] **Mesurer les délais par étape** : attente, chargement à froid,
+      transcription, polissage et livraison ; durée audio, moteur et CPU/GPU
+      effectivement utilisés, charge au moment de l’essai. Passer par le parcours
+      réel de l’application, comparer à réglages égaux, sans journaliser le texte
+      ou exploiter un audio personnel sans accord. Garder la langue Auto ; aucun
+      changement de modèle avant d’avoir localisé le coût et évalué la qualité.
+- [ ] **Indicateur flottant léger** : écoute → attente éventuelle → transcription
+      → polissage → prêt/inséré, avec erreur ou récupération explicite. Montrer
+      l’étape réelle et le temps écoulé, sans pourcentage inventé. Ne pas voler le
+      focus ni intercepter la saisie dans l’application cible. Première version
+      sans nouvelle transcription d’aperçu, pour ne pas ajouter de calcul pendant
+      les lenteurs. Reprendre le [lot 5B historique](todo.md#lot-5b--fenêtre-flottante-au-raccourci-clavier-planifié-le-2207-pas-commencé)
+      avec ce périmètre révisé ; ses hypothèses techniques datées sont à revérifier.
+- [ ] **Refonte globale de l’interface**, chantier distinct à cadrer ensuite avec
+      Alexandre, après les protections et la visibilité du traitement.
+
+Lecture du code du lot 3 : `cli.toggle_dictation` peut redémarrer une capture
+après retrait de la session précédente, même si son traitement continue.
+`desktop._handle_transcribe` sérialise l’inférence sur son modèle partagé, mais
+`cli.transcribe_path` effectue ensuite le polissage et `_finish_dictation` la
+livraison dans chaque processus CLI. Ce verrou ne garantit donc pas l’ordre de
+bout en bout. Ce constat est une lecture du code, pas une reproduction matérielle
+ni une preuve que la première dictée serait systématiquement perdue.
+
 ## Règles de validation
 
 Les reproductions de l'audit deviennent des tests de régression. Configuration,

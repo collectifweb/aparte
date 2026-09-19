@@ -500,6 +500,14 @@ Planifié en **Lot 5B** ci-dessous.
 
 ## Lot 5B — Fenêtre flottante au raccourci clavier (planifié le 22/07, pas commencé)
 
+**Précision du 19 septembre 2026 :** Alexandre confirme le besoin d’un indicateur
+flottant des étapes, notamment pendant les traitements longs. Le premier périmètre
+proposé est un indicateur léger sans transcription d’aperçu supplémentaire ;
+la refonte générale de l’interface reste distincte. Garde-fou des dictées
+successives, mesures de performance et critères actualisés sont suivis dans
+[le plan de fiabilisation Linux](fiabilisation-linux.md#compléments-dusage--retour-du-19-septembre-2026-à-réaliser).
+Le plan technique ci-dessous est historique et doit être réévalué avant exécution.
+
 **Le manque.** L'aperçu du Lot 5A ne se voit que dans la fenêtre d'Aparté. Au
 raccourci clavier, `aparte toggle` lance `arecord` en tâche de fond et rend la
 main : entre les deux appuis, **aucun processus Aparté ne tourne**. Il n'y a ni
