@@ -1,7 +1,7 @@
 # Mesurer les délais de dictée
 
-Instrumentation du lot 4 Linux, préparée localement après la version 1.2.1.
-Elle ne sera active sur une installation qu'après publication et mise à jour.
+Instrumentation du lot 4 Linux, incluse dans la version 1.3.0.
+Elle devient active sur une installation après mise à jour vers cette version.
 Les 60–80 secondes rapportées par Alexandre ne sont pas encore expliquées par
 une mesure sur son poste. La langue Auto et le modèle choisi restent inchangés.
 

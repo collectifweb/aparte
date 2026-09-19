@@ -212,6 +212,17 @@ livraison dans chaque processus CLI. Ce verrou ne garantit donc pas l’ordre de
 bout en bout. Ce constat est une lecture du code, pas une reproduction matérielle
 ni une preuve que la première dictée serait systématiquement perdue.
 
+## Publication 1.3.0 — autorisée, préparation validée
+
+Alexandre a autorisé la suite après les jalons `2408486` et `aa52609`.
+La version 1.3.0 regroupe le lot 3, le garde-fou et les mesures de délais.
+Les deux déclarations, le changelog et les [notes de version](../docs/releases/v1.3.0.md)
+sont alignés ; les 17 tests de mise à jour passent après changement de version.
+Revue indépendante : aucune incompatibilité syntaxique Python 3.10 détectée
+dans les fichiers modifiés, aucun enregistrement ou journal temporaire commité.
+Publication du tag et de la release après CI du commit de version sur `main`.
+L'installation utilisée n'est pas modifiée par cette publication.
+
 ## Règles de validation
 
 Les reproductions de l'audit deviennent des tests de régression. Configuration,
