@@ -84,14 +84,20 @@ veille : celui-ci doit être confirmé séparément.
 
 Alexandre propose une mise en service suivie de retours d'usage, sans attendre
 de reproduire tous les scénarios matériels. Version `1.2.0` préparée pour le
-lot 1 (ajout de la récupération), déclarations et changelog alignés. Le périmètre
-publication GitHub a été explicitement autorisé par Alexandre ; sa préparation
-est terminée et la publication est en cours. L'installation locale sera suivie
-séparément. La mise à jour intégrée exige un tag `v1.2.0` accessible depuis `main` ;
+lot 1 (ajout de la récupération), déclarations et changelog alignés. La
+publication GitHub a été explicitement autorisée par Alexandre et effectuée.
+L'installation locale sera suivie séparément. La mise à jour intégrée exige un
+tag `v1.2.0` accessible depuis `main` ;
 un push de commits sans tag ne sera pas proposé comme nouvelle version.
 Les 17 tests du mécanisme de mise à jour passent après changement de version.
-La commande CI est alignée sur la découverte locale validée (`-t tests`) ; la
-matrice distante Python 3.10–3.13 ne sera confirmée qu'après publication.
+La commande CI est alignée sur la découverte locale validée (`-t tests`). La
+[matrice distante Python 3.10–3.13](https://github.com/collectifweb/aparte/actions/runs/35455930154)
+est verte sur le commit de version `3f7e0da`.
+
+La [release GitHub v1.2.0](https://github.com/collectifweb/aparte/releases/tag/v1.2.0)
+est publiée comme dernière version stable, avec notes françaises et tag annoté
+sur `3f7e0da`, accessible depuis `main`. Aucun changement de l'installation
+locale n'a été effectué lors de cette publication.
 
 Le lot est préparé sur `fix/linux-dictee-fiable`. Les notes destinées à GitHub
 sont dans [`docs/releases/v1.2.0.md`](../docs/releases/v1.2.0.md).
