@@ -36,7 +36,7 @@ class HelpersTest(unittest.TestCase):
 
     def test_toggle_command_is_absolute(self):
         with mock.patch("aparte.hotkey.shutil.which", return_value="/venv/bin/aparte"):
-            self.assertEqual(hotkey.toggle_command("paste"), "/venv/bin/aparte toggle --target paste")
+            self.assertEqual(hotkey.toggle_command("paste"), "/venv/bin/aparte toggle --target paste --hotkey")
 
     def test_manual_instructions_mention_command_and_key(self):
         text = hotkey.manual_instructions("/venv/bin/aparte toggle --target paste", "<Super>space", "cinnamon")
@@ -193,6 +193,85 @@ class InstallHotkeyTest(unittest.TestCase):
         ), mock.patch("aparte.hotkey._gsettings", side_effect=self._reuse_fake()):
             # an explicit --key moves it
             self.assertEqual(hotkey.install_hotkey("<Super>space").key, "<Super>space")
+
+
+class PrivateShortcutMigrationTest(unittest.TestCase):
+    def test_recognizes_stock_commands_in_current_installation(self):
+        with mock.patch.object(hotkey.sys, "executable", "/venv/bin/python"):
+            for command in ("/venv/bin/aparte toggle", "/venv/bin/murmur toggle --target copy",
+                            "/venv/bin/python -m aparte toggle --target paste"):
+                with self.subTest(command=command):
+                    self.assertEqual(hotkey._private_command(command), command + " --hotkey")
+
+    def test_unwraps_only_known_log_redirection(self):
+        command = "/venv/bin/python -m aparte toggle --target paste"
+        with mock.patch.object(hotkey.sys, "executable", "/venv/bin/python"):
+            self.assertEqual(hotkey._private_command("bash -c '" + command + " >> /tmp/aparte-toggle.log 2>&1'"),
+                             command + " --hotkey")
+            self.assertIsNone(hotkey._private_command("bash -c '" + command + " >> /tmp/custom.log 2>&1'"))
+
+    def test_preserves_custom_commands_other_installs_and_stdout(self):
+        with mock.patch.object(hotkey.sys, "executable", "/venv/bin/python"):
+            for command in ("/other/bin/aparte toggle --target paste", "/other/bin/python -m aparte toggle",
+                            "/venv/bin/aparte toggle --target stdout", "/venv/bin/aparte toggle --no-polish",
+                            "/venv/bin/aparte toggle --hotkey", "env APARTE_LANGUAGE=fr /venv/bin/aparte toggle",
+                            "bash -c '/venv/bin/aparte toggle; echo ok >> /tmp/aparte-toggle.log 2>&1'",
+                            "bash -c '/venv/bin/aparte toggle $(whoami) >> /tmp/aparte-toggle.log 2>&1'",
+                            "my-custom-toggle-script"):
+                with self.subTest(command=command):
+                    self.assertIsNone(hotkey._private_command(command))
+
+    def test_migration_changes_only_command_and_is_idempotent(self):
+        command = "bash -c '/venv/bin/python -m aparte toggle --target copy >> /tmp/aparte-toggle.log 2>&1'"
+        state = {"custom0": command, "custom1": "/other/bin/aparte toggle"}
+        writes = []
+        def fake(*args):
+            if args[:1] == ("get",) and args[-1] == "custom-list":
+                return "['custom0', 'custom1']"
+            slot = args[1].split("/")[-2]
+            if args[0] == "get":
+                return repr(state[slot])
+            writes.append(args)
+            state[slot] = hotkey.ast.literal_eval(args[-1])
+            return ""
+        with mock.patch.object(hotkey, "_provider", return_value=hotkey.PROVIDERS["cinnamon"]), \
+             mock.patch.object(hotkey, "_gsettings", side_effect=fake), \
+             mock.patch.object(hotkey.sys, "executable", "/venv/bin/python"):
+            self.assertEqual(hotkey.migrate_hotkey_logging(), ["custom0"])
+            self.assertEqual(hotkey.migrate_hotkey_logging(), [])
+        self.assertEqual(len(writes), 1)
+        self.assertEqual(writes[0][-2], "command")
+        self.assertEqual(state["custom0"], "/venv/bin/python -m aparte toggle --target copy --hotkey")
+        self.assertEqual(state["custom1"], "/other/bin/aparte toggle")
+
+    def test_gsettings_failure_does_not_prevent_startup(self):
+        with mock.patch.object(hotkey, "_provider", return_value=hotkey.PROVIDERS["cinnamon"]), \
+             mock.patch.object(hotkey, "_gsettings", side_effect=hotkey.subprocess.TimeoutExpired("gsettings", 2)):
+            self.assertEqual(hotkey.migrate_hotkey_logging(), [])
+
+    def test_gsettings_calls_have_a_timeout(self):
+        with mock.patch.object(hotkey.subprocess, "run", return_value=mock.Mock(stdout="''")) as run:
+            hotkey._gsettings("get", "schema", "key")
+        self.assertEqual(run.call_args.kwargs["timeout"], 2)
+
+    def test_stdout_shortcut_remains_explicit(self):
+        with mock.patch.object(hotkey.shutil, "which", return_value="/venv/bin/aparte"):
+            self.assertEqual(hotkey.toggle_command("stdout"), "/venv/bin/aparte toggle --target stdout")
+
+    def test_distinct_venvs_pointing_to_same_python_are_not_confused(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            current = root / "current/bin/python"
+            other = root / "other/bin/python"
+            for path in (current, other):
+                path.parent.mkdir(parents=True)
+                path.symlink_to(hotkey.sys.executable)
+            with mock.patch.object(hotkey.sys, "executable", str(current)):
+                self.assertIsNone(hotkey._private_command(f"{other} -m aparte toggle"))
+                self.assertEqual(hotkey._private_command(f"{current} -m aparte toggle"),
+                                 f"{current} -m aparte toggle --hotkey")
 
 
 if __name__ == "__main__":

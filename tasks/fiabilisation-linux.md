@@ -27,7 +27,7 @@ la préparation. Pas de capture réelle ni de mise en veille automatique du post
 - [ ] Validation du correctif sur le poste puis après veille (distincte des
       tests synthétiques ; à coordonner avec l'usage du micro).
 
-## Lot 2 — protection des données (en cours)
+## Lot 2 — protection des données (implémenté, non publié)
 
 Travail autorisé par Alexandre après installation de la version 1.2.0. Branche
 `fix/linux-donnees-fiables`, toujours dans `/tmp/aparte-linux-fiabilisation`.
@@ -37,14 +37,15 @@ L'application installée reste sur la release pendant la préparation.
       devenues 0600 après vérification du propriétaire et du type de fichier,
       sans lecture ni suppression de son contenu. Le raccourci 1.2.0 y écrit
       encore ; ce changement de permissions ne corrige pas à lui seul la collecte.
-- [ ] Journal technique privé et borné, sans texte dicté ; migration conservatrice
+- [x] Journal technique privé et borné, sans texte dicté ; migration conservatrice
       du raccourci connu sans déplacer sa touche ni toucher les autres commandes.
 - [x] Réglages : écriture atomique, fusion protégée entre processus, anciennes
       données préservées en cas d'erreur de sauvegarde.
 - [x] Historique : écritures/effacement coordonnés, fichier privé dès sa création,
       attente bornée pour ne pas suspendre la livraison de la dictée.
-- [ ] Tests isolés avec concurrence réelle, revue croisée, documentation et
-      commits à chaque jalon. Publication et installation du lot à suivre.
+- [x] Tests isolés avec concurrence réelle, revue croisée, documentation et
+      commits à chaque jalon.
+- [ ] Publication et installation du lot (1.2.0 reste installée).
 
 La protection Host des lectures HTTP et le déblocage de la transcription après
 erreur disque ont déjà été livrés dans la version 1.2.0.
@@ -58,6 +59,24 @@ les réglages et une demi-seconde pour l'historique ; ce dernier peut abandonner
 une opération pour préserver la livraison. Tests d'historique en `spawn`, sans
 fork d'un processus ayant déjà des threads HTTP. Les garanties ne couvrent ni
 les anciennes versions ni les outils externes qui ignorent ces verrous.
+Commit du jalon stockage : `cd96aef`.
+
+Jalon journal et intégration : **370 tests Linux verts**, log isolé
+`/tmp/aparte-audit-tests-90iiwxpj/unittest.log`. Les tests couvrent les sorties
+Python, natives, enfants et `atexit`, les pannes disque et les commandes
+personnalisées. La revue indépendante a reproduit une fuite après restauration
+des sorties, puis confirmé sa disparition avec le silence permanent du
+processus de raccourci. Les tests d'intégration vérifient aussi qu'une erreur
+d'historique n'empêche pas la copie et qu'un refus de sauvegarde est signalé par
+l'API sans perdre les réglages précédents.
+
+Lecture seule sur le poste : la commande Cinnamon du slot `custom3`, touche
+`<Super>space`, est reconnue ; la migration propose
+`/home/alexandre/murmur/.venv/bin/python -m aparte toggle --target paste --hotkey`.
+Aucune modification du raccourci ni ouverture du micro pendant ce contrôle.
+Le remplacement du wrapper ne prendra effet qu'au lancement de la future
+version ; l'ancien journal, maintenant privé, reste conservé. Aucun test réel
+après veille ni publication de ce lot n'est revendiqué.
 
 ## Lots suivants
 

@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import history, recovery
+from . import history, recovery, technical_log
 from .audio import RecordingError, play_beep, record_wav
 from .clipboard import copy_text, paste_text
 from .config import Settings, load_config, write_default_config
@@ -27,7 +27,7 @@ from .notify import _preview, notify
 from .polish import PolishOptions, build_polisher
 from .session import (
     get_active_session, start_toggle_recording, stop_toggle_recording,
-    toggle_session_transition, ToggleSessionError,
+    toggle_session_transition, ToggleSessionError, RecordingStartError,
 )
 from .transcription import build_transcriber
 
@@ -35,6 +35,10 @@ from .transcription import build_transcriber
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.command == "toggle" and args.hotkey:
+        if args.target == "stdout" or args.status:
+            parser.error("--hotkey cannot be combined with --target stdout or --status")
+        return _hotkey_main(args)
     settings = Settings.from_env()
 
     # Purge even when the desktop app is closed. A cleanup failure must not
@@ -116,6 +120,30 @@ def main(argv: list[str] | None = None) -> int:
     return 1
 
 
+def _hotkey_main(args: argparse.Namespace) -> int:
+    # Suppress even native libraries and subprocesses; redirecting print alone
+    # would still leak text from a backend or an insertion failure to a wrapper.
+    try:
+        technical_log.silence_process()
+    except (OSError, ValueError) as exc:
+        # Fail closed if the output cannot be silenced; do not start a capture.
+        technical_log.write_event("failed", error_type=type(exc).__name__)
+        return 1
+    technical_log.write_event("invoked")
+    try:
+        settings = Settings.from_env()
+        try:
+            recovery.sweep()
+        except (OSError, RuntimeError):
+            pass
+        toggle_dictation(args, settings)
+    except Exception as exc:
+        technical_log.write_event("failed", error_type=type(exc).__name__)
+        return 1
+    technical_log.write_event("completed")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="aparte")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -167,6 +195,7 @@ def build_parser() -> argparse.ArgumentParser:
     toggle.add_argument("--no-polish", action="store_true", help="Return raw transcription after stop.")
     toggle.add_argument("--keep-audio", action="store_true", help="Keep the temporary recording file.")
     toggle.add_argument("--status", action="store_true", help="Print whether a toggle recording is active.")
+    toggle.add_argument("--hotkey", action="store_true", help="Private shortcut mode: technical diagnostics only, no console output.")
     add_polish_args(toggle)
 
     recover = subparsers.add_parser("recover", help="Récupérer une dictée en échec (une heure).")
@@ -439,6 +468,8 @@ def toggle_dictation(args: argparse.Namespace, settings: Settings) -> str:
                     args.sample_rate, settings.microphone, settings.max_recording_seconds
                 )
             except RecordingError as exc:
+                if getattr(args, "hotkey", False) and isinstance(exc, RecordingStartError):
+                    technical_log.write_event("audio_start_failed", audio_diagnostic=str(exc))
                 # Un raccourci clavier n'a personne pour lire `stderr` — Cinnamon le
                 # jette. Sans cette notification, un démarrage refusé est un appui qui
                 # n'a rien fait : l'appui suivant, celui qui croit arrêter, ne trouve
@@ -541,9 +572,9 @@ def handle_install_autostart(args: argparse.Namespace) -> None:
 
 
 def handle_install_hotkey(args: argparse.Namespace) -> None:
-    from .hotkey import command_string, current_binding, detect_desktop, key_label, manual_instructions, aparte_command
+    from .hotkey import current_binding, detect_desktop, key_label, manual_instructions, toggle_command
 
-    command = command_string(aparte_command("toggle", "--target", args.target))
+    command = toggle_command(args.target)
     if args.remove:
         removed = remove_hotkey(args.name)
         print(f"removed {', '.join(removed)}" if removed else "no Aparté shortcut to remove")

@@ -157,6 +157,30 @@ phrases voisines.
   propre notification `critical`. L'historique s'écrit **avant** l'insertion :
   c'est le seul filet si le collage casse.
 
+### Raccourci : diagnostic technique sans texte dicté
+
+- Les commandes de raccourci utilisent `toggle --hotkey`. Ce mode est réservé
+  à un processus CLI autonome : `technical_log.silence_process()` redirige
+  définitivement stdout/stderr et les flux Python vers `/dev/null`. Ne pas
+  restaurer les descripteurs à la sortie de `main` : les hooks `atexit` et les
+  buffers natifs peuvent encore émettre du texte. Ne jamais appeler ce mode
+  dans le processus du serveur ; ses tests s'exécutent dans des sous-processus.
+- La CLI sans ce flag conserve ses sorties. Les options `--target stdout` et
+  `--status` sont incompatibles avec `--hotkey`.
+- `technical_log.write_event` n'accepte qu'une liste fermée d'événements et le
+  nom de la classe d'erreur. Aucun message d'exception libre, texte transcrit,
+  corps HTTP ou argument de collage. Seul le catch du démarrage d'enregistreur
+  transmet le diagnostic borné de `RecordingStartError`.
+- Le journal vit dans le dossier privé d'état `aparte/logs`, fichiers 0600 dès
+  création, deux fichiers de 128 Kio au plus. Le verrou non bloquant porte sur
+  le dossier stable ; une erreur ou contention peut perdre un événement, sans
+  empêcher la dictée. Les chemins sensibles refusent les liens symboliques.
+- Au démarrage du bureau, `migrate_hotkey_logging()` ne modifie que les commandes
+  historiques reconnues de l'installation courante, jamais la touche ou le nom.
+  Comparer les chemins d'interpréteur lexicalement : résoudre leurs symlinks
+  confondrait deux venv distincts qui pointent vers le même Python système.
+  La migration ne lit ni n'efface les anciens journaux.
+
 ### Réglages et historique : publier un fichier complet
 
 - `config.py` verrouille toute fusion, initialisation et migration avec un

@@ -15,11 +15,13 @@ captures. Unsupported desktops get printable manual instructions instead.
 from __future__ import annotations
 
 import os
+import ast
 import re
 import shlex
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 from dataclasses import dataclass
 
 DEFAULT_KEY = "<Super>space"
@@ -47,7 +49,66 @@ def command_string(command: list[str]) -> str:
 
 
 def toggle_command(target: str = "paste") -> str:
-    return command_string(aparte_command("toggle", "--target", target))
+    args = ["toggle", "--target", target]
+    if target != "stdout":
+        args.append("--hotkey")
+    return command_string(aparte_command(*args))
+
+
+def _private_command(command: str) -> str | None:
+    """Recognize only the old stock command and its known diagnostic wrapper.
+
+    Do not infer identity from a label or a path containing 'aparte'. A command
+    targeting another installation may not understand the new option yet.
+    """
+    try:
+        args = shlex.split(command)
+        if len(args) == 3 and args[0] in {"bash", "/bin/bash", "/usr/bin/bash"} and args[1] == "-c":
+            inner = shlex.split(args[2])
+            if inner[-3:] != [">>", "/tmp/aparte-toggle.log", "2>&1"]:
+                return None
+            args = inner[:-3]
+        if not args:
+            return None
+        executable = args[0] if os.path.isabs(args[0]) else shutil.which(args[0])
+        if not executable:
+            return None
+        current_python = os.path.abspath(sys.executable)
+        binary_dir = str(Path(current_python).parent)
+        if os.path.abspath(executable) == current_python and args[1:3] in (["-m", "aparte"], ["-m", "murmur"]):
+            tail = args[3:]
+        elif os.path.abspath(executable) in {f"{binary_dir}/aparte", f"{binary_dir}/murmur"}:
+            tail = args[1:]
+        else:
+            return None
+        if tail not in (["toggle"], ["toggle", "--target", "paste"], ["toggle", "--target", "copy"]):
+            return None
+        return command_string([*args, "--hotkey"])
+    except ValueError:
+        return None
+
+
+def migrate_hotkey_logging() -> list[str]:
+    """Best-effort upgrade of recognized commands; never keys, names or logs."""
+    changed = []
+    try:
+        provider = _provider()
+        if provider is None:
+            return changed
+        _, slots = _current_slots(provider)
+        for slot in slots:
+            try:
+                raw = _child_get(provider, slot, "command")
+                command = ast.literal_eval(raw)
+                replacement = _private_command(command) if isinstance(command, str) else None
+                if replacement is not None:
+                    _child_set(provider, slot, "command", _quote(replacement))
+                    changed.append(slot)
+            except (OSError, subprocess.SubprocessError, ValueError, SyntaxError):
+                continue
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return changed
 
 
 def install_command() -> str:
@@ -155,7 +216,7 @@ def _provider() -> GsettingsProvider | None:
 
 
 def _gsettings(*args: str) -> str:
-    result = subprocess.run(["gsettings", *args], check=True, capture_output=True, text=True)
+    result = subprocess.run(["gsettings", *args], check=True, capture_output=True, text=True, timeout=2)
     return result.stdout.strip()
 
 

@@ -17,6 +17,7 @@ from .audio import list_microphones
 from .clipboard import copy_text, paste_text
 from .config import Settings, get_env, load_config, positive_int, update_config
 from .diagnostics import collect_diagnostics
+from .hotkey import migrate_hotkey_logging
 from .polish import PolishOptions, build_polisher
 from .stale_server import reclaim_port
 from .transcription import build_transcriber
@@ -67,6 +68,9 @@ EDITABLE_FIELDS = (
 
 
 def run_desktop(host: str, port: int, settings: Settings, open_browser: bool = True) -> None:
+    # Upgrade recognized shortcuts to the private logging mode after an app
+    # update, without reinstalling a binding or moving the user's chosen key.
+    migrate_hotkey_logging()
     # The menu launcher and the autostart entry run the same command, and the
     # server is already up from login. Starting a second one would take a random
     # port and put a second icon in the tray, so hand over to the running one.

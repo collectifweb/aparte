@@ -313,7 +313,7 @@ Shortcuts → Custom Shortcuts → Add) with this command — use the full path 
 binary inside your venv:
 
 ```bash
-/path/to/aparte/.venv/bin/aparte toggle --target paste
+/path/to/aparte/.venv/bin/aparte toggle --target paste --hotkey
 ```
 
 Then assign a key (e.g. a spare key or `Super+Space`). Direct paste needs
@@ -337,6 +337,32 @@ There is no `config set` command. To change settings persistently, edit the JSON
 file printed by `aparte config path`, or use the **Settings** panel in `aparte
 desktop` — it writes to the same file and applies immediately, including to the
 global-hotkey flow.
+
+### Private shortcut diagnostics
+
+Installed shortcuts use `toggle --hotkey`. This standalone mode suppresses
+console output, including backend and child-process output, through process
+shutdown. Ordinary CLI commands and explicit `--target stdout` keep their usual
+output; `--hotkey` cannot be combined with `--target stdout` or `--status`.
+
+Technical events are stored in `~/.local/state/aparte/logs/hotkey.jsonl` (or under
+`XDG_STATE_HOME`). The directory is private (`0700`) and the files are private
+from creation (`0600`). The active log and one rotated copy are each limited to
+128 KiB. Only event names, UTC times and exception types are recorded. A recorder
+startup failure additionally keeps its bounded ALSA diagnostic, including the
+device and exit code. Dictated text and arbitrary exception messages are never
+passed to this logger. A storage failure or concurrent log write may drop a
+diagnostic event without stopping dictation.
+
+When the desktop app starts, recognized Cinnamon/GNOME shortcuts from the same
+installation are upgraded to this mode. Their name and chosen key stay intact.
+The known `bash -c '… >> /tmp/aparte-toggle.log 2>&1'` wrapper is replaced too;
+other wrappers, custom commands and other installations are left alone.
+`aparte install-hotkey --print` shows the command for manual setups.
+
+This migration does not read or delete old diagnostic logs. If an earlier
+custom wrapper stored dictations in `/tmp/aparte-toggle.log`, that existing
+file still needs separate handling; it is not part of the new rotation.
 
 ## Configuration
 

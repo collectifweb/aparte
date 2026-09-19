@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Global shortcuts use a private, size-limited technical log instead of console
+  output containing dictations. Recognized existing shortcuts from the same
+  installation are upgraded at desktop startup, preserving their key and name;
+  custom commands are left intact. Output remains suppressed through process
+  shutdown, including native buffers and exit handlers.
 - Settings updates, initialization and legacy migration coordinate concurrent
   writers and publish complete private files atomically. Write failures preserve
   the previous settings, and malformed JSON is reported without overwriting it.
