@@ -1,5 +1,12 @@
 # Fiabilisation Linux — septembre 2026
 
+> Mise à jour du 19 septembre : la [release GitHub v1.2.0](https://github.com/collectifweb/aparte/releases/tag/v1.2.0)
+> est publiée comme dernière version stable, tag `v1.2.0` sur `3f7e0da`.
+> La [CI Python 3.10–3.13](https://github.com/collectifweb/aparte/actions/runs/35455930154)
+> est verte. Le suivi actualisé est sur `main`, commit documentaire `e658ce7`.
+> Les mentions « pas encore publié » plus bas sont l'état du jalon précédent.
+> L'installation `~/murmur` n'a pas été modifiée par cette publication.
+
 Plan accepté par Alexandre le 19 septembre, après l'audit
 [`docs/audit-linux-2026-09-19.md`](../docs/audit-linux-2026-09-19.md).
 Un commit par étape validée, documentation tenue à jour au même moment.
