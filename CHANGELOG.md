@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — fiabilisation du portage macOS (septembre 2026)
+
+- Réglages et historique publiés atomiquement, avec coordination entre processus ;
+  les erreurs disque préservent la version précédente.
+- Corrections et raccourcis dictés traités comme texte littéral, y compris les
+  antislashs. Historique temporaire Mac privé, expirant après 24 h à la prochaine
+  lecture ou écriture (pas une promesse de suppression pendant l’arrêt).
+
+
 ### Added
 
 - **Experimental macOS groundwork (M0).** A platform-dispatch seam

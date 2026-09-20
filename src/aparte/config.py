@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+import fcntl
 import json
 import os
+import stat
+import tempfile
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from .platform_dispatch import is_macos
 
 
 APP_DIR_NAME = "aparte"
 CONFIG_FILE_NAME = "config.json"
+_LOCK_TIMEOUT_SECONDS = 5.0
 
 # The app was renamed from Murmur to Aparté. Existing installs still keep their
 # config under the old directory and may still export the old variable names.
@@ -169,16 +175,29 @@ def migrate_legacy_config() -> Path | None:
 
     Only acts on the default path, and only when nothing is there yet, so an
     explicit path (tests, ``APARTE_CONFIG``) is never a migration target.
-    Returns the new path when a file was moved.
+    Returns the new path when published. If retiring the old copy fails, the
+    new configuration remains usable and the old copy is left untouched.
     """
-    path = get_config_path()
-    if path.exists() or path != _config_home() / APP_DIR_NAME / CONFIG_FILE_NAME:
+    path = get_config_path().resolve()
+    if get_env("CONFIG") or path.exists() or not get_legacy_config_path().exists():
         return None
+    with _config_lock(path):
+        return _migrate_legacy_locked(path)
+
+
+def _migrate_legacy_locked(path: Path) -> Path | None:
+    """Called with the destination lock held, including by a first update."""
     legacy = get_legacy_config_path()
-    if not legacy.exists():
+    if path.exists() or not legacy.exists():
         return None
-    path.parent.mkdir(parents=True, exist_ok=True)
-    legacy.replace(path)
+    # Parse before publishing: a malformed legacy file stays available to repair.
+    _atomic_write(path, _read_config(legacy))
+    try:
+        legacy.unlink()
+    except OSError:
+        # Publication succeeded: a read-only legacy directory must not make the
+        # first launch fail. Never remove either copy before that point.
+        pass
     return path
 
 
@@ -186,25 +205,80 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     if path is None:
         migrate_legacy_config()
         path = get_config_path()
-    if not path.exists():
-        return DEFAULT_CONFIG.copy()
+    merged = DEFAULT_CONFIG.copy()
+    try:
+        merged.update(_read_config(path))
+    except FileNotFoundError:
+        pass
+    return merged
+
+
+def _read_config(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         data = json.load(handle)
     if not isinstance(data, dict):
         raise ValueError(f"Config file must contain a JSON object: {path}")
-    merged = DEFAULT_CONFIG.copy()
-    merged.update(data)
-    return merged
+    return data
+
+
+@contextmanager
+def _config_lock(path: Path) -> Iterator[None]:
+    """Stable inode shared by all writers; never unlink this lock file.
+
+    The caller resolves the path first so a symlink and its target share a lock.
+    Existing parent directories may be shared; only new ones get mode 0700.
+    """
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd = os.open(
+        path.with_name(path.name + ".lock"),
+        os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK,
+        0o600,
+    )
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                or info.st_nlink != 1):
+            raise PermissionError("Config lock must be a regular file owned by this user")
+        os.fchmod(fd, 0o600)
+        deadline = time.monotonic() + _LOCK_TIMEOUT_SECONDS
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("Configuration occupée : réessaie la sauvegarde.") from None
+                time.sleep(0.02)
+        yield
+    finally:
+        os.close(fd)
+
+
+def _atomic_write(path: Path, data: dict[str, Any]) -> None:
+    """Publish complete private JSON, preserving the old file on write failure."""
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", prefix=f".{path.name}-",
+            suffix=".tmp", dir=path.parent, delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            json.dump(data, handle, indent=2, ensure_ascii=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def write_default_config(path: Path | None = None, force: bool = False) -> Path:
-    path = path or get_config_path()
-    if path.exists() and not force:
-        raise FileExistsError(f"Config already exists: {path}")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        json.dump(DEFAULT_CONFIG, handle, indent=2, ensure_ascii=False)
-        handle.write("\n")
+    path = (path or get_config_path()).resolve()
+    with _config_lock(path):
+        if path.exists() and not force:
+            raise FileExistsError(f"Config already exists: {path}")
+        _atomic_write(path, DEFAULT_CONFIG)
     return path
 
 
@@ -214,20 +288,16 @@ def update_config(updates: dict[str, Any], path: Path | None = None) -> dict[str
     Returns the merged config that was written. Unknown keys are ignored so the
     settings form can only touch fields that the app understands.
     """
-    path = path or get_config_path()
-    data = DEFAULT_CONFIG.copy()
-    if path.exists():
-        with path.open("r", encoding="utf-8") as handle:
-            existing = json.load(handle)
-        if isinstance(existing, dict):
-            data.update(existing)
-    for key, value in updates.items():
-        if key in DEFAULT_CONFIG:
-            data[key] = value
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        json.dump(data, handle, indent=2, ensure_ascii=False)
-        handle.write("\n")
+    migrate = path is None and not get_env("CONFIG")
+    path = (path or get_config_path()).resolve()
+    with _config_lock(path):
+        if migrate:
+            _migrate_legacy_locked(path)
+        data = load_config(path)
+        for key, value in updates.items():
+            if key in DEFAULT_CONFIG:
+                data[key] = value
+        _atomic_write(path, data)
     return data
 
 

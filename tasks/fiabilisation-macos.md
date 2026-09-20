@@ -1,9 +1,9 @@
 # Fiabilisation et livraison macOS — plan proposé le 19 septembre 2026
 
-État : **proposition après audit, corrections non commencées**.
+État : **implémentation autorisée par Alexandre, en cours**.
 Source : [audit macOS](../docs/audit-macos-2026-09-19.md), branche
-`feat/portage-macos`, base `73b5317`. La demande présente autorise l'audit et
-ce plan, pas un déploiement ni un changement des installations utilisées.
+`feat/portage-macos`, base `73b5317`. Alexandre a demandé l’implémentation après l’audit. Le travail reste local,
+sans déploiement ni changement des installations utilisées.
 
 ## Objectif de sortie
 
@@ -32,7 +32,7 @@ Ne pas fabriquer de `.app` finale sur la seule réussite des mocks Linux.
 
 ## Lot 1 — reprendre le socle commun fiable
 
-- [ ] Créer une copie isolée hors Syncthing ; vérifier les remotes et comparer
+- [x] Créer une copie isolée hors Syncthing ; vérifier les remotes et comparer
       le vrai `main` récent, sans changer de branche dans l'arbre partagé.
 - [ ] Intégrer les correctifs communs de vocabulaire, Host HTTP, verrou
       d'inférence, configuration/historique et capture navigateur.
@@ -123,3 +123,17 @@ interactifs de permissions et de collage.
 installation reproductible, permissions conservées sur l'upgrade testé,
 limites de support visibles. Moteurs accélérés supplémentaires et refonte
 d'interface ne sont pas des prérequis sans mesure qui les justifie.
+
+## Jalons réalisés
+
+### Stockage et vocabulaire
+
+Reprise ciblée du socle Linux 1.3.0 dans `/tmp/aparte-macos-fiabilisation` :
+réglages atomiques coordonnés, historique privé coordonné et remplacements
+littéraux. Les réglages Mac `hotkey` et `beep` sont conservés. Sur Mac,
+l’historique temporaire expire après 24 heures à la prochaine lecture/écriture ;
+il reste un fichier sur disque lorsque l’application est arrêtée.
+
+Validation : 92 tests ciblés verts sous Linux, dont concurrence entre processus,
+pannes disque, migration et expiration Mac simulée. Aucune validation native
+ni modification de l’installation Linux utilisée.
