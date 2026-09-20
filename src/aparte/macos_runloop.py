@@ -42,12 +42,11 @@ from .macos_hotkey import (
     safe_hotkey_label,
 )
 from .macos_tray import build_tray
+from .config import update_config
 from .notify import notify
 
-# How long the teardown waits for the recorder's lock before giving up on a clean
-# discard. `_start_locked` holds that lock across the microphone permission dialog —
-# up to 30 s — and the main thread is quitting: freezing the menu bar for half a
-# minute is worse than leaving the OS to reclaim the device.
+# How long one quit attempt waits for the recorder lock. A permission dialog
+# may hold it for 30 s: refusal keeps the tray alive and retries on later ticks.
 SHUTDOWN_TIMEOUT = 2.0
 
 
@@ -131,7 +130,33 @@ def serve_macos(
         if failure is not None:
             _notify_register_failure(spec, failure)
 
-    def teardown() -> None:
+    def configure_hotkey(candidate: str) -> None:
+        # Called by the native menu on the AppKit thread, never by HTTP. Keep the
+        # existing registration until both the new one and its config are valid.
+        nonlocal handle, spec
+        from .macos_hotkey import normalize_hotkey
+        candidate = normalize_hotkey(candidate)
+        with gate:
+            if torn:
+                raise HotkeyError("Aparté is closing")
+            if candidate == spec and handle is not None:
+                return
+            replacement = register(candidate, dispatcher.trigger)
+            try:
+                update_config({"hotkey": candidate})
+            except Exception:
+                replacement.unregister()
+                raise
+            previous = handle
+            handle, spec = replacement, candidate
+            handler_cls.hotkey_state = HotkeyState(registered=True, configured_key=candidate)
+            if previous is not None:
+                previous.unregister()
+
+    if tray is not None and hasattr(tray, "set_hotkey_handler"):
+        tray.set_hotkey_handler(configure_hotkey)
+
+    def teardown() -> bool:
         """Ordered, idempotent, best-effort — the app's single way down.
 
         Three paths lead here and all three must work: the tray's "Quit" item (which
@@ -145,7 +170,15 @@ def serve_macos(
         nonlocal torn
         with gate:
             if torn:
-                return
+                return True
+            # The recorder first makes live audio recoverable and prevents late
+            # delivery. If it cannot, keep the application and its Quit menu alive.
+            try:
+                if controller.shutdown(timeout=SHUTDOWN_TIMEOUT) is False:
+                    return False
+            except Exception as exc:
+                print(f"aparte: cannot preserve recording before quitting: {exc}", file=sys.stderr)
+                return False
             torn = True
             # Announced here, not on the KeyboardInterrupt branch: that branch is the
             # one path macOS almost never takes, and the first native run of M6 had no
@@ -158,10 +191,9 @@ def serve_macos(
             if handle is not None:
                 # Drop the hotkey early so no trigger arrives mid-shutdown.
                 steps.append(("hotkey", handle.unregister))
-            # Drain the dispatcher (bounded join of any in-flight toggle) before the
-            # controller discards a live recording; the server goes last.
+            # shutdown has already disabled further controller toggles. Drain any
+            # dispatch in flight, then close the server.
             steps.append(("dispatcher", dispatcher.close))
-            steps.append(("recorder", lambda: controller.shutdown(timeout=SHUTDOWN_TIMEOUT)))
             steps.append(("server", server.shutdown))
             steps.append(("socket", server.server_close))
             for what, step in steps:
@@ -169,6 +201,7 @@ def serve_macos(
                     step()
                 except Exception as exc:
                     print(f"aparte: teardown step {what} failed: {exc}", file=sys.stderr)
+            return True
 
     try:
         run_loop(on_ready, teardown)

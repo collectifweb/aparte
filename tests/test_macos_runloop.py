@@ -151,8 +151,21 @@ class ServeMacosTest(unittest.TestCase):
         self._run(SimpleNamespace(hotkey="ctrl+opt+d"), register, press=True)
         self.assertEqual(
             self.order,
-            ["hotkey.unregister", "controller.shutdown", "server.shutdown", "server.server_close"],
+            ["controller.shutdown", "hotkey.unregister", "server.shutdown", "server.server_close"],
         )
+
+    def test_quit_refusal_keeps_tray_server_and_shortcut_alive_until_retry(self):
+        register = FakeRegister(handle=FakeHandle(self.order))
+        self.controller.shutdown = mock.Mock(side_effect=[False, True])
+        def run_loop(on_ready, on_quit):
+            on_ready()
+            self.assertFalse(on_quit())
+            self.assertEqual(self.order, [])
+            self.assertTrue(on_quit())
+        serve_macos(self.server, self.controller, SimpleNamespace(hotkey="ctrl+opt+d"),
+                    register=register, run_loop=run_loop)
+        self.assertEqual(self.order, ["hotkey.unregister", "server.shutdown", "server.server_close"])
+        self.assertEqual(self.controller.shutdown.call_count, 2)
 
     def test_a_registration_failure_keeps_serving_and_still_tears_down(self):
         # A reserved/taken combo raises HotkeyError; the server must survive and the
@@ -176,6 +189,53 @@ class ServeMacosTest(unittest.TestCase):
         self.assertIn("taken", state.error)
         self.notify.assert_called_once()
         self.assertEqual(self.notify.call_args.kwargs.get("urgency"), "critical")
+
+
+class NativeHotkeySettingsTest(unittest.TestCase):
+    def test_native_menu_registers_and_saves_before_releasing_old_shortcut(self):
+        order = []
+        server = FakeServer(order)
+        controller = FakeController(order)
+        old, new = mock.Mock(), mock.Mock()
+        register = mock.Mock(side_effect=[old, new])
+        class Tray:
+            def set_hotkey_handler(self, action):
+                self.action = action
+            def run_loop(self, ready, quit):
+                ready()
+                self.action("Alt+Ctrl+F")
+                self_case.assertEqual(server.RequestHandlerClass.hotkey_state.configured_key, "ctrl+opt+f")
+                old.unregister.assert_called_once()
+            def close(self):
+                pass
+        self_case = self
+        with mock.patch.object(macos_runloop, "update_config") as save:
+            serve_macos(server, controller, SimpleNamespace(hotkey="ctrl+opt+d"),
+                        register=register, tray_factory=lambda *args: Tray())
+        save.assert_called_once_with({"hotkey": "ctrl+opt+f"})
+        new.unregister.assert_called_once()  # orderly shutdown still owns new handle
+
+    def test_failed_settings_write_keeps_previous_shortcut_and_closes_replacement(self):
+        order = []
+        server = FakeServer(order)
+        old, new = mock.Mock(), mock.Mock()
+        class Tray:
+            def set_hotkey_handler(self, action):
+                self.action = action
+            def run_loop(self, ready, quit):
+                ready()
+                with self_case.assertRaises(OSError):
+                    self.action("ctrl+opt+f")
+                old.unregister.assert_not_called()
+                new.unregister.assert_called_once()
+                self_case.assertEqual(server.RequestHandlerClass.hotkey_state.configured_key, "ctrl+opt+d")
+            def close(self):
+                pass
+        self_case = self
+        with mock.patch.object(macos_runloop, "update_config", side_effect=OSError("disk full")):
+            serve_macos(server, FakeController(order), SimpleNamespace(hotkey="ctrl+opt+d"),
+                        register=mock.Mock(side_effect=[old, new]), tray_factory=lambda *args: Tray())
+        old.unregister.assert_called_once()
 
 
 class FakeTray:
@@ -245,7 +305,7 @@ class TrayRunLoopTest(unittest.TestCase):
         self._serve(FakeTray(self.order, quit_clicked=True))
         self.assertEqual(
             self.order,
-            ["tray.close", "hotkey.unregister", "controller.shutdown",
+            ["controller.shutdown", "tray.close", "hotkey.unregister",
              "server.shutdown", "server.server_close"],
         )
 

@@ -431,38 +431,10 @@ def _query_hotkey_state():
 
 
 def _whisper_model_cached(settings: Settings) -> bool:
-    """Best-effort: is the speech model already local, so the first transcription
-    needs no network? A filesystem path counts; otherwise look through the
-    HuggingFace hub cache (faster-whisper stores models as ``models--org--repo``).
-    Cross-platform, only informational — a false negative merely shows the honest
-    "will download once" message.
+    """Use the same offline, exact-model verdict as native preparation."""
+    from .model_download import model_cached
 
-    The cache location comes from :mod:`aparte.model_download`, which reads the
-    environment the way huggingface_hub itself does. Computing it a second time
-    here missed ``HF_HUB_CACHE``: someone who had moved their cache — no room on
-    the home partition is the usual reason — got "model not downloaded" from
-    ``doctor`` while the download band said it was ready. Two screens, one
-    machine, opposite answers."""
-    from pathlib import Path
-
-    from .model_download import cache_root
-
-    model = (settings.model or "").strip()
-    if not model:
-        return False
-    if Path(model).expanduser().exists():
-        return True
-    cache = cache_root()
-    if not cache.is_dir():
-        return False
-    needle = model.lower().replace("/", "--")
-    try:
-        return any(
-            entry.name.startswith("models--") and needle in entry.name.lower()
-            for entry in cache.iterdir()
-        )
-    except OSError:
-        return False
+    return model_cached(settings)
 
 
 def collect_diagnostics(settings: Settings, *, hotkey_state=None) -> dict:

@@ -3,8 +3,9 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Callable
 
-from . import history
+from . import history, recovery
 from .audio import RecordingError, play_beep, record_wav
 from .clipboard import copy_text, paste_text
 from .config import Settings, load_config, write_default_config
@@ -40,8 +41,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "record":
             path = record_wav(args.seconds, args.sample_rate, settings.recorder, settings.microphone)
-            output = transcribe_path(path, args, settings)
-            handle_output(output, args, settings)
+            _finish_capture(path, args, settings,
+                            lambda output: handle_output(output, args, settings))
             return 0
         if args.command == "dictate":
             output = dictate_once(args, settings)
@@ -50,6 +51,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "toggle":
             output = toggle_dictation(args, settings)
             print(output)
+            return 0
+        if args.command == "recover":
+            recovery.sweep()
+            if args.recovery_command == "list":
+                import json
+                print(json.dumps(recovery.entries(), ensure_ascii=False))
+            elif args.recovery_command == "delete":
+                recovery.discard(args.id)
+            else:
+                print(retry_recovery(args.id, args, settings))
             return 0
         if args.command == "last":
             text = history.last(settings.history_persist)
@@ -155,7 +166,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Where the recalled dictation should go.",
     )
 
-    desktop = subparsers.add_parser("desktop", help="Launch the local Linux desktop app.")
+    desktop = subparsers.add_parser("desktop", help="Launch the local desktop app.")
     desktop.add_argument("--host", default="127.0.0.1")
     desktop.add_argument("--port", type=int, default=8765)
     desktop.add_argument(
@@ -202,7 +213,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     install_hotkey = subparsers.add_parser(
         "install-hotkey",
-        help="Bind a global keyboard shortcut to toggle dictation (Cinnamon/GNOME).",
+        help="Configure the dictation shortcut (macOS or Cinnamon/GNOME).",
     )
     install_hotkey.add_argument(
         "--key",
@@ -227,6 +238,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="(macOS) Register the shortcut live and log each event, to check it works (M8).",
     )
 
+    recover = subparsers.add_parser("recover", help="Recover a failed dictation (one hour).")
+    commands = recover.add_subparsers(dest="recovery_command", required=True)
+    commands.add_parser("list", help="List recoverable captures without their content.")
+    retry = commands.add_parser("retry", help="Recover text without automatic insertion.")
+    retry.add_argument("id")
+    retry.add_argument("--target", choices=["stdout", "copy"], default="stdout")
+    retry.add_argument("--no-polish", action="store_true")
+    add_polish_args(retry)
+    delete = commands.add_parser("delete", help="Delete a retained capture.")
+    delete.add_argument("id")
     return parser
 
 
@@ -288,17 +309,56 @@ def dictate_once(args: argparse.Namespace, settings: Settings) -> str:
     if settings.beep:
         play_beep("stop")
     notify("⏳ Transcription…", "Aparté traite ta dictée.", urgency="low")
+    return _finish_dictation(path, args, settings)
+
+
+def _finish_dictation(path: Path, args: argparse.Namespace, settings: Settings) -> str:
+    transcribe_args = argparse.Namespace(
+        polish=not args.no_polish,
+        style=args.style or settings.default_style,
+        cleanup_level=args.cleanup_level or settings.cleanup_level,
+    )
+    return _finish_capture(path, transcribe_args, settings,
+                           lambda output: deliver_transcript(output, args.target, settings),
+                           keep_audio=args.keep_audio)
+
+
+def _finish_capture(path: Path, args: argparse.Namespace, settings: Settings,
+                    deliver: Callable[[str], object], *, keep_audio: bool = False) -> str:
+    """Release owned audio only after delivery or a successful recovery copy.
+
+    Capture the raw transcript separately, before polishing can fail. Imported
+    files passed to ``transcribe`` never enter this helper: they remain owned by
+    the caller and must never be removed.
+    """
+    raw = None
+    remove_audio = False
     try:
-        transcribe_args = argparse.Namespace(
-            polish=not args.no_polish,
-            style=args.style or settings.default_style,
-            cleanup_level=args.cleanup_level or settings.cleanup_level,
-        )
-        output = transcribe_path(path, transcribe_args, settings)
-        deliver_transcript(output, args.target, settings)
+        raw_args = argparse.Namespace(**{**vars(args), "polish": False})
+        raw = transcribe_path(path, raw_args, settings)
+        output = polish_text(raw, args, settings) if getattr(args, "polish", False) and raw.strip() else raw
+        deliver(output)
+        remove_audio = True
         return output
+    except Exception:
+        try:
+            identifier = recovery.save_failure(path, raw_text=raw)
+        except Exception:
+            detail = f"La récupération a échoué. L’audio original est conservé : {path}"
+        else:
+            remove_audio = True
+            detail = ("Audio récupérable pendant une heure. Ouvre Aparté pour réessayer "
+                      f"ou utilise « aparte recover retry {identifier} ».")
+        # A broken notification cannot hide the processing error or change the
+        # cleanup decision. CLI users also need a visible recovery instruction.
+        print(detail, file=sys.stderr)
+        try:
+            notify("⚠️ Dictée à récupérer", detail, urgency="critical")
+        except Exception:
+            pass
+        raise
     finally:
-        if not args.keep_audio:
+        if remove_audio and not keep_audio:
             path.unlink(missing_ok=True)
 
 
@@ -356,6 +416,21 @@ def deliver_transcript(output: str, target: str, settings: Settings) -> bool:
     history.record(output, settings.history_persist)
     _deliver(output, target, settings)
     return True
+
+
+def retry_recovery(identifier: str, args: argparse.Namespace, settings: Settings) -> str:
+    """Keep the capture until explicit deletion/expiry, even after printing text."""
+    with recovery.claim(identifier) as item:
+        raw = item.raw_text
+        if raw is None:
+            raw = transcribe_path(item.audio_path, argparse.Namespace(polish=False), settings)
+            recovery.update_raw(item, raw)
+        output = raw if args.no_polish or not raw.strip() else polish_text(raw, args, settings)
+        if output.strip():
+            history.record(output, settings.history_persist)
+            if args.target == "copy":
+                copy_text(output)
+        return output
 
 
 def polish_for_delivery(transcript: str, settings: Settings) -> str:
@@ -419,18 +494,7 @@ def toggle_dictation(args: argparse.Namespace, settings: Settings) -> str:
     if settings.beep:
         play_beep("stop")
     notify("⏳ Transcription…", "Aparté traite ta dictée.", urgency="low")
-    try:
-        transcribe_args = argparse.Namespace(
-            polish=not args.no_polish,
-            style=args.style or settings.default_style,
-            cleanup_level=args.cleanup_level or settings.cleanup_level,
-        )
-        output = transcribe_path(session.audio_path, transcribe_args, settings)
-        deliver_transcript(output, args.target, settings)
-        return output
-    finally:
-        if not args.keep_audio:
-            session.audio_path.unlink(missing_ok=True)
+    return _finish_dictation(session.audio_path, args, settings)
 
 
 def handle_output(output: str, args: argparse.Namespace, settings: Settings) -> None:
@@ -610,10 +674,7 @@ def _install_hotkey_macos(args: argparse.Namespace) -> None:
             return
         print("Active only while Aparté is running (it registers the shortcut at startup).")
         print("Set or clear it: aparte install-hotkey --key '<combo>'  /  --remove.")
-        print(
-            "For a shortcut that works without Aparté running, bind 'aparte toggle' with "
-            "skhd (https://github.com/koekeishiya/skhd). Not integrated."
-        )
+        print("Keep Aparté open for the shortcut; use its menu to configure it.")
         return
 
     combo = args.key or DEFAULT_HOTKEY

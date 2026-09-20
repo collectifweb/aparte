@@ -84,9 +84,9 @@ class ShortcutLineTest(unittest.TestCase):
     def test_a_live_registration_shows_the_combination(self):
         self.assertEqual(view(IDLE).shortcut, "Raccourci : ⌃⌥D")
 
-    def test_no_shortcut_configured_names_the_command_that_creates_one(self):
+    def test_no_shortcut_configured_points_to_the_native_menu(self):
         line = view(IDLE, hotkey=HotkeyState(configured_key=None)).shortcut
-        self.assertEqual(line, "Aucun raccourci — aparte install-hotkey")
+        self.assertEqual(line, "Choisis ton raccourci dans ce menu")
 
     def test_a_refused_combination_is_not_reported_as_working(self):
         # "configured" is a half-truth once Carbon has refused: registered is the
@@ -99,14 +99,14 @@ class ShortcutLineTest(unittest.TestCase):
         self.assertEqual(view(IDLE, hotkey=broken).shortcut, "Raccourci : ctrl+nope")
 
     def test_no_published_state_reads_as_no_shortcut(self):
-        self.assertEqual(view(IDLE, hotkey=None).shortcut, "Aucun raccourci — aparte install-hotkey")
+        self.assertEqual(view(IDLE, hotkey=None).shortcut, "Choisis ton raccourci dans ce menu")
 
     def test_english_shortcut_lines(self):
         english = macos_tray.LABELS["en"]
         self.assertEqual(view(IDLE, texts=english).shortcut, "Shortcut: ⌃⌥D")
         self.assertEqual(
             view(IDLE, hotkey=HotkeyState(configured_key=None), texts=english).shortcut,
-            "No shortcut — aparte install-hotkey",
+            "Choose your shortcut in this menu",
         )
 
 
@@ -199,6 +199,7 @@ class TrayBindingTest(unittest.TestCase):
 
     def setUp(self):
         mock.patch.object(macos_tray, "_set_accessory_policy").start()
+        mock.patch.object(macos_tray, "language", return_value="fr").start()
         self.addCleanup(mock.patch.stopall)
 
 
@@ -221,6 +222,62 @@ class MenuStructureTest(TrayBindingTest):
         quits[0].callback(None)
         self.assertEqual(order, ["teardown"])
         self.assertEqual(rumps.quit_calls, 1)
+
+    def test_quit_waits_for_preservation_before_termination(self):
+        rumps = FakeRumps()
+        tray = build(rumps)
+        attempts = mock.Mock(side_effect=[False, True])
+        tray.run_loop(lambda: None, attempts)
+        tray._quit()
+        self.assertEqual(rumps.quit_calls, 0)
+        self.assertTrue(tray._quit_pending)
+        self.assertEqual(tray._quit_item.title, tray._texts["quit_wait"])
+        tray._tick()
+        self.assertEqual(rumps.quit_calls, 1)
+
+    def test_shortcut_dialog_only_applies_confirmed_valid_choice(self):
+        rumps = FakeRumps()
+        rumps.Window = mock.Mock()
+        rumps.alert = mock.Mock()
+        tray = build(rumps)
+        configure = mock.Mock()
+        tray.set_hotkey_handler(configure)
+        response = rumps.Window.return_value.run.return_value
+        response.clicked, response.text = False, "cmd+shift+d"
+        tray._configure_hotkey()
+        configure.assert_not_called()
+        response.clicked, response.text = True, "nonsense"
+        tray._configure_hotkey()
+        configure.assert_not_called()
+        self.assertEqual(rumps.alert.call_args.kwargs["title"], tray._texts["shortcut_problem"])
+        response.text = "Alt+Ctrl+D"
+        tray._configure_hotkey()
+        configure.assert_called_once_with("ctrl+opt+d")
+        self.assertIn("Appuie pour essayer", rumps.alert.call_args.kwargs["message"])
+
+    def test_model_preparation_is_an_explicit_native_action(self):
+        tray = build(FakeRumps())
+        threads = []
+        class ImmediateThread:
+            def __init__(self, target, **kwargs):
+                self.target = target
+                threads.append(self)
+            def start(self):
+                self.target()
+        with mock.patch.object(macos_tray.threading, "Thread", ImmediateThread):
+            with mock.patch("aparte.model_download.ensure_ready") as ensure:
+                with mock.patch.object(macos_tray.Settings, "from_env", return_value="settings"):
+                    with mock.patch.object(macos_tray.webbrowser, "open"):
+                        ensure.assert_not_called()
+                        tray._prepare_model()
+                ensure.assert_called_once_with("settings")
+
+    def test_copy_last_rereads_history_setting(self):
+        tray = build(FakeRumps())
+        with mock.patch.object(macos_tray.Settings, "from_env", return_value=mock.Mock(history_persist=True)):
+            with mock.patch.object(macos_tray.history, "last", return_value=None) as last:
+                tray._copy_last()
+        last.assert_called_once_with(True)
 
     def test_the_two_state_lines_are_not_clickable(self):
         rumps = FakeRumps()
@@ -586,6 +643,11 @@ class IconAssetTest(unittest.TestCase):
 
 
 class LanguageTest(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch("aparte.macos_locale.sys.platform", "linux")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_the_menu_follows_the_desktop_language(self):
         with mock.patch.dict("os.environ", {"LC_ALL": "", "LC_MESSAGES": "", "LANG": "fr_CA.UTF-8"}):
             self.assertEqual(labels()["quit"], "Quitter")
@@ -595,6 +657,14 @@ class LanguageTest(unittest.TestCase):
     def test_no_language_at_all_falls_back_to_english(self):
         with mock.patch.dict("os.environ", {"LC_ALL": "", "LC_MESSAGES": "", "LANG": ""}):
             self.assertEqual(labels()["quit"], "Quit")
+
+    def test_finder_language_comes_from_foundation_without_shell_locale(self):
+        foundation = mock.Mock()
+        foundation.NSLocale.preferredLanguages.return_value = ["fr-CA", "en-CA"]
+        with mock.patch("aparte.macos_locale.sys.platform", "darwin"):
+            with mock.patch.dict("sys.modules", {"Foundation": foundation}):
+                with mock.patch.dict("os.environ", {"LC_ALL": "", "LC_MESSAGES": "", "LANG": ""}):
+                    self.assertEqual(labels()["quit"], "Quitter")
 
     def test_both_languages_carry_exactly_the_same_keys(self):
         # A label added on one side only is a menu item that reads in the wrong

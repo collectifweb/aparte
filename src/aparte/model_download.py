@@ -1,115 +1,176 @@
-"""Fetch the speech model at launch, and let the interface watch it happen.
+"""Prepare speech models from native actions; HTTP only observes this state.
 
-The model (~500 MB) has always downloaded itself on the first transcription. The
-problem was never the download, it was the silence: a fresh install pressed the
-shortcut and waited minutes with nothing on screen, then got its dictation. On a
-Mac, where the install is meant to be "open it, grant two permissions", that
-silence reads as a broken application.
-
-So Aparté fetches it **itself**, on a thread, as the server comes up, and
-publishes what it knows. Two rules hold the design:
-
-- **The application triggers, never an HTTP route.** Same reason as the recorder
-  and the menu-bar icon on Darwin: a route that started a 500 MB download would
-  be a system effect reachable from a browser. The interface only observes, over
-  a read-only route.
-- **Nothing is invented.** The progress is what the disk actually holds, not a
-  callback the library does not promise. When the expected size is unknown the
-  state says so instead of showing a percentage that means nothing.
-
-The fact lives in this module's memory, local to the process that downloads —
-like ``macos_tray._BUILD_OUTCOME``. A ``doctor`` running beside it sees nothing
-here; it keeps reading ``model_ready`` off the cache, which is the persistent
-truth.
+A directory is not a downloaded model. Diagnostics and the recorder share the
+same conservative check of the exact repository and its default revision.
 """
-
 from __future__ import annotations
 
+import importlib.util
 import os
 import threading
 from pathlib import Path
 
 from .config import Settings
 
-# faster-whisper resolves a plain size to this organisation on the Hub. A name
-# that already carries a slash is a repository id and passes through untouched.
-_FASTER_WHISPER_REPO = "Systran/faster-whisper-{size}"
-
-# The backends whose model comes from the Hub. "auto" belongs here: it tries
-# faster-whisper first, which is what a default install ends up running.
-_HUB_BACKENDS = frozenset({"auto", "faster-whisper"})
-
+# Fallback for diagnostics without faster-whisper installed. Prefer its installed
+# resolver so preparation and inference follow the same version's aliases.
+_MODEL_REPOS = {
+    **{size: f"Systran/faster-whisper-{size}" for size in (
+        "tiny", "tiny.en", "base", "base.en", "small", "small.en", "medium",
+        "medium.en", "large-v1", "large-v2", "large-v3",
+    )},
+    "large": "Systran/faster-whisper-large-v3",
+    **{size: f"Systran/faster-{size.replace('distil-', 'distil-whisper-')}" for size in (
+        "distil-large-v2", "distil-medium.en", "distil-small.en", "distil-large-v3",
+    )},
+    "distil-large-v3.5": "distil-whisper/distil-large-v3.5-ct2",
+    "turbo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+    "large-v3-turbo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+}
+_ALLOW_PATTERNS = ["config.json", "preprocessor_config.json", "model.bin", "tokenizer.json", "vocabulary.*"]
 READY = "ready"
 DOWNLOADING = "downloading"
 ERROR = "error"
-# We cannot fetch it ahead of time — another backend, a model given as a path, or
-# no huggingface_hub. Not a failure: the first transcription downloads it the way
-# it always has.
 UNAVAILABLE = "unavailable"
-
 _lock = threading.Lock()
 _state: dict | None = None
 _thread: threading.Thread | None = None
 
 
+def _has_module(name: str) -> bool:
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def effective_backend(settings: Settings) -> str:
+    """Match auto's first installed engine, without loading any weights."""
+    if settings.transcriber != "auto":
+        return settings.transcriber
+    if _has_module("faster_whisper"):
+        return "faster-whisper"
+    if _has_module("whisper"):
+        return "openai-whisper"
+    return "whisper.cpp"
+
+
+def _local_path(model: str) -> bool:
+    return Path(model).expanduser().exists() or model.startswith(("/", "./", "../", "~"))
+
+
 def repo_id(model: str) -> str | None:
-    """The Hub repository a model name stands for, or None when there is nothing
-    to fetch — an empty name, or a directory the user points at directly."""
     model = (model or "").strip()
-    if not model:
-        return None
-    if Path(model).expanduser().exists():
+    if not model or _local_path(model):
         return None
     if "/" in model:
         return model
-    return _FASTER_WHISPER_REPO.format(size=model)
+    try:
+        from faster_whisper.utils import _MODELS
+        models = _MODELS
+    except Exception:
+        # Importing utils executes faster-whisper's package initializer, which
+        # can fail in a native dependency (for example an incompatible
+        # ctranslate2 dylib). Alias lookup must not prevent the desktop from
+        # starting and showing diagnostics. Inference will report engine errors.
+        models = _MODEL_REPOS
+    return models.get(model)
 
 
 def cache_root() -> Path:
-    """Where huggingface_hub keeps its repositories. Read from the environment
-    the same way the library does, so a user who moved their cache is followed."""
-    hub = os.getenv("HF_HUB_CACHE")
+    hub = os.getenv("HF_HUB_CACHE") or os.getenv("HUGGINGFACE_HUB_CACHE")
     if hub:
-        return Path(hub).expanduser()
+        return Path(os.path.expandvars(hub)).expanduser()
     home = os.getenv("HF_HOME")
     if home:
-        return Path(home).expanduser() / "hub"
-    return Path.home() / ".cache" / "huggingface" / "hub"
+        return Path(os.path.expandvars(home)).expanduser() / "hub"
+    return Path(os.getenv("XDG_CACHE_HOME") or Path.home() / ".cache").expanduser() / "huggingface" / "hub"
 
 
 def repo_dir(repo: str) -> Path:
     return cache_root() / ("models--" + repo.replace("/", "--"))
 
 
-def bytes_on_disk(repo: str) -> int:
-    """What the cache already holds for this repository.
-
-    Sum **every** blob, not only the ``.incomplete`` ones: huggingface_hub
-    downloads into ``<sha>.incomplete`` and renames on completion, so counting
-    only the incomplete files would make the progress fall back to nothing each
-    time a file finished."""
-    blobs = repo_dir(repo) / "blobs"
+def _nonempty(path: Path) -> bool:
     try:
-        return sum(f.stat().st_size for f in blobs.iterdir() if f.is_file())
+        return path.is_file() and path.stat().st_size > 0
+    except OSError:
+        return False
+
+
+def _complete_model(path: Path) -> bool:
+    """Required files only; model loading still validates their contents.
+
+    A dangling cache symlink and a zero-byte interrupted file both fail. Include
+    the tokenizer so an otherwise cached model cannot fetch it during dictation.
+    """
+    return all(_nonempty(path / name) for name in ("config.json", "model.bin", "tokenizer.json")) and any(
+        _nonempty(path / name) for name in ("vocabulary.json", "vocabulary.txt")
+    )
+
+
+def _cached_repo_path(repo: str) -> Path | None:
+    root = repo_dir(repo)
+    try:
+        revision = (root / "refs" / "main").read_text().strip()
+    except OSError:
+        return None
+    if not revision or Path(revision).name != revision or revision in (".", ".."):
+        return None
+    path = root / "snapshots" / revision
+    return path.absolute() if _complete_model(path) else None
+
+
+def _cached_repo(repo: str) -> bool:
+    return _cached_repo_path(repo) is not None
+
+
+def cached_model_path(model: str) -> Path | None:
+    """Resolve a complete faster-whisper model locally, without any Hub call.
+
+    Inference receives this directory instead of a Hub alias, preventing its
+    constructor from starting another model download through an HTTP request.
+    """
+    model = (model or "").strip()
+    if not model:
+        return None
+    if _local_path(model):
+        path = Path(model).expanduser()
+        return path.absolute() if _complete_model(path) else None
+    repo = repo_id(model)
+    return _cached_repo_path(repo) if repo else None
+
+
+def model_cached(settings: Settings) -> bool:
+    """Offline, backend-specific evidence. Never inspect a similarly named repo."""
+    model = (settings.model or "").strip()
+    if not model:
+        return False
+    backend = effective_backend(settings)
+    path = Path(model).expanduser()
+    if backend == "faster-whisper":
+        return cached_model_path(model) is not None
+    if backend == "whisper.cpp":
+        return _nonempty(path)
+    if backend == "openai-whisper":
+        # Whisper writes a named .pt directly, including partial downloads. Only
+        # its checksum proves completeness; do not hash gigabytes on a doctor
+        # HTTP request. Leave named checkpoints unconfirmed until engine loading.
+        return _local_path(model) and _nonempty(path)
+    return backend == "text"
+
+
+def bytes_on_disk(repo: str) -> int:
+    try:
+        return sum(f.stat().st_size for f in (repo_dir(repo) / "blobs").iterdir() if f.is_file())
     except OSError:
         return 0
 
 
 def expected_bytes(repo: str) -> int | None:
-    """The repository's total size, asked of the Hub. None when it cannot be
-    known — offline, an old huggingface_hub, a repository without file metadata.
-    The caller must then show an honest indeterminate state."""
-    try:
-        from huggingface_hub import HfApi
-    except ImportError:
-        return None
-    try:
-        info = HfApi().model_info(repo, files_metadata=True)
-    except Exception:
-        return None
-    sizes = [getattr(s, "size", None) for s in getattr(info, "siblings", None) or []]
-    known = [s for s in sizes if isinstance(s, int) and s > 0]
-    return sum(known) or None
+    # Several revisions can coexist in blobs. A repository total cannot safely
+    # be compared with their sum; retain honest byte progress without a percent.
+    return None
 
 
 def _set(**fields) -> None:
@@ -119,8 +180,6 @@ def _set(**fields) -> None:
 
 
 def snapshot() -> dict | None:
-    """What the interface may observe, or None when this process never started a
-    download — the route 404s then, as the recorder and tray routes do."""
     with _lock:
         return dict(_state) if _state is not None else None
 
@@ -129,55 +188,74 @@ def _download(repo: str) -> None:
     try:
         from huggingface_hub import snapshot_download
     except ImportError:
-        _set(state=UNAVAILABLE, reason="huggingface_hub")
+        _set(state=ERROR, reason="huggingface_hub", error="huggingface_hub is unavailable")
         return
-    _set(state=DOWNLOADING, total_bytes=expected_bytes(repo))
     try:
-        snapshot_download(repo)
-    except Exception as exc:  # network, proxy, checksum, disk
+        snapshot_download(repo, cache_dir=str(cache_root()), allow_patterns=_ALLOW_PATTERNS)
+        if not _cached_repo(repo):
+            raise RuntimeError("Downloaded model is incomplete")
+    except Exception as exc:
         _set(state=ERROR, error=f"{type(exc).__name__}: {exc}")
         return
-    _set(state=READY, downloaded_bytes=bytes_on_disk(repo))
+    _set(state=READY, downloaded_bytes=bytes_on_disk(repo), error=None)
 
 
 def start(settings: Settings) -> None:
-    """Begin fetching the model if it is missing. Returns at once; the download
-    runs on a daemon thread so it can never hold up the shutdown. Calling twice
-    does nothing the second time."""
-    global _thread
-    if settings.transcriber not in _HUB_BACKENDS:
-        # openai-whisper and whisper.cpp keep their weights elsewhere; fetching a
-        # faster-whisper repository for them would download 500 MB nobody uses.
-        _set(state=UNAVAILABLE, reason="backend", model=settings.model)
-        return
-    repo = repo_id(settings.model)
-    if repo is None:
-        _set(state=UNAVAILABLE, reason="local-model", model=settings.model)
-        return
+    """Native-only start/retry; reserve and launch the worker under one lock.
+
+    A second gesture cannot create a second download, including in the interval
+    before Thread.start(). A changed model waits for the current download to end.
+    """
+    global _thread, _state
+    backend = effective_backend(settings)
+    model = settings.model
     with _lock:
         if _thread is not None and _thread.is_alive():
             return
-    if (repo_dir(repo) / "snapshots").is_dir():
-        _set(state=READY, model=settings.model, repo=repo)
-        return
-    _set(state=DOWNLOADING, model=settings.model, repo=repo, total_bytes=None, error=None)
-    thread = threading.Thread(target=_download, args=(repo,), daemon=True)
-    with _lock:
-        _thread = thread
-    thread.start()
+        base = {"model": model, "backend": backend, "error": None, "total_bytes": None}
+        if model_cached(settings):
+            _state = {**base, "state": READY}
+            return
+        if backend != "faster-whisper":
+            _state = {**base, "state": UNAVAILABLE, "reason": "backend"}
+            return
+        repo = repo_id(model)
+        if repo is None:
+            _state = {**base, "state": ERROR, "reason": "local-model" if _local_path(model) else "unknown-model",
+                      "error": "The selected model is missing or incomplete"}
+            return
+        _state = {**base, "state": DOWNLOADING, "repo": repo}
+        _thread = threading.Thread(target=_download, args=(repo,), daemon=True)
+        try:
+            _thread.start()
+        except Exception as exc:
+            _thread = None
+            _state = {**_state, "state": ERROR, "error": f"{type(exc).__name__}: {exc}"}
 
 
-def progress() -> dict | None:
-    """The state, with the byte count refreshed from disk. Read on each request
-    rather than tracked as the download runs: the disk is the one place that
-    cannot be wrong."""
+def progress(settings: Settings | None = None) -> dict | None:
+    """Read-only, including when settings changed: never fetch from HTTP."""
     state = snapshot()
     if state is None:
         return None
-    repo = state.get("repo")
-    if repo and state.get("state") == DOWNLOADING:
-        state["downloaded_bytes"] = bytes_on_disk(repo)
+    if settings is not None:
+        backend = effective_backend(settings)
+        if state.get("model") != settings.model or state.get("backend") != backend:
+            ready = model_cached(settings)
+            return {"state": READY if ready else UNAVAILABLE, "model": settings.model,
+                    "backend": backend, "reason": "configuration-changed", "total_bytes": None}
+    if state and state.get("repo") and state.get("state") == DOWNLOADING:
+        state["downloaded_bytes"] = bytes_on_disk(state["repo"])
     return state
+
+
+def ensure_ready(settings: Settings) -> bool:
+    """A native gesture may retry; callers must leave the microphone closed."""
+    start(settings)
+    state = progress(settings)
+    return bool(state and (state["state"] == READY or (
+        state["state"] == UNAVAILABLE and effective_backend(settings) != "faster-whisper"
+    )))
 
 
 def reset_for_tests() -> None:

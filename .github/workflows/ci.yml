@@ -2,13 +2,18 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/portage-macos]
   pull_request:
-    branches: [main]
+    branches: [main, feat/portage-macos]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -16,22 +21,39 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-
-      - name: Install (core + dev only)
-        # Deliberately no whisper/recording/cuda extras: the suite must pass with
-        # only the base dependencies, proving the app degrades gracefully when
-        # optional backends are absent.
+      - name: Install core and development dependencies
+        # No optional engines here: Linux must still degrade gracefully.
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
-
       - name: Byte-compile
-        run: python -m compileall -q src
+        run: python -m compileall -q src scripts
+      - name: Run complete suite with private data and caches
+        run: python scripts/run-tests.py
 
-      - name: Run tests
-        run: python -m unittest discover -s tests -v
+  macos:
+    # Native Apple Silicon; this job does not claim interactive TCC validation.
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install real native and speech dependencies
+        run: |
+          brew install portaudio
+          python -m pip install --upgrade pip
+          python -m pip install ".[whisper,recording,macos,dev]"
+          python -m pip check
+      - name: Check installed package and native imports without microphone access
+        env:
+          HF_HUB_OFFLINE: "1"
+          HF_HUB_DISABLE_TELEMETRY: "1"
+        run: python scripts/check-macos-package.py
+      - name: Run isolated macOS suite including native clang and codesign
+        run: python scripts/run-tests.py --suite macos

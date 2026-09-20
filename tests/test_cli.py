@@ -39,6 +39,14 @@ class StopDictationTest(unittest.TestCase):
     def _run(self, transcript: str, target: str = "paste", paste_raises: Exception | None = None):
         recording = mock.Mock(audio_path=Path("/tmp/aparte-test.wav"))
         manager = mock.Mock()
+        # These are delivery-order tests. Actual audio retention is exercised
+        # with private synthetic files in test_cli_recovery.
+        polish = mock.patch.object(cli, "polish_text", side_effect=lambda text, *_: text)
+        recovery = mock.patch.object(cli.recovery, "save_failure", return_value="0" * 32)
+        polish.start()
+        recovery.start()
+        self.addCleanup(polish.stop)
+        self.addCleanup(recovery.stop)
         with mock.patch.object(cli, "get_active_session", return_value=recording):
             with mock.patch.object(cli, "stop_toggle_recording", return_value=recording):
                 with mock.patch.object(cli, "transcribe_path", return_value=transcript):
@@ -88,7 +96,8 @@ class StopDictationTest(unittest.TestCase):
         manager, error = self._run("Bonjour", paste_raises=RuntimeError("xdotool absent"))
         self.assertIsInstance(error, RuntimeError)
         manager.record.assert_called_once_with("Bonjour", False)
-        failure = manager.notify.call_args
+        failure = next(call for call in manager.notify.call_args_list
+                       if "non insérée" in call.args[0])
         self.assertIn("non insérée", failure.args[0])
         self.assertIn("aparte last", failure.args[1])
         self.assertEqual(failure.kwargs["urgency"], "critical")

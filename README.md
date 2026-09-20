@@ -14,12 +14,13 @@
 [![CI](https://github.com/collectifweb/aparte/actions/workflows/ci.yml/badge.svg)](https://github.com/collectifweb/aparte/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Aparté is a local-first dictation app for Linux. It can run as a CLI, as a command bound to a global keyboard shortcut, or as a lightweight local desktop web app.
+Aparté is a local-first dictation app for Linux, with a macOS prototype under
+active development. It can run as a CLI, through a global keyboard shortcut,
+or through a lightweight local desktop web app. See [the macOS setup](#running-on-macos-development-prototype) for the port’s current limits.
 
-Nothing leaves your machine: Whisper runs locally, formatting runs locally, and
-there is no account, no API key, and — apart from a one-time Whisper model
-download the first time you transcribe, if it isn't already cached — no network
-call. Your audio and dictated text never leave the machine. It is also the only
+Your audio and dictated text stay on your machine: Whisper and formatting run
+locally, with no account or API key. Downloading speech models and explicitly
+checking for or installing updates use the network. It is also the only
 dictation app that takes **French typography** seriously — non-breaking spaces
 before `? ! ; :`, real `« »` quotes, curly apostrophes.
 
@@ -76,6 +77,8 @@ with the global shortcut rather than only inside the app, and capturing a
 correction straight from the editor instead of retyping it in Settings.
 
 ## Install
+
+The following two paths are for Linux. macOS uses the [development setup below](#running-on-macos-development-prototype).
 
 Two ways to install. The script is the easy path; the manual venv install gives you more control.
 
@@ -172,39 +175,76 @@ Pull and re-run the install script as above; the rename is handled for you:
   re-run `aparte install-desktop` / `aparte install-autostart`, so you don't end
   up with two menu entries or two servers competing at login.
 
-### Running on macOS (experimental, browser-only preview)
+### Running on macOS (development prototype)
 
-Aparté is **Linux-first**. macOS is an experimental companion, not a supported
-target yet. What already works today, with no new code, is the **browser
-dictation** path through the local web app:
+The macOS port includes native microphone capture, a global shortcut, insertion
+into the focused application, notifications and a menu-bar icon. Browser
+recording is also available. This is still a development prototype: installation
+on a clean account, the supported OS/architecture matrix and permission
+continuity across upgrades have **not yet been validated for distribution**.
+Historical interactive trials used Intel/Big Sur; they do not establish support
+for other Macs. Current evidence and remaining work are tracked in the
+[macOS reliability plan](tasks/fiabilisation-macos.md).
+
+For development, use the port branch and an existing Python 3.10+ installation.
+Homebrew is used here for PortAudio; no Aparté formula or tap is published by this
+branch:
 
 ```bash
-git clone https://github.com/collectifweb/aparte.git
+brew install portaudio
+git clone --branch feat/portage-macos https://github.com/collectifweb/aparte.git
 cd aparte
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -e ".[whisper]"   # transcription backend; a bare install can't transcribe
-aparte desktop                          # serves http://127.0.0.1:8765
+python -m pip install -e ".[whisper,recording,macos]"
+aparte doctor
+aparte desktop
 ```
 
-On that page you can record (the **browser** captures the microphone via
-`getUserMedia` and sends the audio to the local server), transcribe locally,
-polish locally, and **copy** the result from the browser clipboard with a click.
+Keep Aparté running. In its menu-bar menu, choose **Set up the shortcut…**
+(**Configurer le raccourci…**) and enter a combination such as `ctrl+opt+d`.
+The change takes effect immediately; try an actual press, since macOS accepting
+a registration does not prove another application will not intercept the key.
+A second press stops recording, transcribes, formats and inserts. CLI setup is
+also available with `aparte install-hotkey --key 'ctrl+opt+d'`; that path takes
+effect when Aparté restarts. `aparte toggle` is the Linux mechanism and does not
+control the Mac recorder.
 
-The part that *is* the product now works there too: inserting the dictation
-straight into the app you're using, a global keyboard shortcut, the menu-bar icon
-that shows the microphone is open, native notifications and the start/stop tone.
-The icon needs the `macos` extra (`pip install -e ".[macos]"`); without it Aparté
-runs, silently, with nothing in the menu bar.
+Allow microphone access when requested and Accessibility access for insertion.
+Running from Terminal can attribute permissions to Terminal rather than Aparté.
+The browser's microphone permission is separate. On the web page, **Copy** uses
+the browser clipboard; native insertion is available through the shortcut.
 
-What is still missing is the **install itself**: there is no packaged application
-yet, so Aparté runs from a checkout and does not start at login. That, and every
-lot before it, is in [docs/plan-portage-macos.md](docs/plan-portage-macos.md).
+The first launch prepares the selected speech model if needed. After a failed
+download or a model change, choose **Prepare the model…** (**Préparer le
+modèle…**) from the menu. Wait for preparation to finish before dictating.
+Downloading models uses the network; your recordings and transcripts are
+processed locally. Once the selected model is complete, transcription can run
+offline.
 
-One nuance to the "nothing leaves your machine" promise: the very first
-transcription downloads the Whisper model from Hugging Face if it isn't cached
-yet. Your audio and dictated text never leave the machine; only that one-time
-model fetch touches the network, after which everything runs offline.
+A local application bundle can be built for native validation. It requires
+Apple's command-line tools (`clang` and `codesign`):
+
+```bash
+aparte install-app --open       # builds ~/Applications/Aparté.app, then opens it
+aparte install-app --remove     # removes the bundle; keeps settings and models
+```
+
+The installer stages and verifies the new bundle on the destination volume,
+keeps the old one until publication is verified, and restores it on ordinary
+installation errors. If restoration also fails, it reports the preserved backup
+path. A forced termination between filesystem operations may still require
+manual restoration. Builds now include both French and English resources so a
+shell-language change does not change the generated launcher or plist.
+
+An existing bundle built before that change can have a different signature.
+`install-app` refuses replacement unless explicitly run with `--force`; replacing
+it may require granting microphone and Accessibility access again. This
+protection is **not** proof that permissions survive upgrades: the launcher and
+signing choices still await [native M7-0 validation](.claude/mac-validation/m7/README.md).
+There is no validated Homebrew formula or macOS login-startup installer yet;
+`install-desktop` and `install-autostart` remain Linux commands. After an update
+from the Mac menu, quit and relaunch Aparté.
 
 ### Extras, à la carte
 
@@ -215,7 +255,7 @@ model fetch touches the network, after which everything runs offline.
 | `cuda`       | NVIDIA GPU acceleration — see *GPU acceleration* below                |
 | `macos`      | macOS only: insertion, global shortcut, menu-bar icon (no-op elsewhere) |
 
-### System packages
+### System packages (Linux)
 
 ```bash
 sudo apt install alsa-utils ffmpeg wl-clipboard wtype xclip xdotool
@@ -280,7 +320,7 @@ Use fixed-duration dictation as a global keyboard shortcut command in GNOME/KDE/
 aparte dictate --seconds 8 --target paste
 ```
 
-For a more Flow-like shortcut, bind the same toggle command to one global hotkey. The first press starts recording; the second press stops, transcribes, polishes, and inserts:
+On Linux, for a two-press shortcut, bind the same toggle command to one global hotkey. The first press starts recording; the second press stops, transcribes, polishes, and inserts:
 
 ```bash
 aparte toggle --target paste
@@ -319,7 +359,7 @@ aparte install-autostart
 aparte install-autostart --remove   # undo
 ```
 
-## Global hotkey (recommended for dictating into other apps)
+## Global hotkey on Linux (recommended for dictating into other apps)
 
 The Flow-like flow is one global shortcut bound to `toggle`: press once to start,
 press again to transcribe and insert into whatever app is focused (Slack, email,
@@ -410,7 +450,8 @@ copy the last dictation, jump to Settings, or quit.
 On macOS the same icon sits in the menu bar, drawn in black and white so the
 system can tint it for a light or a dark bar, with the elapsed time beside it
 while you dictate. Its menu adds an **update** item that pulls and reinstalls in
-place. It comes with the `macos` extra; the rest of this section is Linux.
+place, then asks you to relaunch. It also offers shortcut setup and model
+preparation. It comes with the `macos` extra; the rest of this section is Linux.
 
 It relies on PyGObject and the AppIndicator typelib, which are system packages
 rather than pip ones:
@@ -439,17 +480,63 @@ The last five dictations sit under the action bar in the desktop app; click one
 to copy it. From a terminal, `aparte last` prints the most recent one and
 `aparte last --target paste` re-inserts it into the focused window.
 
-They live in the runtime directory (`$XDG_RUNTIME_DIR/aparte`, which is tmpfs and
-wiped when you log out), because a dictation can carry a password or a private
-message. Tick **Keep history between sessions** in Settings — or set
-`history_persist` in the config — to write them to `~/.local/state/aparte`
-instead, in a file only you can read.
+By default, Linux stores them in the runtime directory: a systemd session's
+`$XDG_RUNTIME_DIR/aparte` is normally tmpfs and removed at logout. A temporary
+filesystem fallback is used when that directory is unavailable; logout deletion
+is not guaranteed for that fallback.
+
+On macOS the default is a **private temporary file on disk**, limited to five
+entries. Entries older than 24 hours are removed at the next history read or
+write. Quitting Aparté does not erase that file, and an application that is not
+running cannot promise timed deletion.
+
+Tick **Keep history between sessions** in Settings — or set `history_persist`
+in the config — to use `~/.local/state/aparte/history.json` (or the
+`XDG_STATE_HOME` equivalent). That separate private store keeps the last five
+entries without the macOS 24-hour expiry.
 
 Every Aparté process shares that one store, so a dictation made through the
 global hotkey shows up in the app, and vice versa, without either one having to
 be running for the other.
 
-Insertion modes (`paste_mode` in the config, or **How to insert** under
+### Recovering a failed dictation
+
+Failed native dictations and failed browser transcriptions received by the
+server can appear in **Dictations to recover** (**Dictées à récupérer**). Audio
+and any available raw text stay in a private local store for **one hour** from
+the capture's recovery save; retrying does not extend that deadline. Listings
+show timestamps and availability, without loading audio or transcript content.
+
+Use **Retry** or **Raw text** to display a separate result. Your current editor
+is preserved until you choose to open that result there. Recovery never pastes
+into another application automatically. Use **Delete** to remove the retained
+capture; closing the displayed result does not delete the capture. A browser
+upload that never reaches the server cannot be recovered from this panel.
+
+The same actions are available from a terminal:
+
+```bash
+aparte recover list
+aparte recover retry ID                 # print the recovered text
+aparte recover retry ID --no-polish     # use the raw transcript when available
+aparte recover retry ID --target copy   # explicitly copy the recovered text
+aparte recover delete ID
+```
+
+Replace `ID` with an identifier from `recover list`. Successful retry keeps the
+capture until deletion or its original expiry, including when the response is
+lost. Cleanup runs while the desktop application is open and on subsequent
+recovery operations. When Aparté is stopped, expired files can remain on disk
+until that next cleanup, although expired entries cannot be retried.
+
+Normal **Quit** on macOS preserves a live native capture before closing and
+refuses to close if it cannot save it. Force-quitting or killing the process
+while audio is still only in memory can lose that capture. CLI capture failures
+preserve the original audio if the recovery copy fails, and report its path;
+`--keep-audio` also keeps the original for `dictate` and `toggle`. Recovery is a
+fallback for failures, not a backup of every successful dictation.
+
+Linux insertion modes (`paste_mode` in the config, or **How to insert** under
 **Hardware** in the desktop app). Every mode copies the dictation to the
 clipboard first, so it is never lost when the insertion lands somewhere
 unexpected:
@@ -462,14 +549,15 @@ unexpected:
 
 ### Choosing a microphone
 
-**Input device**, under **Hardware** in Settings, lists what ALSA can capture
-from — pick one, or leave it on the system default. **Refresh** rebuilds the
+**Input device**, under **Hardware** in Settings, lists native capture devices
+(ALSA on Linux, PortAudio on macOS). Pick one, or leave it on the system default. **Refresh** rebuilds the
 list without closing the panel, for a microphone plugged in after opening it. A device that has since been
 unplugged stays in the list, marked as such, rather than being silently swapped
 for another one.
 
 It applies to the global shortcut and to the terminal commands (`microphone` in
-the config, an ALSA name such as `plughw:CARD=Mini,DEV=0`). The desktop app's
+the config, an ALSA name such as `plughw:CARD=Mini,DEV=0` on Linux or the
+selected PortAudio device on macOS). The desktop app's
 **Talk** button records through the browser, so it follows whichever microphone
 the browser is set to.
 

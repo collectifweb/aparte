@@ -67,11 +67,25 @@ def type_unicode(text: str) -> str:
     Posted in bounded chunks so a long dictation is preserved whole; raises
     :class:`ClipboardError` if an event can't be built."""
     Quartz = _quartz()
-    for start in range(0, len(text), _UNICODE_CHUNK):
-        chunk = text[start : start + _UNICODE_CHUNK]
+    for chunk in _unicode_chunks(text):
         event = Quartz.CGEventCreateKeyboardEvent(None, 0, True)
         if event is None:
             raise ClipboardError("macOS could not create the keyboard event for typing.")
-        Quartz.CGEventKeyboardSetUnicodeString(event, len(chunk), chunk)
+        Quartz.CGEventKeyboardSetUnicodeString(event, len(chunk.encode("utf-16-le")) // 2, chunk)
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
     return "cgevent-type"
+
+
+def _unicode_chunks(text: str):
+    """Bound UTF-16 units without splitting a supplementary Unicode character."""
+    chunk = []
+    units = 0
+    for character in text:
+        width = 2 if ord(character) > 0xFFFF else 1
+        if units + width > _UNICODE_CHUNK:
+            yield "".join(chunk)
+            chunk, units = [], 0
+        chunk.append(character)
+        units += width
+    if chunk:
+        yield "".join(chunk)

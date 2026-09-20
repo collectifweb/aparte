@@ -91,6 +91,16 @@ class TypeUnicodeTest(unittest.TestCase):
         # As many posts as chunks.
         self.assertEqual(len(quartz.posted), len(chunks))
 
+    def test_supplementary_characters_use_utf16_units_and_stay_whole(self):
+        text = "A😀B" + "x" * 17 + "😀" * 15
+        quartz = FakeQuartz()
+        with _with_quartz(quartz):
+            macos_insert.type_unicode(text)
+        self.assertEqual("".join(chunk for _, _, chunk in quartz.unicode), text)
+        for _, length, chunk in quartz.unicode:
+            self.assertEqual(length, len(chunk.encode("utf-16-le")) // 2)
+            self.assertLessEqual(length, macos_insert._UNICODE_CHUNK)
+
     def test_a_missing_quartz_raises(self):
         with _with_quartz(None):
             with self.assertRaises(ClipboardError):

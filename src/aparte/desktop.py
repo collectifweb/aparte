@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import socket
 import tempfile
@@ -11,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
 
-from . import history, model_download
+from . import history, model_download, recovery
 from .audio import list_microphones, sweep_orphan_recordings
 from .clipboard import copy_text, paste_text
 from .config import Settings, get_env, load_config, positive_int, update_config
@@ -97,6 +98,9 @@ def run_desktop(host: str, port: int, settings: Settings, open_browser: bool = T
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
     print(f"Aparté desktop running at {url}")
+    cleanup_stop = threading.Event()
+    threading.Thread(target=_maintain_recovery, args=(cleanup_stop,), daemon=True,
+                     name="aparte-recovery-cleanup").start()
     if is_macos():
         # A Mac install is meant to be "open it, grant two permissions". Waiting
         # in silence for 500 MB on the first dictation is not that, so fetch the
@@ -111,7 +115,10 @@ def run_desktop(host: str, port: int, settings: Settings, open_browser: bool = T
         # AppKit/Carbon piece loads off macOS.
         from .macos_runloop import serve_macos
 
-        serve_macos(server, controller, settings, url=url)
+        try:
+            serve_macos(server, controller, settings, url=url)
+        finally:
+            cleanup_stop.set()
         return
     # The tray icon needs GTK on the main thread, so the server moves off it.
     # Without the system bindings there is no tray, and nothing changes.
@@ -125,7 +132,18 @@ def run_desktop(host: str, port: int, settings: Settings, open_browser: bool = T
     except KeyboardInterrupt:
         print("\nStopping desktop server.")
     finally:
+        cleanup_stop.set()
         server.server_close()
+
+
+def _maintain_recovery(stop: threading.Event, interval: float = 60.0) -> None:
+    while not stop.is_set():
+        try:
+            recovery.sweep()
+            sweep_orphan_recordings(failed_uploads_only=True)
+        except (OSError, RuntimeError, ValueError):
+            pass
+        stop.wait(interval)
 
 
 def already_running(host: str, port: int, timeout: float = 2.0) -> str | None:
@@ -232,13 +250,26 @@ def handler_factory(
 
     def get_transcriber(active: Settings, model: str | None = None):
         model = model or active.model
+        backend = active.transcriber
+        if is_macos() and model_download.effective_backend(active) == "faster-whisper":
+            local_model = model_download.cached_model_path(model)
+            if local_model is None:
+                raise RuntimeError(
+                    "Le modèle n’est pas prêt. Dans le menu Aparté, choisis "
+                    "« Préparer le modèle… », puis réessaie."
+                )
+            # A repository name lets WhisperModel fetch missing files itself.
+            # Pass the verified directory and pin this engine even for 'auto':
+            # its OpenAI fallback could otherwise start another download.
+            model = str(local_model)
+            backend = "faster-whisper"
         # La clé porte tout ce qui construit le transcripteur, pas seulement le
         # modèle. `_handle_save_config` vide bien le cache, mais une config
         # modifiée ailleurs — édition à la main, appel externe à
         # `update_config()`, synchronisation par un tiers — rendrait sinon un
         # transcripteur périmé sans que rien ne le signale.
         key = (
-            active.transcriber,
+            backend,
             model,
             active.language,
             active.device,
@@ -250,7 +281,7 @@ def handler_factory(
             transcriber = transcriber_cache.get(key)
             if transcriber is None:
                 transcriber = build_transcriber(
-                    backend=active.transcriber,
+                    backend=backend,
                     model=model,
                     language=active.language,
                     whisper_cpp=active.whisper_cpp,
@@ -271,6 +302,9 @@ def handler_factory(
         hotkey_state = None
 
         def do_GET(self) -> None:
+            if not self._host_is_ours():
+                self.send_error(HTTPStatus.FORBIDDEN)
+                return
             route = self.path.split("?", 1)[0]
             if route == "/" or self.path.startswith("/?"):
                 self._serve_static("/")
@@ -287,6 +321,12 @@ def handler_factory(
                 self._send_json(
                     collect_diagnostics(current_settings(), hotkey_state=self.hotkey_state)
                 )
+                return
+            if route == "/api/recovery":
+                try:
+                    self._send_json({"entries": recovery.entries()})
+                except (OSError, RuntimeError):
+                    self._send_json({"error": "Recovery unavailable"}, HTTPStatus.SERVICE_UNAVAILABLE)
                 return
             if route == "/api/history":
                 active = current_settings()
@@ -342,7 +382,7 @@ def handler_factory(
                 # route that pulled 500 MB would be a system effect reachable
                 # from a browser. 404 while no download was ever started, which
                 # is every Linux run and any Mac whose model is already there.
-                state = model_download.progress()
+                state = model_download.progress(current_settings())
                 if state is None:
                     self.send_error(HTTPStatus.NOT_FOUND)
                     return
@@ -373,6 +413,9 @@ def handler_factory(
                 self.send_error(HTTPStatus.NOT_FOUND)
                 return
             try:
+                if self.path in {"/api/recovery/retry", "/api/recovery/delete"}:
+                    self._handle_recovery()
+                    return
                 if self.path == "/api/config":
                     self._handle_save_config()
                     return
@@ -441,6 +484,13 @@ def handler_factory(
             127.0.0.1 arrives with a matching Host and Origin, both its own. So
             the address we were reached under has to be one of ours too.
             """
+            if not self._host_is_ours():
+                return False
+            host = self.headers.get("Host", "")
+            origin = self.headers.get("Origin")
+            return origin is None or origin == f"http://{host}"
+
+        def _host_is_ours(self) -> bool:
             host = self.headers.get("Host", "")
             try:
                 hostname = urlsplit(f"//{host}").hostname
@@ -452,8 +502,49 @@ def handler_factory(
             # there is nothing left to compare against.
             if bound not in {"0.0.0.0", "::"} and hostname not in LOOPBACK_HOSTS and hostname != bound:
                 return False
-            origin = self.headers.get("Origin")
-            return origin is None or origin == f"http://{host}"
+            return bool(hostname)
+
+        def _handle_recovery(self) -> None:
+            payload = self._read_json()
+            if not isinstance(payload, dict) or not isinstance(payload.get("id"), str):
+                self._send_json({"error": "A capture identifier is required."}, HTTPStatus.BAD_REQUEST)
+                return
+            identifier = payload["id"]
+            try:
+                if self.path == "/api/recovery/delete":
+                    recovery.discard(identifier)
+                    self._send_json({"ok": True})
+                    return
+                with recovery.claim(identifier) as item:
+                    active = current_settings()
+                    raw = item.raw_text
+                    if raw is None:
+                        # Never delegate back to our own HTTP server: this is
+                        # its cached model, shared with regular transcriptions.
+                        inference_lock.acquire()
+                        try:
+                            transcriber = get_transcriber(active)
+                            raw = transcriber.transcribe(item.audio_path).text
+                        finally:
+                            inference_lock.release()
+                        recovery.update_raw(item, raw)
+                    if payload.get("raw") is True or not raw.strip():
+                        output = raw
+                    else:
+                        from .cli import polish_text
+
+                        output = polish_text(raw, argparse.Namespace(), active)
+                    if output.strip():
+                        history.record(output, active.history_persist)
+                    # Keep the capture until explicit deletion/expiry. A lost
+                    # response must not destroy the only recoverable dictation.
+                    self._send_json({"text": output})
+            except recovery.RecoveryBusy:
+                self._send_json({"error": "This capture is already being recovered."}, HTTPStatus.CONFLICT)
+            except recovery.RecoveryNotFound:
+                self._send_json({"error": "This capture has expired or was deleted."}, HTTPStatus.GONE)
+            except ValueError:
+                self._send_json({"error": "Invalid capture identifier."}, HTTPStatus.BAD_REQUEST)
 
         def _read_json(self) -> dict[str, object]:
             length = int(self.headers.get("Content-Length", "0"))
@@ -467,7 +558,8 @@ def handler_factory(
             # leaving it unread would desynchronise the connection.
             body = self.rfile.read(length)
             preview = self._flag("preview")
-            if not inference_lock.acquire(blocking=not preview):
+            acquired = inference_lock.acquire(blocking=not preview)
+            if not acquired:
                 self._send_json({"text": None, "busy": True})
                 return
             suffix = ".webm"
@@ -475,17 +567,47 @@ def handler_factory(
                 suffix = ".wav"
             elif "audio/mpeg" in content_type:
                 suffix = ".mp3"
-            handle = tempfile.NamedTemporaryFile(prefix="aparte-upload-", suffix=suffix, delete=False)
-            path = Path(handle.name)
-            handle.write(body)
-            handle.close()
+            path = None
+            uploaded = False
+            transcript = None
             try:
+                with tempfile.NamedTemporaryFile(prefix="aparte-upload-", suffix=suffix, delete=False) as handle:
+                    path = Path(handle.name)
+                    handle.write(body)
+                uploaded = True
                 active = current_settings()
-                transcript = get_transcriber(active, self._requested_model(active)).transcribe(path).text
+                transcriber = get_transcriber(active, self._requested_model(active))
+                transcript = transcriber.transcribe(path).text
                 self._send_json({"text": transcript})
+            except Exception:
+                # Only final browser captures opt in. CLI delegation retains its
+                # original itself, and previews are disposable snapshots.
+                if uploaded and not preview and self._flag("recover"):
+                    try:
+                        recovery.save_failure(path, raw_text=transcript)
+                    except (OSError, RuntimeError) as storage_error:
+                        # Keep the existing private upload when a second copy cannot
+                        # be written. Mark only this FAILED upload for expiry; active
+                        # uploads must never be swept during a long inference.
+                        retained = path
+                        failed = path.with_name(path.name.replace("aparte-upload-", "aparte-failed-upload-", 1))
+                        try:
+                            path.rename(failed)
+                            retained = failed
+                        except OSError:
+                            pass
+                        path = None
+                        raise RuntimeError(
+                            f"Recovery storage unavailable. Audio retained at {retained}; "
+                            "import it again after freeing disk space."
+                        ) from storage_error
+                raise
             finally:
-                path.unlink(missing_ok=True)
-                inference_lock.release()
+                try:
+                    if path is not None:
+                        path.unlink(missing_ok=True)
+                finally:
+                    inference_lock.release()
 
         def _handle_update_apply(self) -> None:
             """Stream the update log line by line, then restart if it worked.
@@ -521,6 +643,8 @@ def handler_factory(
             config = load_config()
             data = {key: config.get(key) for key in EDITABLE_FIELDS}
             data["allowed_models"] = list(ALLOWED_MODELS)
+            data["platform"] = "macos" if is_macos() else "linux"
+            data["capabilities"] = {"paste": not is_macos(), "system_clipboard": not is_macos()}
             return data
 
         def _handle_save_config(self) -> None:
@@ -551,6 +675,7 @@ def handler_factory(
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(data)
 
@@ -580,7 +705,8 @@ def handler_factory(
             with inference_lock:
                 return get_transcriber(current_settings()).transcribe(wav).text
 
-        controller = RecordingController(_transcribe_capture, current_settings)
+        controller = RecordingController(_transcribe_capture, current_settings,
+                                         recording_allowed=model_download.ensure_ready)
         DesktopHandler._recording_controller = controller
 
     # run_desktop() owns the controller (it wires the shortcut and calls shutdown);

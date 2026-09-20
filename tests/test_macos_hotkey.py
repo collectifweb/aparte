@@ -232,8 +232,13 @@ class _FakeCarbonFunction:
         self.restype = None
         self.argtypes = None
         self.result = 0
+        self.calls = []
+        self.side_effect = None
 
     def __call__(self, *args):
+        self.calls.append(args)
+        if self.side_effect is not None:
+            return self.side_effect(*args)
         return self.result
 
 
@@ -245,6 +250,66 @@ class _FakeCarbon:
 
     def __getattr__(self, name):
         return self._functions.setdefault(name, _FakeCarbonFunction())
+
+
+class CarbonRebindingTest(unittest.TestCase):
+    def setUp(self):
+        import ctypes
+        self.carbon = _FakeCarbon()
+        patches = [mock.patch.object(ctypes, "CDLL", return_value=self.carbon),
+                   mock.patch.object(macos_hotkey, "_CARBON_BACKEND", None)]
+        for patcher in patches:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def _emit(self, token, *, signature=macos_hotkey._HOTKEY_SIGNATURE, status=0):
+        def parameter(*args):
+            identity = args[-1]._obj
+            identity.signature, identity.id = signature, token
+            return status
+        self.carbon.GetEventParameter.side_effect = parameter
+        return macos_hotkey._carbon_backend()._callback(None, None, None)
+
+    def test_failed_replacement_keeps_old_shortcut_routable_and_one_handler(self):
+        old_trigger, replacement_trigger = mock.Mock(), mock.Mock()
+        old = register_hotkey("ctrl+opt+d", old_trigger)
+        replacement = register_hotkey("ctrl+opt+f", replacement_trigger)
+        self.assertEqual(len(self.carbon.InstallEventHandler.calls), 1)
+        self.assertNotEqual(old._token, replacement._token)
+        # Same rollback used when persisting a new shortcut fails.
+        replacement.unregister()
+        self.assertEqual(self._emit(old._token), macos_hotkey._NO_ERR)
+        old_trigger.assert_called_once()
+        replacement_trigger.assert_not_called()
+        self.assertEqual(self._emit(replacement._token), macos_hotkey._EVENT_NOT_HANDLED)
+        old.unregister()
+        # Handler survives the last individual binding, with no ID reuse.
+        third = register_hotkey("ctrl+opt+g", mock.Mock())
+        self.assertGreater(third._token, replacement._token)
+        self.assertEqual(len(self.carbon.InstallEventHandler.calls), 1)
+        third.unregister()
+
+    def test_foreign_unknown_or_unreadable_event_is_left_for_other_handlers(self):
+        trigger = mock.Mock()
+        handle = register_hotkey("ctrl+opt+d", trigger)
+        self.assertEqual(self._emit(handle._token, signature=123), macos_hotkey._EVENT_NOT_HANDLED)
+        self.assertEqual(self._emit(9000), macos_hotkey._EVENT_NOT_HANDLED)
+        self.assertEqual(self._emit(handle._token, status=-50), macos_hotkey._EVENT_NOT_HANDLED)
+        trigger.assert_not_called()
+        handle.unregister()
+
+    def test_backend_and_callback_remain_owned_after_handle_is_discarded(self):
+        import gc
+        import weakref
+        handle = register_hotkey("ctrl+opt+d", mock.Mock())
+        backend_ref = weakref.ref(handle._backend)
+        callback_ref = weakref.ref(handle._backend._callback)
+        handle.unregister()
+        del handle
+        gc.collect()
+        self.assertIsNotNone(backend_ref())
+        self.assertIsNotNone(callback_ref())
+        self.assertIs(macos_hotkey._carbon_backend(), backend_ref())
 
 
 class CarbonBackendSignatureTest(unittest.TestCase):

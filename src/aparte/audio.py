@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 import tempfile
 import time
 import wave
@@ -83,9 +84,11 @@ _ORPHAN_RECORDING = re.compile(r"^aparte-[a-z0-9_]{8}\.wav$")
 # Old enough that no live capture can be caught: the recording cap is 300 s by
 # default, and a second instance's file must never be pulled from under it.
 _ORPHAN_AFTER_SECONDS = 3600.0
+_FAILED_UPLOAD = re.compile(r"^aparte-failed-upload-[a-z0-9_]{8}\.(wav|webm|mp3)$")
 
 
-def sweep_orphan_recordings(older_than: float = _ORPHAN_AFTER_SECONDS) -> int:
+def sweep_orphan_recordings(older_than: float = _ORPHAN_AFTER_SECONDS, *,
+                            failed_uploads_only: bool = False) -> int:
     """Delete captures an earlier run abandoned. Returns how many were removed.
 
     Best-effort by design: this runs at startup, and a file that refuses to go
@@ -97,10 +100,14 @@ def sweep_orphan_recordings(older_than: float = _ORPHAN_AFTER_SECONDS) -> int:
     except OSError:
         return 0
     for path in entries:
-        if not _ORPHAN_RECORDING.match(path.name):
+        if not (_FAILED_UPLOAD.fullmatch(path.name) or
+                (not failed_uploads_only and _ORPHAN_RECORDING.fullmatch(path.name))):
             continue
         try:
-            if now - path.stat().st_mtime < older_than:
+            info = path.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid():
+                continue
+            if now - info.st_mtime < older_than:
                 continue
             path.unlink()
             removed += 1

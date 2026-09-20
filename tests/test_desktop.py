@@ -522,9 +522,10 @@ class ModelStateRouteTest(unittest.TestCase):
     def test_it_reports_what_the_download_knows(self):
         with tempfile.TemporaryDirectory() as directory:
             with mock.patch.dict(os.environ, {"HF_HUB_CACHE": directory}):
-                with mock.patch.object(model_download.threading, "Thread"):
-                    model_download.start(Settings(model="small", transcriber="auto"))
-                res = make_request("GET", "/api/model-state")
+                with mock.patch.object(model_download, "_has_module", return_value=True):
+                    with mock.patch.object(model_download.threading, "Thread"):
+                        model_download.start(Settings(model="small", transcriber="auto"))
+                    res = make_request("GET", "/api/model-state")
         self.assertEqual(res["status"], int(HTTPStatus.OK))
         body = json.loads(res["body"])
         self.assertEqual(body["state"], "downloading")

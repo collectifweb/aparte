@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed — fiabilisation du portage macOS (septembre 2026)
 
+- Captures natives préservées avant transcription, texte brut conservé avant
+  polissage et récupération privée pendant une heure via le panneau ou
+  `aparte recover`. Fermeture coordonnée sans insertion tardive ; une panne
+  de stockage empêchant la sauvegarde refuse la fermeture normale.
+- État du cache modèle exact, préparation exclusive/rejouable depuis le menu,
+  garde avant capture et inférence faster-whisper Mac sur snapshot local.
+  Sondage web résilient et fin du bandeau « prêt » corrigée.
+- Validation Host des lectures HTTP, libération garantie du verrou d’inférence,
+  capture navigateur exclusive, copie navigateur fonctionnelle sur Mac.
+- Choix du raccourci depuis le menu natif avec retour arrière sur échec ; cycle
+  de vie Carbon partagé, langue Foundation, insertion UTF-16, limites audio
+  visibles et réglages relus pour la dernière dictée.
+- Tests isolés et job CI Apple Silicon ajoutés, avec vraies dépendances et test
+  clang/codesign. Leur validation matérielle reste ouverte ; aucune release Mac
+  ni formula Homebrew finale n’est annoncée par ces changements.
 - Installation du prototype `.app` coordonnée entre processus, signature vérifiée
   avant/après publication et ancienne application restaurée sur erreur. Les
   ressources FR/EN sont stables quelle que soit la locale de construction.

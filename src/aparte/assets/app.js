@@ -6,6 +6,8 @@ const statusEl = $("#status");
 const recordBtn = $("#record");
 const heroSub = $("#hero-sub");
 let recordingSession = null;
+// Une navigation invalide aussi les permissions et réponses encore en vol.
+let captureGeneration = 0;
 
 /* ---------- i18n ---------- */
 const I18N = window.APARTE_I18N || { en: {}, fr: {} };
@@ -13,6 +15,7 @@ let lang = localStorage.getItem("aparte_lang");
 if (!I18N[lang]) lang = (navigator.language || "en").slice(0, 2);
 if (!I18N[lang]) lang = "en";
 let recordState = "idle";
+let updateBusy = false;
 let setupIncomplete = false;
 let historyPersist = false;
 let livePreview = true;
@@ -21,6 +24,8 @@ let livePreview = true;
 let previewing = false;
 // Vrai tant que le modèle de reconnaissance descend : rien ne peut transcrire.
 let modelDownloading = false;
+let systemClipboard = true;
+let serverPlatform = "linux";
 
 function t(key, vars) {
   let s = (I18N[lang] && I18N[lang][key]) || (I18N.en && I18N.en[key]) || key;
@@ -47,6 +52,7 @@ function applyI18n() {
   // rappel elle resterait dans la langue précédente. modelPhase repart à zéro
   // pour forcer sa réécriture.
   if (lastModelState) { modelPhase = null; renderModelState(lastModelState); }
+  renderRecovery();
 }
 
 function status(message, kind) {
@@ -67,21 +73,21 @@ async function postJson(path, payload) {
 // Les trois actions travaillent sur le contenu de l'éditeur : sur un éditeur
 // vide elles ne font rien tout en annonçant qu'elles ont réussi, et « Copier »
 // va plus loin — il remplace le presse-papiers par du vide. Elles suivent donc
-// l'éditeur autant que le traitement. « Importer audio » reste actif : c'est
-// lui qui remplit l'éditeur.
+// l'éditeur autant que le traitement. Une capture et un import s'excluent.
 const TEXT_ACTIONS = ["#polish", "#copy", "#paste"];
 
 function syncActionState() {
   // Un aperçu compte comme un traitement en cours : polir, copier ou insérer un
   // texte que la passe suivante va réécrire donnerait une version périmée.
-  const busy = recordState === "processing" || previewing;
+  const busy = recordState !== "idle" || previewing;
   const empty = !editor.value.trim();
   TEXT_ACTIONS.forEach((sel) => { $(sel).disabled = busy || empty; });
-  $("#pick-file").disabled = busy || modelDownloading;
-  // Tant que le modèle arrive, il n'y a rien pour transcrire : le bouton attend
-  // avec la bande qui explique pourquoi. Sans ça, on lancerait un second
-  // téléchargement du même dépôt par-dessus le premier.
-  recordBtn.disabled = modelDownloading;
+  $("#pick-file").disabled = busy || updateBusy || modelDownloading;
+  const apply = $("#update-apply");
+  if (apply) apply.disabled = busy || updateBusy;
+  $("#open-recovery").disabled = recordState !== "idle" || previewing;
+  recordBtn.disabled = updateBusy || !["idle", "recording"].includes(recordState)
+    || (modelDownloading && recordState === "idle");
 }
 
 // Texte tapé ou collé à la main dans l'éditeur : les actions se rallument.
@@ -90,14 +96,16 @@ editor.addEventListener("input", syncActionState);
 function setRecordState(state) {
   recordState = state;
   recordBtn.classList.remove("recording", "processing");
+  recordBtn.disabled = updateBusy || !["idle", "recording"].includes(state);
+  recordBtn.setAttribute("aria-busy", String(recordBtn.disabled));
   syncActionState();
   const label = recordBtn.querySelector(".record-label");
   if (state === "recording") {
     recordBtn.classList.add("recording");
     label.textContent = t("hero.stop");
-  } else if (state === "processing") {
+  } else if (["opening", "stopping", "processing"].includes(state)) {
     recordBtn.classList.add("processing");
-    label.textContent = t("hero.processing");
+    label.textContent = t("hero." + state);
   } else {
     label.textContent = t("hero.talk");
   }
@@ -105,65 +113,93 @@ function setRecordState(state) {
 
 /* ---------- Transcription ---------- */
 async function transcribeBlob(blob) {
+  const generation = captureGeneration;
   const model = $("#model").value;
   setRecordState("processing");
   status(t("st.transcribing", { model }));
   try {
-    const res = await fetch("/api/transcribe?model=" + encodeURIComponent(model), {
+    const res = await fetch("/api/transcribe?recover=1&model=" + encodeURIComponent(model), {
       method: "POST",
       headers: { "Content-Type": blob.type || "application/octet-stream" },
       body: blob,
     });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
+    if (generation !== captureGeneration) return;
     editor.value = data.text;
     if ($("#autoPolish").checked && data.text.trim()) {
-      await polishEditor();
+      await polishEditor(() => generation === captureGeneration);
     } else {
       status(data.text.trim() ? t("st.transcript_ready") : t("st.no_speech"));
     }
-    if (editor.value.trim()) recordRecent(editor.value);
+    if (generation === captureGeneration && editor.value.trim()) recordRecent(editor.value);
   } finally {
-    clearPreview();
-    setRecordState("idle");
+    if (generation === captureGeneration) {
+      clearPreview();
+      setRecordState("idle");
+      loadRecovery();
+    }
   }
 }
 
-async function polishEditor() {
+async function polishEditor(isCurrent = () => true) {
   status(t("st.polishing"));
   const data = await postJson("/api/polish", { text: editor.value });
+  if (!isCurrent()) return;
   editor.value = data.text;
   syncActionState();
   status(t("st.polished"));
 }
 
 /* ---------- Browser WAV recording ---------- */
-async function startWavRecording() {
+async function startWavRecording(isCurrent = () => true) {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  const audioContext = new AudioContext();
-  const source = audioContext.createMediaStreamSource(stream);
-  const processor = audioContext.createScriptProcessor(4096, 1, 1);
-  const chunks = [];
-  processor.onaudioprocess = (event) => {
-    chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
-  };
-  source.connect(processor);
-  processor.connect(audioContext.destination);
-  const sampleRate = audioContext.sampleRate;
-  return {
-    // Une photo de ce qui a été capté jusqu'ici, sans rien interrompre :
-    // l'enregistrement continue de remplir `chunks` derrière.
-    snapshot() {
-      return encodeWav(chunks, sampleRate);
-    },
-    async stop() {
-      processor.disconnect();
-      source.disconnect();
-      stream.getTracks().forEach((tr) => tr.stop());
-      await audioContext.close();
-      return encodeWav(chunks, sampleRate);
-    },
-  };
+  let audioContext, source, processor;
+  let released = false;
+  let closing;
+  // Libérer les pistes est synchrone : ni close() lent, ni disconnect() en
+  // erreur ne doivent garder le micro ouvert. Tous les chemins passent ici.
+  function release() {
+    if (released) return closing;
+    released = true;
+    if (processor) processor.onaudioprocess = null;
+    for (const node of [processor, source]) {
+      try { if (node) node.disconnect(); } catch (_) {}
+    }
+    for (const track of stream.getTracks()) {
+      try { track.stop(); } catch (_) {}
+    }
+    try { closing = audioContext ? Promise.resolve(audioContext.close()) : Promise.resolve(); }
+    catch (err) { closing = Promise.reject(err); }
+    return closing;
+  }
+  if (!isCurrent()) { await release(); return null; }
+  try {
+    audioContext = new AudioContext();
+    source = audioContext.createMediaStreamSource(stream);
+    processor = audioContext.createScriptProcessor(4096, 1, 1);
+    const chunks = [];
+    processor.onaudioprocess = (event) => {
+      if (!released) chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+    };
+    source.connect(processor);
+    processor.connect(audioContext.destination);
+    const sampleRate = audioContext.sampleRate;
+    let stopping;
+    return {
+      snapshot() { return encodeWav(chunks, sampleRate); },
+      stop() {
+        // Les pistes sont déjà arrêtées. Un contexte déjà fermé peut refuser
+        // close(), sans invalider les échantillons capturés avant l'arrêt.
+        if (!stopping) stopping = release().catch(() => {}).then(() => encodeWav(chunks, sampleRate));
+        return stopping;
+      },
+      cancel() { return release(); },
+    };
+  } catch (err) {
+    await release().catch(() => {});
+    throw err;
+  }
 }
 
 function encodeWav(chunks, sampleRate) {
@@ -223,7 +259,7 @@ function startPreviewLoop(session) {
         const data = await res.json();
         // `text` est nul quand le serveur transcrivait déjà : la passe a
         // simplement laissé son tour.
-        if (typeof data.text === "string") showPreview(data.text);
+        if (recordingSession === session && typeof data.text === "string") showPreview(data.text);
       }
     } catch (_) {
       // Un aperçu raté ne dit rien sur la dictée en cours, qui continue. Se
@@ -256,40 +292,87 @@ function clearPreview() {
 
 /* ---------- Record button ---------- */
 recordBtn.addEventListener("click", async () => {
-  if (recordState === "processing") return;
-  if (recordingSession) {
+  if (recordState === "recording" && recordingSession) {
+    const generation = captureGeneration;
     const session = recordingSession;
     recordingSession = null;
     stopPreviewLoop();
-    const blob = await session.stop();
-    try { await transcribeBlob(blob); } catch (err) { status(String(err), "error"); clearPreview(); setRecordState("idle"); }
+    setRecordState("stopping");
+    status(t("st.stopping"));
+    try {
+      const blob = await session.stop();
+      if (generation !== captureGeneration) return;
+      await transcribeBlob(blob);
+    } catch (err) {
+      if (generation !== captureGeneration) return;
+      status(t("st.capture_error") + err, "error");
+      clearPreview();
+      setRecordState("idle");
+    }
     return;
   }
+  if (recordState !== "idle" || updateBusy) return;
+  const generation = ++captureGeneration;
+  // Verrouiller avant la demande de permission, pas après son acceptation.
+  setRecordState("opening");
+  status(t("st.opening"));
   try {
-    recordingSession = await startWavRecording();
+    const session = await startWavRecording(() => generation === captureGeneration);
+    if (generation !== captureGeneration) {
+      if (session) await session.cancel().catch(() => {});
+      return;
+    }
+    recordingSession = session;
     setRecordState("recording");
     status(t("st.recording"));
-    startPreviewLoop(recordingSession);
+    startPreviewLoop(session);
   } catch (err) {
+    if (generation !== captureGeneration) return;
     recordingSession = null;
+    setRecordState("idle");
     status(t("st.mic_error") + err, "error");
   }
+});
+
+window.addEventListener("pagehide", () => {
+  captureGeneration++;
+  stopPreviewLoop();
+  const session = recordingSession;
+  recordingSession = null;
+  if (session) session.cancel().catch(() => {});
+  clearPreview();
+  if (recordState !== "idle") status(t("st.page_left"));
+  setRecordState("idle");
 });
 
 /* ---------- Action chips ---------- */
 $("#polish").addEventListener("click", async () => {
   try { await polishEditor(); } catch (err) { status(String(err), "error"); }
 });
-$("#pick-file").addEventListener("click", () => $("#file").click());
+$("#pick-file").addEventListener("click", () => {
+  if (recordState === "idle" && !updateBusy) $("#file").click();
+});
 $("#file").addEventListener("change", async () => {
   const file = $("#file").files[0];
+  $("#file").value = "";
   if (!file) return;
-  try { await transcribeBlob(file); } catch (err) { status(String(err), "error"); setRecordState("idle"); }
+  // Le sélecteur peut avoir été ouvert avant le début de la capture.
+  if (recordState !== "idle" || updateBusy) {
+    status(t(updateBusy ? "st.update_busy" : "st.import_busy"), "error"); return;
+  }
+  const generation = captureGeneration;
+  try { await transcribeBlob(file); } catch (err) {
+    if (generation === captureGeneration) { status(String(err), "error"); setRecordState("idle"); }
+  }
 });
 $("#copy").addEventListener("click", async () => {
   status(t("st.copying"));
   try {
-    await postJson("/api/copy", { text: editor.value });
+    if (!systemClipboard) {
+      await navigator.clipboard.writeText(editor.value);
+    } else {
+      await postJson("/api/copy", { text: editor.value });
+    }
     status(t("st.copied"));
   } catch (err) {
     try { await navigator.clipboard.writeText(editor.value); status(t("st.copied_browser")); }
@@ -408,6 +491,14 @@ function fillModelSelect(sel, models, value) {
 
 async function loadConfig() {
   const cfg = await (await fetch("/api/config")).json();
+  serverPlatform = cfg.platform || "linux";
+  systemClipboard = cfg.capabilities?.system_clipboard !== false;
+  $("#paste").hidden = cfg.capabilities?.paste === false;
+  const help = $("#set-history-persist-help");
+  if (help) {
+    help.dataset.i18n = serverPlatform === "macos" ? "set.history_persist_help_macos" : "set.history_persist_help";
+    help.textContent = t(help.dataset.i18n);
+  }
   allowedModels = cfg.allowed_models || allowedModels;
   fillModelSelect($("#model"), allowedModels, cfg.model || "small");
   fillModelSelect($("#set-model"), allowedModels, cfg.model || "small");
@@ -505,6 +596,10 @@ $("#save-settings").addEventListener("click", async () => {
       snippets: vocabulary[1].parsed.entries,
     });
     $("#model").value = $("#set-model").value;
+    livePreview = $("#set-live-preview").checked;
+    historyPersist = $("#set-history-persist").checked;
+    renderRecent(recentEntries);
+    watchModel();
     closeOverlay($("#settings-overlay"));
     status(t("st.settings_saved"));
   } catch (err) { settingsError(String(err)); }
@@ -647,14 +742,18 @@ function emptyRecent() {
   return `<div class="recent-empty">
       <span>${escapeHtml(key ? t("recent.hotkey_bound", { key }) : t("recent.hotkey_unbound"))}</span>
       ${fix}
-      <span>${escapeHtml(t(historyPersist ? "recent.local_kept" : "recent.local"))}</span>
+      <span>${escapeHtml(t(historyPersist ? "recent.local_kept" : serverPlatform === "macos" ? "recent.local_macos" : "recent.local"))}</span>
     </div>`;
 }
 
 async function copyRecent(text) {
   status(t("st.copying"));
   try {
-    await postJson("/api/copy", { text });
+    if (!systemClipboard) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      await postJson("/api/copy", { text });
+    }
     status(t("st.copied"));
   } catch (err) {
     try { await navigator.clipboard.writeText(text); status(t("st.copied_browser")); }
@@ -669,11 +768,167 @@ function relativeTime(at) {
   return t("time.hours", { n: Math.round(seconds / 3600) });
 }
 
+/* ---------- Récupération après un échec ---------- */
+let recoveryEntries = [];
+let recoveryResult = null;
+let recoveryBusy = false;
+let recoveryLoading = false;
+let recoveryVersion = 0;
+let recoveryMessage = "";
+let recoveryError = false;
+
+function recoveryNotice(key, error = false) {
+  recoveryMessage = key;
+  recoveryError = error;
+  $("#recovery-status").textContent = key ? t("recovery." + key) : "";
+  $("#recovery").hidden = !recoveryEntries.length && !recoveryResult && !error;
+}
+
+function recoveryTime(at) {
+  return new Date(at * 1000).toLocaleString(lang, {
+    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function renderRecovery() {
+  const list = $("#recovery-list");
+  const focused = list.contains(document.activeElement) ? document.activeElement : null;
+  list.replaceChildren();
+  for (const entry of recoveryEntries) {
+    const item = document.createElement("li");
+    item.className = "recovery-item";
+    const meta = document.createElement("div");
+    meta.className = "recovery-meta";
+    const label = t("recovery.capture", { time: recoveryTime(entry.created_at) });
+    meta.textContent = label;
+    const expiry = document.createElement("small");
+    expiry.textContent = t("recovery.expires", { time: recoveryTime(entry.expires_at) });
+    meta.appendChild(expiry);
+    item.appendChild(meta);
+    for (const action of (entry.has_text ? ["retry", "raw", "delete"] : ["retry", "delete"])) {
+      const button = document.createElement("button");
+      button.className = "chip" + (action === "delete" ? " ghost" : "");
+      button.textContent = t("recovery." + action);
+      button.setAttribute("aria-label", t("recovery." + action) + " — " + label);
+      button.disabled = recoveryBusy || entry.busy === true;
+      button.dataset.recoveryId = entry.id;
+      button.dataset.recoveryAction = action;
+      button.addEventListener("click", () => actOnRecovery(action, entry.id));
+      item.appendChild(button);
+    }
+    list.appendChild(item);
+  }
+  if (focused) {
+    const next = Array.from(list.querySelectorAll("button")).find((button) =>
+      button.dataset.recoveryId === focused.dataset.recoveryId && button.dataset.recoveryAction === focused.dataset.recoveryAction);
+    if (next && !next.disabled) next.focus();
+  }
+  $("#refresh-recovery").disabled = recoveryBusy || recoveryLoading;
+  $("#dismiss-recovery").disabled = recoveryBusy;
+  $("#recovery-result").hidden = !recoveryResult;
+  $("#recovery-text").value = recoveryResult ? recoveryResult.text : "";
+  recoveryNotice(recoveryMessage, recoveryError);
+}
+
+async function loadRecovery() {
+  if (recoveryLoading || recoveryBusy) return;
+  recoveryLoading = true;
+  $("#refresh-recovery").disabled = true;
+  const version = recoveryVersion;
+  try {
+    const res = await fetch("/api/recovery", { cache: "no-store" });
+    if (!res.ok) throw new Error("recovery unavailable");
+    const data = await res.json();
+    if (!Array.isArray(data.entries)) throw new Error("invalid recovery response");
+    // Une lecture déjà en vol ne doit pas ressusciter une entrée supprimée.
+    if (version !== recoveryVersion) return;
+    recoveryEntries = data.entries;
+    if (recoveryMessage === "load_failed") recoveryNotice("");
+  } catch (_) {
+    if (version === recoveryVersion) recoveryNotice("load_failed", true);
+  } finally {
+    recoveryLoading = false;
+    // Ne pas redessiner les boutons pendant qu'une action est en cours.
+    if (!recoveryBusy) renderRecovery();
+  }
+}
+
+async function actOnRecovery(action, id) {
+  if (recoveryBusy) return;
+  if (action === "delete" && !window.confirm(t("recovery.delete_confirm"))) return;
+  const retry = action !== "delete";
+  if (retry && recoveryResult && !window.confirm(t("recovery.discard_confirm"))) return;
+  recoveryBusy = true;
+  recoveryVersion++;
+  recoveryNotice(retry ? "retrying" : "deleting");
+  renderRecovery();
+  try {
+    const res = await fetch("/api/recovery/" + (retry ? "retry" : "delete"), {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(action === "raw" ? { id, raw: true } : { id }),
+    });
+    if (!res.ok) {
+      const key = { 409: "busy", 410: "expired", 400: "invalid" }[res.status]
+        || (action === "delete" ? "delete_failed" : "failed");
+      if (res.status === 410) recoveryEntries = recoveryEntries.filter((entry) => entry.id !== id);
+      recoveryNotice(key, true);
+      return;
+    }
+    if (retry) {
+      const data = await res.json();
+      if (typeof data.text !== "string") throw new Error("invalid recovery response");
+      // Aucun passage par l'éditeur, le presse-papiers ou le collage ici : les
+      // modifications faites pendant l'inférence restent intactes.
+      recoveryResult = data.text.trim() ? { id, text: data.text } : null;
+      recoveryNotice(recoveryResult ? "ready" : "no_speech");
+      loadRecent();
+    } else {
+      recoveryEntries = recoveryEntries.filter((entry) => entry.id !== id);
+      if (recoveryResult && recoveryResult.id === id) recoveryResult = null;
+      recoveryNotice("deleted");
+    }
+  } catch (_) {
+    // Ne pas afficher la réponse brute : elle peut contenir du texte privé.
+    recoveryNotice(action === "delete" ? "delete_failed" : "failed", true);
+  } finally {
+    recoveryBusy = false;
+    renderRecovery();
+    // Les boutons de liste ont été reconstruits : rendre le focus à un point
+    // stable, sauf si la personne est en train d'écrire dans l'éditeur.
+    if (document.activeElement === document.body && !$("#recovery").hidden) $("#recovery-title").focus();
+    loadRecovery();
+  }
+}
+
+$("#refresh-recovery").addEventListener("click", loadRecovery);
+$("#open-recovery").addEventListener("click", () => {
+  if (!recoveryResult) return;
+  if (recordState !== "idle" || previewing) { recoveryNotice("editor_busy", true); return; }
+  if (editor.value.trim() && !window.confirm(t("recovery.replace_confirm"))) return;
+  editor.value = recoveryResult.text;
+  recoveryResult = null;
+  syncActionState();
+  renderRecovery();
+  editor.focus();
+  status(t("recovery.opened"));
+});
+$("#dismiss-recovery").addEventListener("click", () => {
+  if (!recoveryResult || !window.confirm(t("recovery.discard_confirm"))) return;
+  recoveryResult = null;
+  recoveryNotice("");
+  renderRecovery();
+  if (!$("#recovery").hidden) $("#recovery-title").focus();
+  else editor.focus();
+});
+window.addEventListener("focus", loadRecovery);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) loadRecovery(); });
+// Actualise aussi les expirations et les échecs du raccourci lorsque l'onglet
+// reste au premier plan. Aucun audio ni texte n'est chargé par cette lecture.
+setInterval(() => { if (!document.hidden) loadRecovery(); }, 30000);
+
 /* ---------- Mise à jour ---------- */
 // Ligne que le serveur écrit seule quand la mise à jour a réussi : elle distingue
 // « le journal s'est arrêté » de « c'est installé ».
 const UPDATE_DONE = "__APARTE_UPDATED__";
-let updateBusy = false;
 
 // Aucune vérification automatique : à l'ouverture du panneau on se contente de ce
 // que git sait déjà en local. Le réseau n'est joint que sur clic.
@@ -735,11 +990,18 @@ function renderUpdate(data) {
   $("#update-check").addEventListener("click", () => loadUpdate(true));
   const apply = $("#update-apply");
   if (apply) apply.addEventListener("click", runUpdate);
+  syncActionState();
+  if (recordState !== "idle") $("#update-note").textContent = t("update.capture_busy");
 }
 
 async function runUpdate() {
   if (updateBusy) return;
+  if (recordState !== "idle") {
+    $("#update-note").textContent = t("update.capture_busy");
+    return;
+  }
   updateBusy = true;
+  setRecordState(recordState);
   const log = $("#update-log");
   const note = $("#update-note");
   const buttons = [$("#update-check"), $("#update-apply")].filter(Boolean);
@@ -768,6 +1030,7 @@ async function runUpdate() {
   note.textContent = t(installed ? "update.restarting" : "update.failed");
   if (installed) return waitForRestart(note);
   updateBusy = false;
+  setRecordState(recordState);
   buttons.forEach((b) => (b.disabled = false));
 }
 
@@ -785,6 +1048,7 @@ async function waitForRestart(note) {
   }
   note.textContent = t("update.no_restart");
   updateBusy = false;
+  setRecordState(recordState);
 }
 
 let lastHealth = null;
@@ -817,6 +1081,7 @@ const modelMeter = $("#model-meter");
 let modelPhase = null;
 let lastModelState = null;
 let modelDoneTimer = null;
+let modelReconnecting = false;
 
 function formatMegabytes(bytes) {
   const mb = Math.round((bytes || 0) / 1e6);
@@ -831,9 +1096,11 @@ function formatMegabytes(bytes) {
 
 function renderModelState(data) {
   lastModelState = data;
-  const phase = data.state;
+  const needsPreparation = data.state === "unavailable" && data.reason === "configuration-changed";
+  const phase = needsPreparation ? "pending" : data.state;
   const previous = modelPhase;
-  modelDownloading = phase === "downloading";
+  if (phase !== previous) { clearTimeout(modelDoneTimer); modelDoneTimer = null; }
+  modelDownloading = ["downloading", "pending", "error"].includes(phase);
   syncActionState();
   // Rien à raconter : le modèle était déjà là quand la page s'est ouverte, ou il
   // n'y a rien à chercher (un chemin local, un autre moteur).
@@ -841,13 +1108,17 @@ function renderModelState(data) {
     modelNotice.hidden = true;
     return;
   }
+  // Keep a dismissed success hidden on subsequent background polls.
+  if (phase === "ready" && previous === "ready" && modelNotice.hidden) return;
   modelNotice.hidden = false;
   modelNotice.classList.toggle("failed", phase === "error");
-  if (phase !== previous) {
+  if (phase !== previous || modelReconnecting) {
+    modelReconnecting = false;
     // Une seule annonce par étape. Le compte d'octets change chaque seconde : le
     // laisser dans la région vive le ferait répéter sans fin à un lecteur d'écran.
     modelPhase = phase;
     $("#model-line").textContent = t(
+      phase === "pending" ? "model.pending" :
       phase === "downloading" ? "model.downloading"
         : phase === "error" ? "model.failed"
         : "model.ready"
@@ -856,9 +1127,9 @@ function renderModelState(data) {
   $("#model-privacy").hidden = phase !== "downloading";
   if (phase !== "downloading") {
     modelMeter.hidden = true;
-    $("#model-detail").textContent = phase === "error" ? (data.error || "") : "";
+    $("#model-detail").textContent = phase === "error" ? t("model.retry_native") : "";
     // L'attente est finie : la bande a fait son travail et s'efface.
-    if (phase === "ready") {
+    if (phase === "ready" && phase !== previous) {
       clearTimeout(modelDoneTimer);
       modelDoneTimer = setTimeout(() => { modelNotice.hidden = true; }, 8000);
     }
@@ -883,14 +1154,31 @@ function renderModelState(data) {
   }
 }
 
+let modelWatchTimer = null;
+let modelWatchBusy = false;
 async function watchModel() {
+  if (modelWatchBusy) return;
+  clearTimeout(modelWatchTimer);
+  modelWatchBusy = true;
+  let again = false;
   try {
     const res = await fetch("/api/model-state", { cache: "no-store" });
-    if (!res.ok) return;
+    if (res.status === 404) return;
+    if (!res.ok) throw new Error("model state unavailable");
     const data = await res.json();
     renderModelState(data);
-    if (data.state === "downloading") setTimeout(watchModel, 1000);
-  } catch (_) {}
+    // Also observe a native retry or a model change after the initial download.
+    again = true;
+  } catch (_) {
+    again = true;
+    if (modelDownloading) {
+      modelReconnecting = true;
+      $("#model-line").textContent = t("model.reconnecting");
+    }
+  } finally {
+    modelWatchBusy = false;
+    if (again) modelWatchTimer = setTimeout(watchModel, modelDownloading ? 1000 : 5000);
+  }
 }
 
 /* ---------- Init ---------- */
@@ -907,6 +1195,7 @@ applyI18n();
   // Après le diagnostic : l'état vide affiche le raccourci qu'il vient d'y lire.
   loadRecent();
   watchModel();
+  loadRecovery();
   // Entrée « Réglages » du menu de la barre système : elle ouvre cette page
   // avec le tiroir déjà déplié.
   if (location.hash === "#settings") openOverlay("#settings-overlay");

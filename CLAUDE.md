@@ -72,9 +72,11 @@ Il n'y a **pas de `.venv` ni de `pytest`** sur cette machine. Les tests sont
 écrits en `unittest` :
 
 ```bash
-PYTHONPATH=src python3 -m unittest discover -s tests -t tests
+python3 scripts/run-tests.py
 ```
 
+Ce lanceur isole configuration, données et caches avant tout import. Il exécute
+`PYTHONPATH=src python3 -m unittest discover -s tests -t tests`.
 Le `-t tests` est nécessaire : `tests/` n'a pas de `__init__.py`, et sans lui
 la découverte échoue avec « Start directory is not importable ».
 
@@ -354,7 +356,7 @@ phrases voisines.
   est un test de route explicite dans `do_POST`, **après** l'Origin-check. Les
   actions natives Mac passent par la CLI, le raccourci in-process ou le tray.
   (M3, `docs/plan-portage-macos-m3.md`.)
-- **Sur macOS, l'enregistrement de la bascule vit en mémoire du serveur**
+- **Sur macOS, la capture active de la bascule vit en mémoire du serveur**
   (`macos_recording.py`, `RecordingController`), pas dans `session.py` (arecord,
   `/proc` — Linux only). Trois garde-fous que M5 ne doit pas casser : son
   `recording_lock` est **distinct** d'`inference_lock` (les mélanger bloque
@@ -392,22 +394,20 @@ phrases voisines.
     `handler_factory(return_controller=True)`) : il câble le déclencheur et appelle
     `shutdown()`. Le handler HTTP ne fait qu'**observer** (`_recording_controller`,
     `hotkey_state`).
-  - **`finally` ordonné** : désinscrire le raccourci → `dispatcher.close()` (join
-    borné, aucun `toggle()` en vol) → `controller.shutdown()` → `server.shutdown()`
-    + `server_close()`. `server.shutdown()` **jamais** dans une branche Linux où
-    `serve_forever()` tient le fil principal (interblocage). ⚠️ **Ce démontage ne
-    vaut que pour une sortie normale de la boucle** (le futur « Quitter » du tray,
-    M6) : `_appkit_run_loop` remet SIGINT à `SIG_DFL`, donc un `Ctrl-C` **tue le
-    processus net**, sans `KeyboardInterrupt` et sans `finally` — vérifié en M8, la
-    ligne « Stopping desktop server » n'apparaît jamais. Sans dégât (tout est en
-    mémoire : aucun processus survivant, aucun micro laissé ouvert), mais ne pas
-    écrire ni croire l'inverse.
-  - **`Settings.hotkey` = réglage de fichier** lu **au démarrage** (redémarrage
-    pour changer en M5), **hors `EDITABLE_FIELDS`** mais **dans `DEFAULT_CONFIG`**
-    (sinon `update_config` le jette). **Vide = aucun raccourci** (opt-in via
-    `install-hotkey`, cohérent avec Linux) : le serveur n'inscrit rien. Format
-    canonique macOS `ctrl+opt+d` (entrée), distinct des accélérateurs gsettings ;
-    `⌃⌥D` est **sortie seule** (`hotkey_label`).
+  - **Démontage : conserver avant de quitter.** `controller.shutdown()` ferme
+    la capture et garantit une copie privée avant de laisser le tray, le
+    raccourci, le dispatcher et le serveur se fermer. Si la sauvegarde échoue,
+    le menu reste vivant pour réessayer ; une transcription bloquée déjà
+    sauvegardée ne bloque pas la sortie. Aucun collage tardif après validation
+    de la fermeture. Un arrêt forcé pendant la capture en RAM reste destructeur.
+    `server.shutdown()` ne s'appelle jamais depuis le fil qui sert les requêtes.
+  - **`Settings.hotkey` reste hors `EDITABLE_FIELDS` HTTP, dans `DEFAULT_CONFIG`.**
+    Vide = aucun raccourci. Le menu natif « Configurer le raccourci… » inscrit
+    puis sauvegarde la combinaison et garde l'ancienne si l'opération échoue.
+    Une modification par la CLI/fichier exige encore un redémarrage. Format
+    d'entrée `ctrl+opt+d`, sortie `⌃⌥D`. Un seul backend Carbon par processus
+    conserve son callback et attribue des identifiants distincts ; les événements
+    étrangers retournent `eventNotHandledErr`.
   - **L'état du raccourci s'observe, il ne déclenche aucun effet système** :
     `GET /api/hotkey-state` (lecture seule, autorisée sur Darwin) rend
     `{registered, configured_key, status, error}`. `serve_macos` **publie** cet état
@@ -543,7 +543,8 @@ encore la mesure est nommé comme tel à la fin.
 - **La `.app` est construite sur la machine de l'utilisateur, jamais
   téléchargée.** C'est ce qui la garde hors de la quarantaine : l'attribut est
   posé par ce qui télécharge, et il n'y a rien à télécharger. Corollaire :
-  aucun compte Apple, aucun Mac pour fabriquer les versions, aucune CI macOS.
+  aucun compte Apple prévu pour cette hypothèse de distribution locale. La CI
+  macOS et une preuve interactive des autorisations restent nécessaires.
 - **L'exécutable principal du bundle est un Mach-O, jamais un script.** Apple
   DTS (thread 678819) : *« TCC expects its bundled clients … to use a native main
   executable. … If your product uses a script as its main executable, you're
@@ -587,7 +588,7 @@ encore la mesure est nommé comme tel à la fin.
   système déclenchable depuis un navigateur — même critère que le reste de
   l'invariant Darwin. `GET /api/model-state` **observe** seulement, et rend 404
   tant que rien n'a été lancé dans ce processus. Trois règles :
-  - **La progression somme tous les blocs du cache, pas seulement les
+  - **La progression somme tous les blocs du dépôt exact, pas seulement les
     `.incomplete`.** `huggingface_hub` télécharge dans `<sha>.incomplete` puis
     renomme : ne compter que les incomplets ferait **reculer** la barre à chaque
     fichier terminé.
@@ -615,7 +616,40 @@ encore la mesure est nommé comme tel à la fin.
   certificat local auto-signé. Les deux se mesurent
   (`.claude/mac-validation/m7/`), comme M8 a mesuré le nombre d'événements par
   appui plutôt que de le supposer. **Tant que M7-0 n'a pas répondu, les lots M7c
-  à M7h ne s'écrivent pas.**
+  à M7h ne s'écrivent pas.** La demande explicite du 19 septembre autorise les
+  correctifs du prototype et la CI ; elle ne tranche pas le lanceur, la signature
+  finale, la formula ni le démarrage à la connexion.
+
+### Fiabilisation du 19 septembre 2026
+
+État actuel : [tasks/fiabilisation-macos.md](tasks/fiabilisation-macos.md).
+L'audit est un instantané historique ; ce suivi distingue les corrections
+exécutées sous Linux de ce qui exige encore un vrai Mac.
+
+- `recovery.save_and_claim()` publie **et verrouille** la capture avant toute
+  inférence native. Garder le verrou jusqu'à la livraison évite qu'une suppression
+  concurrente efface la seule copie. Sauver le brut avant polissage ; supprimer
+  après livraison réussie seulement. Le retry conserve sa source jusqu'à
+  suppression explicite/expiration, même si la réponse HTTP est perdue.
+- Captures de secours : fichiers privés, durée d'une heure, nettoyage périodique
+  quand le serveur tourne ou à la prochaine utilisation. Aucun minuteur ne tourne
+  après l'arrêt du processus. Historique temporaire Mac : fichier privé de 24 h,
+  nettoyé à la prochaine lecture/écriture, pas de promesse de RAM ou de logout.
+- Le cache modèle n'est prêt qu'avec les fichiers requis non vides du dépôt et
+  de la révision exacts. Ce n'est pas une vérification de leur contenu. La capture
+  native attend la préparation ; le navigateur observe, son inférence
+  faster-whisper Mac utilise exclusivement le snapshot local vérifié. Changer le
+  modèle exige de le préparer depuis le menu natif. Le sondage reprend après une
+  erreur réseau transitoire ; aucun pourcentage sans taille totale connue.
+- L'interface Mac utilise le presse-papiers du navigateur au clic. Aucune route
+  native de collage/copie n'est réactivée. La langue des menus vient de Foundation,
+  l'insertion Unicode compte les unités UTF-16 et garde les paires de surrogates.
+- Installation du prototype : signature vérifiée avant et après publication,
+  verrou interprocessus, construction sur le volume de destination, ancienne
+  application conservée puis restaurée en cas d'erreur. Si la restauration échoue,
+  ne jamais effacer la sauvegarde. Les ressources FR/EN sont toutes présentes,
+  indépendantes de la locale de construction. Une première reconstruction de
+  l'ancien bundle peut changer son empreinte et demander `--force` + réautorisation.
 
 ## Git
 

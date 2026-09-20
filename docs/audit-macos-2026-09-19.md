@@ -6,6 +6,9 @@ la protection des dictées, la reprise des correctifs communs déjà livrés sou
 Linux, puis la preuve du parcours d'installation et d'autorisation sur un Mac
 Apple Silicon récent. Une refonte générale n'est pas justifiée par cet audit.
 
+**Instantané avant correction.** L’implémentation a ensuite été autorisée ;
+consulter les jalons du plan pour l’état après correction.
+
 Plan exécutable : [fiabilisation et livraison macOS](../tasks/fiabilisation-macos.md).
 
 ## Périmètre et preuves

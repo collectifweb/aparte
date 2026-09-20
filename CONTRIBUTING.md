@@ -1,6 +1,7 @@
 # Contributing to Aparté
 
-Thanks for your interest in Aparté — a local-first dictation app for Linux.
+Thanks for your interest in Aparté — a local-first dictation app for Linux,
+with an experimental native macOS port.
 Contributions of all kinds are welcome: bug reports, fixes, features, docs, and
 testing on different desktop environments.
 
@@ -32,6 +33,8 @@ venv with `python3 -m venv --without-pip .venv` and bootstrap pip with
 Optional extras:
 
 - `.[cuda]` — NVIDIA GPU acceleration (CUDA runtime wheels, no system toolkit).
+- `.[whisper,recording,macos,dev]` — the macOS development environment; install
+  PortAudio first with `brew install portaudio`. See the [prototype setup](README.md#running-on-macos-development-prototype).
 - System tools for recording/insertion: `sudo apt install alsa-utils xclip xdotool`
   (X11) or `wl-clipboard wtype` (Wayland).
 
@@ -40,23 +43,59 @@ see what is set up.
 
 ## Running the tests
 
+Use the isolated runner from the repository root:
+
 ```bash
-PYTHONPATH=src python3 -m unittest discover -s tests -t tests
+python3 scripts/run-tests.py                      # complete suite; required on Linux
+python3 scripts/run-tests.py --suite macos        # macOS-compatible selection
+python3 scripts/run-tests.py test_config_persistence test_recovery
 ```
 
-Both flags are required. `-t tests` sets the top-level directory: `tests/` has no
-`__init__.py`, and without it discovery fails with *"Start directory is not
-importable"*. `PYTHONPATH=src` is what lets the tests import `aparte` when you
-have not installed the package in editable mode.
+The runner creates private temporary configuration, data, state, runtime,
+temporary-file and model-cache directories before importing the application. It
+removes inherited `APARTE_*` and `MURMUR_*` overrides, sets `APARTE_CONFIG`, and
+puts Hugging Face in offline mode. It deliberately does **not** set
+`APARTE_RUNTIME_DIR`: some tests exercise the `XDG_RUNTIME_DIR` fallback. All
+paths are removed after the test subprocess exits.
 
-The suite is dependency-light and runs without a Whisper backend, a microphone,
-or a display. Please keep it that way: mock external tools and never require a
-real model download or audio device in a test.
+The underlying Linux command is `PYTHONPATH=src python3 -m unittest discover -s
+tests -t tests`. Run it directly only with equivalent isolation. Both discovery
+flags are required because `tests/` has no `__init__.py`.
 
-A test that goes through `current_settings()` must point `APARTE_CONFIG` at a
-temporary file, not just `APARTE_RUNTIME_DIR` — otherwise the server reads the
-real user config, and if `history_persist` is on there, the test writes into
-somebody's actual dictation history.
+Tests must not use personal dictation history, a real clipboard, a microphone,
+login entries or a model download. A test that calls `current_settings()` must
+set `APARTE_CONFIG` to a temporary file: a runtime override alone still reads
+the user's persistence setting. Tests that install desktop entries must isolate
+both `XDG_DATA_HOME` and `XDG_CONFIG_HOME`, since legacy cleanup reaches
+autostart configuration. Keep tests safe when run individually as well as through
+the runner. Synthetic files, fake audio devices and controlled concurrent
+processes cover storage failures and lifecycle races without personal data.
+
+The Linux suite remains dependency-light. Node is needed for the browser
+controller tests; they exercise JavaScript with synthetic DOM/audio objects,
+without opening a browser or microphone. A C compiler runs the launcher
+compilation tests. Native macOS signing checks skip on other platforms.
+
+### macOS validation
+
+The [CI workflow](.github/workflows/ci.yml) defines a separate `macos-15` job with
+Python 3.11, PortAudio and the real `whisper,recording,macos,dev` dependencies. It
+checks the installed package and native imports, then runs the isolated macOS
+selection. That includes actual `clang` compilation and `codesign` verification,
+bundle stability across French/English locales, and signature rejection after a
+synthetic resource modification. Linux continues to run the complete suite.
+
+A workflow definition is not a successful CI run. Record the run URL and result
+when GitHub executes it; local Linux tests and simulated Darwin branches do not
+establish native success. CI also cannot prove microphone/Accessibility prompts,
+Finder launch attribution, shortcut delivery, insertion into target apps or
+permission continuity after upgrades. Those require the interactive
+[M7-0 protocol](.claude/mac-validation/m7/README.md) and the matrix in the
+[macOS reliability plan](tasks/fiabilisation-macos.md).
+
+Do not change the installed app or switch branches in a Syncthing-shared working
+tree to run these checks. Use an isolated checkout, preserve pre-existing work,
+and distinguish executed checks from simulations and code inspection in reports.
 
 ## Code layout
 
@@ -72,6 +111,7 @@ src/aparte/
   polish.py         heuristic + Ollama text cleanup
   numbers.py        French numbers dictated in words → digits
   history.py        the last five dictations, shared by every Aparté process
+  recovery.py       private, expiring audio/raw-text recovery and retry claims
   clipboard.py      copy / paste (wl-clipboard, xclip, wtype, xdotool)
   notify.py         desktop notifications (notify-send)
   diagnostics.py    structured setup checks, shared by CLI + /api/doctor
@@ -79,6 +119,11 @@ src/aparte/
   tray.py           system tray icon (PyGObject + AppIndicator, optional)
   update.py         git pull + reinstall, driven from the Setup panel
   linux_desktop.py  .desktop launcher, autostart, and icon install
+  macos_recording.py native capture lifecycle and recovery before processing
+  macos_runloop.py   AppKit loop, global shortcut and ordered shutdown
+  macos_tray.py      native menu actions and status
+  macos_install.py   signed bundle publication and rollback
+  model_download.py shared model-cache checks and preparation state
   assets/           frontend: index.html, app.css, app.js, i18n.js, SVG icons
 ```
 

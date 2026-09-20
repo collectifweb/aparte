@@ -492,6 +492,23 @@ textarea.kv {
   max-height: 30vh;
   overflow-y: auto;
 }
+/* Récupération et historique partagent la zone qui défile : le micro et
+   l’éditeur ne changent pas de place lorsqu’une capture échoue. */
+.recovery { padding-bottom: var(--sp-4); margin-bottom: var(--sp-3); border-bottom: 1px solid var(--line); }
+.recovery-heading, .recovery-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.recovery-heading { justify-content: space-between; }
+.recovery h2 { margin: 0; font-size: var(--fs-ui); font-weight: 600; }
+.recovery-help, .recovery-status { margin: var(--sp-2) 0; font-size: var(--fs-ui); color: var(--ink-soft); }
+.recovery-status { color: var(--ink); }
+.recovery-status:empty { display: none; }
+.recovery-list { list-style: none; margin: 0; padding: 0; }
+.recovery-item { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); padding: var(--sp-2) 0; border-bottom: 1px solid var(--line); }
+.recovery-item:last-child { border-bottom: none; }
+.recovery-meta { flex: 1 1 180px; font-size: var(--fs-ui); }
+.recovery-meta small { display: block; color: var(--ink-soft); font-size: var(--fs-caption); }
+#recovery-result { margin-top: var(--sp-3); }
+#recovery-result label { font-size: var(--fs-ui); font-weight: 600; }
+#recovery-text { display: block; width: 100%; margin-top: var(--sp-2); padding: var(--sp-3); resize: vertical; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--ink); font: var(--fs-title)/1.65 var(--font-text); }
 .recent-empty {
   display: grid; gap: var(--sp-2);
   color: var(--ink-soft); font-size: var(--fs-caption);

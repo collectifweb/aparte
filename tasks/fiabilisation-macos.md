@@ -1,6 +1,7 @@
-# Fiabilisation et livraison macOS — plan proposé le 19 septembre 2026
+# Fiabilisation et livraison macOS — suivi du 19 septembre 2026
 
-État : **implémentation autorisée par Alexandre, en cours**.
+État : **correctifs locaux implémentés et vérifiés sous Linux ; validation
+matérielle et distribution macOS encore ouvertes**.
 Source : [audit macOS](../docs/audit-macos-2026-09-19.md), branche
 `feat/portage-macos`, base `73b5317`. Alexandre a demandé l’implémentation après l’audit. Le travail reste local,
 sans déploiement ni changement des installations utilisées.
@@ -34,12 +35,12 @@ Ne pas fabriquer de `.app` finale sur la seule réussite des mocks Linux.
 
 - [x] Créer une copie isolée hors Syncthing ; vérifier les remotes et comparer
       le vrai `main` récent, sans changer de branche dans l'arbre partagé.
-- [ ] Intégrer les correctifs communs de vocabulaire, Host HTTP, verrou
+- [x] Intégrer les correctifs communs de vocabulaire, Host HTTP, verrou
       d'inférence, configuration/historique et capture navigateur.
-- [ ] Résoudre les jonctions Mac à la main : garder les routes natives
+- [x] Résoudre les jonctions Mac à la main : garder les routes natives
       interdites via HTTP, les imports conditionnels et les boucles AppKit.
-- [ ] Adapter la récupération des captures/texte brut au contrôleur natif.
-- [ ] Tester refus disque, exceptions moteur/polissage, concurrence et
+- [x] Adapter la récupération des captures/texte brut au contrôleur natif.
+- [x] Tester refus disque, exceptions moteur/polissage, concurrence et
       enchaînement de dictées, puis suite complète isolée.
 
 **Acceptation :** MAC-02 à 05, 10 et stockage de MAC-11 corrigés avec scénarios
@@ -49,17 +50,20 @@ préexistants sans décision distincte.
 
 ## Lot 2 — rendre les états et les sorties fiables
 
-- [ ] Fermeture : terminer le travail ou abandon explicitement choisi,
+- [x] Fermeture : terminer le travail ou abandon explicitement choisi,
       conservation privée en cas d'échec ; pas de capture perdue implicitement.
-- [ ] Exposer dépassement de durée, débordement audio et dernière erreur.
-- [ ] Modèle : dépôt exact et cache complet, reprise après interruption,
+- [x] Exposer dépassement de durée, débordement audio et dernière erreur.
+- [x] Modèle : dépôt exact et cache complet, reprise après interruption,
       état partagé pour raccourci et navigateur ; sondage web résilient.
-- [ ] Définir la conservation réelle de l'historique temporaire sur Mac.
-- [ ] Réparer les écarts fonctionnels de MAC-15 : actions web disponibles,
+- [x] Définir la conservation réelle de l'historique temporaire sur Mac.
+- [x] Réparer les écarts fonctionnels de MAC-15 : actions web disponibles,
       préférences de langue système, UTF-16, réglages relus par le menu,
       aperçu immédiat et conseils de réparation.
-- [ ] Définir une sortie d'un traitement anormalement long qui préserve la
-      capture ; mesurer avant de fixer les seuils et le mécanisme d'annulation.
+- [x] Autoriser la sortie d’un traitement bloqué une fois la capture préservée,
+      sans collage tardif. En cas de panne de stockage, refuser de quitter et
+      proposer de réessayer plutôt que perdre la capsule en mémoire.
+- [ ] Mesurer les durées natives et définir les seuils d’avertissement ; pas de
+      destruction arbitraire d’un fil de calcul Python.
 
 **Acceptation :** états compréhensibles et cohérents après erreur ; récupération
 possible ; aucun faux « prêt » dû à un cache vide ; aucun bouton durablement
@@ -73,13 +77,15 @@ Dépend du verdict du lot 0 et du socle des lots 1–2.
       avec les architectures promises, extras `whisper,recording,macos`, pas CUDA.
 - [ ] Tester sur un compte neuf les prérequis Homebrew/outils Apple, sans supposer
       que Python, PortAudio ou les modèles sont déjà installés.
-- [ ] Publication du bundle avec restauration sur erreur, vérification de
+- [x] Publication du bundle avec restauration sur erreur, vérification de
       signature, réinstallation idempotente et message de réparation.
-- [ ] Premier lancement : autorisations expliquées, préparation du modèle,
-      choix/activation du raccourci et vérification par un véritable appui.
-- [ ] Ajouter le démarrage à la connexion natif avec opt-in, ou annoncer
-      explicitement son absence dans la première bêta. Ne pas confondre avec
-      l'intégration de bureau Linux.
+- [x] Ajouter au menu natif le choix/activation du raccourci avec retour arrière
+      sur échec et la préparation explicite du modèle.
+- [ ] Valider le premier lancement et les autorisations sur compte neuf, puis
+      le raccourci par un véritable appui. Inscription acceptée ≠ raccourci prouvé.
+- [x] Annoncer explicitement l’absence de démarrage à la connexion dans le README.
+- [ ] Ajouter ultérieurement le démarrage natif avec opt-in après preuve du
+      lanceur, sans le confondre avec l’intégration de bureau Linux.
 - [ ] Vérifier mise à jour, relance nécessaire, désinstallation et données
       conservées. Aligner les commandes réellement disponibles et la doc.
 
@@ -91,10 +97,11 @@ développeur ni commande de dépannage cachée.
 
 À préparer pendant les lots précédents ; le passage complet suit le lot 3.
 
-- [ ] CI macOS sur chaque PR : dépendances natives réelles, imports PyObjC,
-      compilation/signature du lanceur, installation du paquet/formula,
-      tests sans périphérique et conservation des résultats.
-- [ ] Préserver la CI Linux ; rendre les tests de langue indépendants de la
+- [x] Préparer la CI macOS Apple Silicon sur push/PR : dépendances réelles,
+      imports du paquet installé, clang/codesign, tests sans périphérique.
+- [ ] Exécuter cette CI sur GitHub et conserver son résultat ; l’installation
+      du paquet Python est couverte, celle de la formula attend le lot 0.
+- [x] Préserver la CI Linux ; rendre les tests de langue indépendants de la
       locale du runner. La compilation sous gcc n'est pas la preuve clang.
 - [ ] Essais manuels sur chaque combinaison OS/architecture annoncée :
       permissions, raccourci/clavier, quatre applications cibles, micro
@@ -111,8 +118,8 @@ interactifs de permissions et de collage.
 
 ## Lot 5 — bêta limitée, puis publication
 
-- [ ] Consolider une page d'état actuelle, archiver les consignes de lots
-      devenues contradictoires, aligner README/CHANGELOG/versions.
+- [x] Consolider le suivi actuel, marquer l’audit comme historique et aligner
+      README/CHANGELOG/consignes. Version inchangée : aucune release publiée.
 - [ ] Distribuer une bêta à quelques testeurs sur les cibles annoncées ; relever
       erreurs et étapes techniques sans collecter les dictées par défaut.
 - [ ] Corriger les problèmes bloquants observés et rejouer la matrice touchée.
@@ -151,5 +158,52 @@ sa première reconstruction après ce changement peut nécessiter `--force` et d
 réaccorder les autorisations. Le mode du lanceur et la signature restent ceux du
 prototype : aucune décision M7-0 n’est déduite des simulations.
 
-Validation : 60 tests installation/bundle exécutés sous Linux, dont un test natif
+Validation : 61 tests installation/bundle exécutés sous Linux, dont un test natif
 clang/codesign ignoré. Ce dernier est ajouté pour le runner macOS.
+
+### Captures, modèle, interface et automatisation
+
+- Sauvegarde privée native avant inférence, texte brut avant polissage, verrou
+  conservé de la création à la livraison ; récupération CLI et web après erreur.
+- Fermeture coordonnée ; aucune insertion tardive après fermeture validée.
+  Débordement audio et limite de durée visibles. Panne disque : capsule conservée
+  ou fichier source laissé au chemin signalé, jamais présenté comme récupéré.
+- Filtre Host sur les lectures HTTP, verrou d’inférence libéré même après une
+  panne de fichier temporaire, capture navigateur exclusive et nettoyage des
+  streams lors d’une erreur/ouverture tardive/fermeture de page.
+- État du modèle fondé sur dépôt/révision/fichiers exacts, une préparation à la
+  fois, reprise depuis le menu natif. Le chemin Mac faster-whisper utilise le
+  snapshot local lors de l’inférence : l’HTTP ne lance pas son téléchargement.
+- Copie web via le navigateur, bouton de collage système masqué sur Mac, réglages
+  relus, langue des menus via Foundation, insertion UTF-16 corrigée. Le bandeau
+  du modèle reprend après panne réseau et disparaît réellement après succès.
+- Menu de raccourci avec retour arrière ; un backend Carbon par processus garde
+  le callback vivant et ne consomme pas les événements étrangers.
+- Lanceur de tests isolé et CI Linux/macOS ; la CI macOS n’a pas été exécutée
+  dans cette intervention, qui dispose uniquement d’un hôte Linux.
+
+**Vérification actuelle :** [preuve et limites](../docs/validation-macos-2026-09-19.md).
+726 tests exécutés sous Linux, suite verte avec 1 test natif ignoré ; sélection
+macOS : 471 tests avec ce même test ignoré (totaux non additionnables).
+
+### Correspondance avec l’audit
+
+| Constats | État après correction |
+| --- | --- |
+| MAC-01 à 05, MAC-10 et 11 | Correctifs intégrés avec tests du socle et des parcours concernés |
+| MAC-06, MAC-08 | Ouverts : cible, installation neuve, TCC, distribution réelle |
+| MAC-07 | Réglage natif livré ; essai physique du raccourci encore requis |
+| MAC-09 | Sauvegarde avant fermeture et pas de livraison tardive ; kill brutal pendant capture hors garantie |
+| MAC-12, MAC-13 | Cache exact, reprise et garde native/web pour faster-whisper ; poids réels à charger sur Mac |
+| MAC-14 | Vérification + restauration ; essais codesign natifs préparés, pas exécutés ici |
+| MAC-15 | Code et tests corrigés ; langue/Unicode/peripherals restent à confirmer nativement |
+| MAC-16 | Récupération et CI préparées ; matrice matérielle et temps réels ouverts |
+
+### Prochaine étape concrète
+
+1. Exécuter `.claude/mac-validation/m7/` sur un Mac Apple Silicon récent ;
+   consigner OS/Python/Homebrew/architecture, Finder, permissions et relances.
+2. Déclencher la CI et suivre le premier résultat macOS. Tester le même commit
+   sur compte neuf, avec texte synthétique, avant de déclarer un Mac pris en charge.
+3. Sur ces preuves, choisir lanceur/signature puis implémenter la formula et
+   son parcours de mise à jour/désinstallation. Le tap et la bêta ne sont pas publiés.

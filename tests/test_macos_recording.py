@@ -1,3 +1,6 @@
+import os
+import tempfile
+import threading
 import sys
 import types
 import unittest
@@ -66,6 +69,13 @@ class FakeSounddevice:
 
 class ControllerTestBase(unittest.TestCase):
     def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.runtime = Path(temporary.name)
+        environment = mock.patch.dict(os.environ, {"APARTE_RUNTIME_DIR": str(self.runtime / "runtime"),
+                                                   "APARTE_CONFIG": str(self.runtime / "config.json")})
+        environment.start()
+        self.addCleanup(environment.stop)
         self.sd = FakeSounddevice()
         self.now = 1000.0
         self.settings = _settings()
@@ -87,6 +97,7 @@ class ControllerTestBase(unittest.TestCase):
         # at the boundary. deliver_transcript keeps its real empty→False contract so
         # the worker's branches behave, but records instead of touching the clipboard.
         self.notify = mock.patch.object(macos_recording, "notify").start()
+        mock.patch.object(macos_recording, "ensure_microphone_access").start()
         self.addCleanup(mock.patch.stopall)
         self.delivered: list[tuple] = []
 
@@ -160,6 +171,8 @@ class CallbackTest(ControllerTestBase):
         stream.feed(40)   # dropped
         self.assertEqual(len(capture.frames), 3)
         self.assertTrue(capture.truncated)
+        self.assertEqual(capture.frame_count, 100)
+        self.assertEqual(sum(map(len, capture.frames)), 200)
 
     def test_a_portaudio_status_is_recorded_as_overflow(self):
         self.controller.toggle()
@@ -231,7 +244,7 @@ class ConflictTest(ControllerTestBase):
 
 
 class ShutdownTest(ControllerTestBase):
-    def test_shutdown_discards_a_live_recording_without_transcribing(self):
+    def test_shutdown_preserves_a_live_recording_without_transcribing(self):
         self.controller.toggle()
         self.sd.streams[0].feed(16000)
         self.controller.shutdown()
@@ -239,6 +252,7 @@ class ShutdownTest(ControllerTestBase):
         self.assertEqual(self.controller.state, IDLE)
         self.assertEqual(self.transcribed, [])
         self.assertIsNone(self.controller._worker)
+        self.assertEqual(len(macos_recording.recovery.entries()), 1)
 
 
 class MissingFrameworkTest(ControllerTestBase):
@@ -420,7 +434,7 @@ class BoundedShutdownTest(ControllerTestBase):
         self.assertFalse(self.controller.shutdown(timeout=0.05))
         self.assertEqual(self.controller.state, RECORDING)  # untouched, not corrupted
 
-    def test_shutdown_still_discards_a_live_recording_when_it_gets_the_lock(self):
+    def test_shutdown_closes_an_empty_live_recording_when_it_gets_the_lock(self):
         self.controller.toggle()
         self.assertTrue(self.controller.shutdown(timeout=1.0))
         self.assertEqual(self.controller.recording_snapshot(), (IDLE, None))
@@ -431,6 +445,103 @@ class BoundedShutdownTest(ControllerTestBase):
         self.controller.toggle()
         self.assertTrue(self.controller.shutdown())
         self.assertEqual(self.controller.state, IDLE)
+
+
+class RecoverySafetyTest(ControllerTestBase):
+    def test_transcription_failure_keeps_recoverable_audio(self):
+        self.controller._transcribe_fn = mock.Mock(side_effect=RuntimeError("model failed"))
+        self._record_and_stop()
+        entries = macos_recording.recovery.entries()
+        self.assertEqual(len(entries), 1)
+        with macos_recording.recovery.claim(entries[0]["id"]) as item:
+            with wave.open(str(item.audio_path)) as wav:
+                self.assertEqual(wav.getnframes(), 16000)
+            self.assertIsNone(item.raw_text)
+
+    def test_capture_cannot_be_deleted_between_storage_and_transcription(self):
+        reads = []
+        def settings():
+            reads.append(True)
+            if len(reads) == 2:  # worker reads config after preserving its audio
+                entries = macos_recording.recovery.entries()
+                self.assertEqual(len(entries), 1)
+                self.assertTrue(entries[0]["busy"])
+                with self.assertRaises(macos_recording.recovery.RecoveryBusy):
+                    macos_recording.recovery.discard(entries[0]["id"])
+            return self.settings
+        self.controller._settings_provider = settings
+        self._record_and_stop()
+        self.assertEqual(len(reads), 2)
+        self.assertEqual(self.controller.state, IDLE)
+        self.assertEqual(len(self.delivered), 1)
+
+    def test_failed_initial_backup_keeps_capsule_until_storage_recovers(self):
+        with mock.patch.object(macos_recording.recovery.shutil, "copyfileobj", side_effect=OSError("disk full")):
+            self._record_and_stop()
+        self.assertEqual(self.controller.state, ERROR)
+        self.assertIsNotNone(self.controller._unsaved_capture)
+        self.assertEqual(self.transcribed, [])
+        self.assertTrue(self.controller.shutdown(timeout=.1))
+        self.assertEqual(len(macos_recording.recovery.entries()), 1)
+
+    def test_polish_failure_keeps_raw_text(self):
+        self.polish.side_effect = RuntimeError("polish failed")
+        self._record_and_stop()
+        entry = macos_recording.recovery.entries()[0]
+        with macos_recording.recovery.claim(entry["id"]) as item:
+            self.assertEqual(item.raw_text, "bonjour le monde")
+        self.deliver.assert_not_called()
+
+    def test_success_removes_private_backup(self):
+        self._record_and_stop()
+        self.assertEqual(macos_recording.recovery.entries(), [])
+
+    def test_shutdown_during_blocked_inference_preserves_and_suppresses_late_paste(self):
+        entered, release = threading.Event(), threading.Event()
+        def transcribe(path):
+            entered.set()
+            release.wait(3)
+            return "late text"
+        self.controller._transcribe_fn = transcribe
+        self.controller.toggle()
+        self.sd.streams[0].feed(16000)
+        self.now += 1
+        self.controller.toggle()
+        self.assertTrue(entered.wait(2))
+        try:
+            self.assertTrue(self.controller.shutdown(timeout=.1))
+            self.assertTrue(self.controller._worker.is_alive())
+            self.assertEqual(len(macos_recording.recovery.entries()), 1)
+        finally:
+            release.set()
+            self._run_worker()
+        self.deliver.assert_not_called()
+        self.assertEqual(len(macos_recording.recovery.entries()), 1)
+
+    def test_disk_failure_keeps_memory_and_refuses_quit_until_saved(self):
+        self.controller.toggle()
+        self.sd.streams[0].feed(16000)
+        with mock.patch.object(self.controller, "_write_wav", side_effect=OSError("disk full")):
+            self.assertFalse(self.controller.shutdown(timeout=.1))
+            self.assertIsNotNone(self.controller._unsaved_capture)
+        self.assertTrue(self.controller.shutdown(timeout=.1))
+        self.assertEqual(len(macos_recording.recovery.entries()), 1)
+
+    def test_overflow_is_visible_after_success(self):
+        self.controller.toggle()
+        self.sd.streams[0].feed(16000, status="overflow")
+        self.now += 1
+        self.controller.toggle()
+        self._run_worker()
+        self.assertEqual(self.controller.warning, "overflow")
+        self.assertEqual(self.notify.call_args.kwargs["urgency"], "normal")
+
+    def test_model_preparation_blocks_before_microphone_permission(self):
+        self.controller._recording_allowed = mock.Mock(return_value=False)
+        with mock.patch.object(macos_recording, "ensure_microphone_access") as permission:
+            self.controller.toggle()
+        permission.assert_not_called()
+        self.assertEqual(self.sd.streams, [])
 
 
 if __name__ == "__main__":

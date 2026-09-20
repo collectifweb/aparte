@@ -22,7 +22,6 @@ which is what DESIGN.md requires of every colour.
 
 from __future__ import annotations
 
-import os
 import sys
 import threading
 import webbrowser
@@ -31,7 +30,9 @@ from pathlib import Path
 
 from . import history
 from .clipboard import copy_text
-from .macos_hotkey import safe_hotkey_label
+from .config import Settings
+from .macos_locale import language
+from .macos_hotkey import DEFAULT_HOTKEY, normalize_hotkey, safe_hotkey_label
 from .macos_recording import ERROR, IDLE, PROCESSING, RECORDING
 from .notify import notify
 
@@ -61,12 +62,24 @@ LABELS = {
         "processing": "Transcription en cours…",
         "error": "La dernière dictée a échoué",
         "shortcut": "Raccourci : {key}",
-        "shortcut_none": "Aucun raccourci — aparte install-hotkey",
+        "shortcut_none": "Choisis ton raccourci dans ce menu",
+        "shortcut_configure": "Configurer le raccourci…",
+        "shortcut_prompt": "Saisis une combinaison, par exemple ctrl+opt+d. Elle démarre et arrête la dictée dans tes applications.",
+        "shortcut_save": "Enregistrer",
+        "cancel": "Annuler",
+        "shortcut_try": "Raccourci enregistré : {key}. Appuie pour essayer. Si rien ne se passe, choisis une autre combinaison.",
+        "shortcut_problem": "Raccourci non modifié",
+        "shortcut_retry": "Vérifie la combinaison et réessaie.",
         "shortcut_failed": "Raccourci indisponible : {key}",
         "open": "Ouvrir Aparté",
         "copy": "Copier la dernière dictée",
         "settings": "Réglages",
+        "model_prepare": "Préparer le modèle…",
         "quit": "Quitter",
+        "quit_wait": "Sauvegarde avant de quitter…",
+        "quit_retry": "Sauvegarde impossible — réessayer de quitter",
+        "overflow": "Audio incomplet — vérifie le texte",
+        "cap": "Durée maximale atteinte — vérifie le texte",
         "update_check": "Rechercher une mise à jour…",
         "update_busy": "Vérification…",
         "update_install": "Installer la version {version}",
@@ -91,12 +104,24 @@ LABELS = {
         "processing": "Transcribing…",
         "error": "The last dictation failed",
         "shortcut": "Shortcut: {key}",
-        "shortcut_none": "No shortcut — aparte install-hotkey",
+        "shortcut_none": "Choose your shortcut in this menu",
+        "shortcut_configure": "Set up the shortcut…",
+        "shortcut_prompt": "Enter a combination, for example ctrl+opt+d. It starts and stops dictation in your applications.",
+        "shortcut_save": "Save",
+        "cancel": "Cancel",
+        "shortcut_try": "Shortcut saved: {key}. Press it to try. If nothing happens, choose another combination.",
+        "shortcut_problem": "Shortcut unchanged",
+        "shortcut_retry": "Check the combination and try again.",
         "shortcut_failed": "Shortcut unavailable: {key}",
         "open": "Open Aparté",
         "copy": "Copy the last dictation",
         "settings": "Settings",
+        "model_prepare": "Prepare the model…",
         "quit": "Quit",
+        "quit_wait": "Saving before quitting…",
+        "quit_retry": "Could not save — retry quitting",
+        "overflow": "Incomplete audio — review the text",
+        "cap": "Recording limit reached — review the text",
         "update_check": "Check for updates…",
         "update_busy": "Checking…",
         "update_install": "Install version {version}",
@@ -127,8 +152,7 @@ UPDATE_DONE = "done"        # installed; nothing left to do but relaunch
 def labels() -> dict[str, str]:
     # A menu-bar menu belongs to the desktop, so it follows the desktop's language
     # rather than the browser's or the dictation setting — same rule as the GTK tray.
-    language = os.getenv("LC_ALL") or os.getenv("LC_MESSAGES") or os.getenv("LANG") or ""
-    return LABELS["fr"] if language.lower().startswith("fr") else LABELS["en"]
+    return LABELS[language()]
 
 
 def format_elapsed(seconds: float) -> str:
@@ -349,6 +373,9 @@ class MacTray:
         self._hotkey_state = hotkey_state
         self._texts = labels()
 
+        self._set_hotkey = None
+        self._quit_pending = False
+        self._quit_item = rumps.MenuItem(self._texts["quit"], callback=self._quit)
         self._on_ready = None
         self._on_quit = None
         self._ready_fired = False
@@ -381,10 +408,12 @@ class MacTray:
             rumps.MenuItem(self._texts["open"], callback=self._open),
             rumps.MenuItem(self._texts["copy"], callback=self._copy_last),
             rumps.MenuItem(self._texts["settings"], callback=self._open_settings),
+            rumps.MenuItem(self._texts["shortcut_configure"], callback=self._configure_hotkey),
+            rumps.MenuItem(self._texts["model_prepare"], callback=self._prepare_model),
             rumps.separator,
             self._update_item,
             rumps.separator,
-            rumps.MenuItem(self._texts["quit"], callback=self._quit),
+            self._quit_item,
         ]
         self.refresh()
 
@@ -437,9 +466,10 @@ class MacTray:
         except Exception:
             pass
 
-    def _quit_hook(self) -> None:
+    def _quit_hook(self) -> bool:
         if self._on_quit is not None:
-            self._on_quit()
+            return self._on_quit() is not False
+        return True
 
     def close(self) -> None:
         """Stop the timers. First step of the teardown, and safe to repeat."""
@@ -462,6 +492,8 @@ class MacTray:
     def _tick(self, _timer=None) -> None:
         try:
             self.refresh()
+            if self._quit_pending:
+                self._quit()
         except Exception as exc:
             # A drawing failure must not kill the timer: it would freeze the icon on
             # a stale state, which is worse than the wrong pixel.
@@ -483,6 +515,9 @@ class MacTray:
             self._app.title = view.title
         if previous is None or view.status != previous.status:
             self._status_item.title = view.status
+        warning = getattr(self._controller, "warning", None)
+        if warning in ("overflow", "cap") and view.status == self._texts["idle"]:
+            self._status_item.title = self._texts[warning]
         if previous is None or view.shortcut != previous.shortcut:
             self._shortcut_item.title = view.shortcut
 
@@ -494,8 +529,51 @@ class MacTray:
     def _open_settings(self, _=None) -> None:
         webbrowser.open(f"{self._url}/#settings")
 
+    def _prepare_model(self, _=None) -> None:
+        # Explicit native gesture; opening the web page never starts a download.
+        def prepare():
+            from .model_download import ensure_ready
+            try:
+                ensure_ready(Settings.from_env())
+            except Exception as exc:
+                try:
+                    notify(self._texts["model_prepare"], str(exc), urgency="critical")
+                except Exception:
+                    pass
+        threading.Thread(target=prepare, name="aparte-model-prepare", daemon=True).start()
+        self._open()
+
+    def set_hotkey_handler(self, callback) -> None:
+        """Native-only action, installed by the owner of the Carbon registration."""
+        self._set_hotkey = callback
+
+    def _configure_hotkey(self, _=None) -> None:
+        if self._set_hotkey is None:
+            return
+        state = self._hotkey_state()
+        value = getattr(state, "configured_key", None) or DEFAULT_HOTKEY
+        window = self._rumps.Window(
+            title=self._texts["shortcut_configure"],
+            message=self._texts["shortcut_prompt"],
+            default_text=value,
+            ok=self._texts["shortcut_save"], cancel=self._texts["cancel"],
+        )
+        response = window.run()
+        if not response.clicked:
+            return
+        try:
+            combo = normalize_hotkey(response.text)
+            self._set_hotkey(combo)
+        except Exception as exc:
+            self._rumps.alert(title=self._texts["shortcut_problem"],
+                              message=f"{self._texts['shortcut_retry']}\n{exc}")
+            return
+        self.refresh()
+        self._rumps.alert(title=self._texts["shortcut_configure"],
+                          message=self._texts["shortcut_try"].format(key=safe_hotkey_label(combo)))
+
     def _copy_last(self, _=None) -> None:
-        text = history.last(self._settings.history_persist)
+        text = history.last(Settings.from_env().history_persist)
         if text:
             # Off the UI thread: copying shells out, and a slow clipboard tool would
             # otherwise freeze the whole menu.
@@ -503,7 +581,11 @@ class MacTray:
 
     def _quit(self, _=None) -> None:
         # Teardown first, terminate second: terminate_ never comes back.
-        self._quit_hook()
+        if not self._quit_hook():
+            self._quit_pending = self._controller.recording_snapshot()[0] != ERROR
+            self._quit_item.title = self._texts["quit_wait" if self._quit_pending else "quit_retry"]
+            return
+        self._quit_pending = False
         self._rumps.quit_application()
 
     # -- Updating ---------------------------------------------------------------

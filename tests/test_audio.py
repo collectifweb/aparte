@@ -170,6 +170,16 @@ class SweepOrphanRecordingsTest(unittest.TestCase):
         self.assertEqual(audio.sweep_orphan_recordings(), 1)
         self.assertFalse(orphan.exists())
 
+    def test_failed_uploads_expire_but_active_uploads_and_symlinks_survive(self):
+        failed = self._file("aparte-failed-upload-a1b2c3d4.webm", age_seconds=7200)
+        active = self._file("aparte-upload-a1b2c3d4.webm", age_seconds=7200)
+        link = Path(self.tmp) / "aparte-failed-upload-b1b2c3d4.wav"
+        link.symlink_to(active)
+        self.assertEqual(audio.sweep_orphan_recordings(failed_uploads_only=True), 1)
+        self.assertFalse(failed.exists())
+        self.assertTrue(active.exists())
+        self.assertTrue(link.is_symlink())
+
     def test_a_recent_capture_is_left_alone(self):
         # It could belong to an instance recording right now.
         live = self._file("aparte-a1b2c3d4.wav", age_seconds=10)

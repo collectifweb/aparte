@@ -616,9 +616,17 @@ Sur un Mac neuf, sans rien à l'écran, ça ressemble à une application cassée
   3,97:1 en sombre sur ce fond — le calcul l'écarte. Le filet lui rend un bord :
   un creux posé sur le fond de page ne fait que 1,13:1, le disque disparaîtrait.
 
-La bande porte aussi la phrase « c'est la seule fois qu'Aparté touche au réseau » —
-PRODUCT.md § 5 demande que « rien ne sort de la machine » soit **visible**, et le
-seul instant où c'est nuancé est justement celui-là.
+La bande précise : « Le téléchargement du modèle utilise Internet. Tes dictées
+restent sur ton ordinateur. » La confidentialité reste visible, sans prétendre
+que l'application ne fera jamais d'autre requête (nouveau modèle, mise à jour).
+Une erreur temporaire de sondage se lit « Reconnexion » puis revient à l'étape
+courante. Le succès s'efface après huit secondes sans être réaffiché au sondage
+suivant. Une nouvelle préparation annule cette disparition.
+
+Le panneau de récupération reprend les filets, boutons et textes secondaires
+existants sous les actions. Il montre l'échéance et distingue réessayer, récupérer
+le brut et supprimer. Le texte récupéré exige un clic explicite pour remplacer
+l'éditeur ; il ne se colle jamais automatiquement dans une autre application.
 
 ### Motion
 

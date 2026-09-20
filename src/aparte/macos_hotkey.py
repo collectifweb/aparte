@@ -58,6 +58,7 @@ _CLOSE_JOIN_SECONDS = 5.0
 # testable without importing Carbon. Values are the documented four-char codes and
 # masks from <HIToolbox/Events.h> / <MacTypes.h>.
 _NO_ERR = 0
+_EVENT_NOT_HANDLED = -9874  # eventNotHandledErr, CarbonEventsCore.h
 _K_EVENT_CLASS_KEYBOARD = 0x6B657962   # 'keyb'
 _K_EVENT_HOTKEY_PRESSED = 6
 _K_EVENT_HOTKEY_RELEASED = 7           # deliberately never subscribed to
@@ -377,14 +378,21 @@ def _notify_toggle_failure(exc: Exception) -> None:
 # -- Real Carbon backend (macOS only, verified by hand in M8) ---------------------
 
 
-def _carbon_backend():
-    """Build the real ``RegisterEventHotKey`` backend. Imported lazily.
+# A single native handler lives for the whole process. Carbon retains its C
+# function pointer, so the Python callback must outlive every individual binding.
+# Rebinding must also keep one increasing ID space rather than installing another
+# handler whose first ID collides with the still-active shortcut.
+_CARBON_BACKEND = None
+_CARBON_BACKEND_LOCK = threading.Lock()
 
-    Native Carbon via ctypes — it cannot run on the Linux dev machine and is not
-    covered by the unit tests, which inject a fake backend. Its behaviour on a
-    real ``NSApplication`` run loop is validated in the M8 smoke suite.
-    """
-    return _CarbonBackend()
+
+def _carbon_backend():
+    """Lazily create and retain the application's one Carbon event handler."""
+    global _CARBON_BACKEND
+    with _CARBON_BACKEND_LOCK:
+        if _CARBON_BACKEND is None:
+            _CARBON_BACKEND = _CarbonBackend()
+        return _CARBON_BACKEND
 
 
 class _CarbonBackend:
@@ -492,7 +500,7 @@ class _CarbonBackend:
         def _on_event(next_handler, event, user_data):
             try:
                 hk_id = EventHotKeyID()
-                self._carbon.GetEventParameter(
+                status = self._carbon.GetEventParameter(
                     event,
                     _K_EVENT_PARAM_DIRECT_OBJECT,
                     _TYPE_EVENT_HOTKEY_ID,
@@ -501,12 +509,17 @@ class _CarbonBackend:
                     None,
                     ctypes.byref(hk_id),
                 )
+                if status != _NO_ERR or int(hk_id.signature) != _HOTKEY_SIGNATURE:
+                    return _EVENT_NOT_HANDLED
                 trigger = self._triggers.get(int(hk_id.id))
-                if trigger is not None:
-                    trigger()
+                if trigger is None:
+                    return _EVENT_NOT_HANDLED
+                trigger()
+                return _NO_ERR
             except Exception:
-                pass  # never let a Python error escape into Carbon
-            return _NO_ERR
+                # Never let Python escape into Carbon, or swallow another
+                # component's event when ours could not decode/handle it.
+                return _EVENT_NOT_HANDLED
 
         self._callback = self._HANDLER(_on_event)
         spec = (self._EventTypeSpec * 1)()
