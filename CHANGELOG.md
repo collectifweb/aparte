@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed — fiabilisation du portage macOS (septembre 2026)
 
+- Installation du prototype `.app` coordonnée entre processus, signature vérifiée
+  avant/après publication et ancienne application restaurée sur erreur. Les
+  ressources FR/EN sont stables quelle que soit la locale de construction.
+  La première reconstruction de l’ancien bundle peut demander `--force` et
+  une nouvelle autorisation ; la preuve TCC sur Mac reste à faire.
 - Réglages et historique publiés atomiquement, avec coordination entre processus ;
   les erreurs disque préservent la version précédente.
 - Corrections et raccourcis dictés traités comme texte littéral, y compris les

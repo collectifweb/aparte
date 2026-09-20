@@ -17,6 +17,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from aparte import macos_desktop
 
@@ -78,14 +79,15 @@ class InfoPlistTest(unittest.TestCase):
         # Aparté is a menu-bar resident (M6), not a windowed application.
         self.assertIs(self.document["LSUIElement"], True)
 
-    def test_microphone_reason_is_present_and_localised(self):
+    def test_microphone_reason_has_a_stable_fallback_and_declares_localizations(self):
         # Without this key macOS kills the process instead of asking.
         self.assertIn("Aparté", self.document["NSMicrophoneUsageDescription"])
         english = plistlib.loads(macos_desktop.build_info_plist("en"))
-        self.assertNotEqual(
+        self.assertEqual(
             english["NSMicrophoneUsageDescription"],
             self.document["NSMicrophoneUsageDescription"],
         )
+        self.assertEqual(self.document["CFBundleLocalizations"], ["fr", "en"])
 
     def test_the_version_is_the_launchers_not_apartes(self):
         # The bundle must not move when Aparté is released, or the cdhash changes and
@@ -336,6 +338,27 @@ class WriteBundleTest(unittest.TestCase):
         before = (destination / "Contents" / "Info.plist").read_bytes()
         self._write(destination)
         self.assertEqual(before, (destination / "Contents" / "Info.plist").read_bytes())
+
+    def test_localized_privacy_reasons_ship_together(self):
+        bundle = self.root / "Aparté.app"
+        self._write(bundle)
+        for locale in ("fr", "en"):
+            resource = bundle / "Contents" / "Resources" / f"{locale}.lproj" / "InfoPlist.strings"
+            self.assertEqual(plistlib.loads(resource.read_bytes())["NSMicrophoneUsageDescription"],
+                             macos_desktop.MICROPHONE_REASON[locale])
+
+    def test_locale_never_changes_the_signed_sources_or_resources(self):
+        trees = []
+        for locale in ("fr_CA.UTF-8", "en_US.UTF-8"):
+            bundle = self.root / f"{locale}.app"
+            with mock.patch.dict(os.environ, {"LANG": locale, "LC_ALL": locale,
+                                              "LC_MESSAGES": locale}):
+                macos_desktop.write_bundle(bundle, "/stable/python")
+            trees.append({str(path.relative_to(bundle)): path.read_bytes()
+                          for path in bundle.rglob("*") if path.is_file()})
+        self.assertEqual(trees[0], trees[1])
+        self.assertEqual(macos_desktop.launcher_source("/stable/python", language="fr"),
+                         macos_desktop.launcher_source("/stable/python", language="en"))
 
     def test_a_missing_icon_does_not_stop_the_bundle(self):
         # The .icns lands in M7b; until then the bundle still has to be buildable.

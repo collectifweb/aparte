@@ -137,3 +137,19 @@ il reste un fichier sur disque lorsque l’application est arrêtée.
 Validation : 92 tests ciblés verts sous Linux, dont concurrence entre processus,
 pannes disque, migration et expiration Mac simulée. Aucune validation native
 ni modification de l’installation Linux utilisée.
+
+### Publication sûre du prototype `.app`
+
+Construction sur le même volume que la destination, verrou installation /
+désinstallation, signature vérifiée avant et après publication, restauration de
+l’ancienne application en cas d’échec. Si la restauration échoue à son tour, la
+sauvegarde reste disponible au chemin signalé. Un arrêt brutal entre les deux
+renommages peut encore nécessiter cette restauration manuelle.
+
+Le bundle contient les deux traductions et un lanceur indépendant de la locale ;
+sa première reconstruction après ce changement peut nécessiter `--force` et de
+réaccorder les autorisations. Le mode du lanceur et la signature restent ceux du
+prototype : aucune décision M7-0 n’est déduite des simulations.
+
+Validation : 60 tests installation/bundle exécutés sous Linux, dont un test natif
+clang/codesign ignoré. Ce dernier est ajouté pour le runner macOS.

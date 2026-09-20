@@ -28,7 +28,6 @@ attribution itself — is measured on a real Mac by the M7-0 probe.
 
 from __future__ import annotations
 
-import os
 import plistlib
 import shutil
 from pathlib import Path
@@ -105,17 +104,6 @@ def stable_interpreter(executable: str) -> str:
     return str(Path(*parts[:cellar], "opt", formula, *rest))
 
 
-def _language() -> str:
-    """``fr`` or ``en``, from the desktop's locale — the same rule as the menu-bar icon.
-
-    Duplicated rather than imported from :mod:`aparte.macos_tray`: importing that module
-    pulls in :mod:`aparte.notify`, which imports ``gi`` and poisons the interpreter for
-    the rest of the test suite on the Linux dev machine (CLAUDE.md, "Lancer les tests").
-    """
-    locale = os.getenv("LC_ALL") or os.getenv("LC_MESSAGES") or os.getenv("LANG") or ""
-    return "fr" if locale.lower().startswith("fr") else "en"
-
-
 # Shown by macOS inside its own "Aparté would like to access the microphone" dialog. The
 # system draws it, so it has to be a plain sentence, in the user's language.
 MICROPHONE_REASON = {
@@ -145,11 +133,12 @@ def build_info_plist(language: str | None = None) -> bytes:
     """The bundle's ``Info.plist``, as bytes ready to write.
 
     Deliberately free of anything that moves between Aparté releases — see the module
-    docstring. ``language`` is an explicit input so the determinism test can pin it.
+    docstring. ``language`` remains accepted for older probe scripts, but cannot
+    change the signed bytes: macOS chooses from the bundled localizations.
     """
-    language = language or _language()
     document = {
-        "CFBundleDevelopmentRegion": "fr" if language == "fr" else "en",
+        "CFBundleDevelopmentRegion": "fr",
+        "CFBundleLocalizations": ["fr", "en"],
         "CFBundleDisplayName": "Aparté",
         "CFBundleExecutable": LAUNCHER_NAME,
         "CFBundleIconFile": ICON_FILE,
@@ -165,7 +154,7 @@ def build_info_plist(language: str | None = None) -> bytes:
         "LSUIElement": True,
         "LSMinimumSystemVersion": MACOSX_DEPLOYMENT_TARGET,
         # Without this key macOS kills the process instead of asking for the microphone.
-        "NSMicrophoneUsageDescription": MICROPHONE_REASON[language],
+        "NSMicrophoneUsageDescription": MICROPHONE_REASON["fr"],
     }
     return plistlib.dumps(document, fmt=plistlib.FMT_XML, sort_keys=False)
 
@@ -198,12 +187,12 @@ def launcher_source(
     """
     if mode not in (LAUNCH_EXEC, LAUNCH_CHILD):
         raise ValueError(f"unknown launch mode: {mode!r}")
-    language = language or _language()
     child = mode == LAUNCH_CHILD
     baked = "".join(f"    {_c_string(arg)},\n" for arg in args)
     return _LAUNCHER_TEMPLATE.format(
         interpreter=_c_string(interpreter),
-        message=_c_string(MISSING_INTERPRETER_MESSAGE[language]),
+        message=_c_string(MISSING_INTERPRETER_MESSAGE["fr"] + "\\n\\n"
+                          + MISSING_INTERPRETER_MESSAGE["en"]),
         arguments=baked,
         helpers=_CHILD_HELPERS if child else "",
         handover=_CHILD_HANDOVER if child else _EXEC_HANDOVER,
@@ -374,6 +363,16 @@ def write_bundle(destination: Path, interpreter: str, *, mode: str = LAUNCH_EXEC
 
     plist = contents / "Info.plist"
     plist.write_bytes(build_info_plist(language))
+
+    # Both localizations ship on every machine. Choosing one while building
+    # would change the signed identity when the shell locale changes.
+    for locale, reason in MICROPHONE_REASON.items():
+        localized = resources / f"{locale}.lproj" / "InfoPlist.strings"
+        localized.parent.mkdir(parents=True, exist_ok=True)
+        localized.write_bytes(plistlib.dumps({
+            "CFBundleDisplayName": "Aparté",
+            "NSMicrophoneUsageDescription": reason,
+        }, fmt=plistlib.FMT_XML, sort_keys=True))
 
     source = contents / f"{LAUNCHER_NAME}.c"
     source.write_text(

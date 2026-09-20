@@ -25,10 +25,16 @@ a one-line change here, deliberately, so nobody has to go hunting.
 from __future__ import annotations
 
 import re
+import fcntl
+import os
 import shutil
+import stat
 import subprocess
 import tempfile
+import time
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
 
 from . import macos_desktop
 from .config import _config_home, APP_DIR_NAME
@@ -46,6 +52,7 @@ INSTALL_IDENTITY = "-"
 
 CDHASH_FILE = "bundle-cdhash"
 _CDHASH = re.compile(r"^CDHash=([0-9a-f]+)", re.MULTILINE | re.IGNORECASE)
+_LOCK_TIMEOUT_SECONDS = 5.0
 
 
 class InstallError(RuntimeError):
@@ -71,6 +78,8 @@ def read_cdhash(bundle: Path) -> str | None:
             ["codesign", "-dvvv", str(bundle)], capture_output=True, text=True, timeout=30
         )
     except (OSError, subprocess.SubprocessError):
+        return None
+    if done.returncode != 0:
         return None
     found = _CDHASH.search(done.stdout + "\n" + done.stderr)
     return found.group(1).lower() if found else None
@@ -100,7 +109,41 @@ def _build(staging: Path, interpreter: str, mode: str, identity: str) -> Path:
     if identity != "-":
         signature[signature.index("-", 2)] = identity
     _run(signature)
+    _verify_signature(bundle)
     return bundle
+
+
+def _verify_signature(bundle: Path) -> None:
+    # Reading a CDHash merely describes a signature, including one whose sealed
+    # resources were modified. Verification must check the actual bundle.
+    _run(["codesign", "--verify", "--deep", "--strict", str(bundle)])
+
+
+@contextmanager
+def _installation_lock(destination: Path) -> Iterator[None]:
+    """Serialize install and removal; this stable lock is never unlinked."""
+    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd = os.open(destination.parent / ".aparte-install.lock",
+                 os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK,
+                 0o600)
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                or info.st_nlink != 1):
+            raise InstallError("Invalid application installation lock")
+        os.fchmod(fd, 0o600)
+        deadline = time.monotonic() + _LOCK_TIMEOUT_SECONDS
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise InstallError("Another Aparté installation or removal is in progress; retry later")
+                time.sleep(0.02)
+        yield
+    finally:
+        os.close(fd)
 
 
 def install_app(
@@ -121,36 +164,75 @@ def install_app(
     permissions without warning.
     """
     destination = macos_desktop.bundle_path()
-    with tempfile.TemporaryDirectory() as directory:
-        fresh = _build(Path(directory), interpreter, mode, identity)
-        fingerprint = read_cdhash(fresh)
-        if fingerprint is None:
-            raise InstallError(
-                "the freshly signed bundle has no readable fingerprint — refusing to "
-                "install something codesign cannot describe"
-            )
+    with _installation_lock(destination):
+        if destination.is_symlink():
+            raise InstallError("The installed application is a symbolic link; refusing to replace it")
+        # Same parent means every publication/rollback rename stays on one volume.
+        staging = Path(tempfile.mkdtemp(prefix=".aparte-install-", dir=destination.parent))
+        backup = staging / "previous.app"
+        try:
+            fresh = _build(staging, interpreter, mode, identity)
+            fingerprint = read_cdhash(fresh)
+            if fingerprint is None:
+                raise InstallError(
+                    "the freshly signed bundle has no readable fingerprint — refusing to "
+                    "install something codesign cannot describe"
+                )
 
-        installed = read_cdhash(destination) if destination.exists() else None
-        if installed is not None and installed == fingerprint:
+            installed = None
+            if destination.exists():
+                try:
+                    _verify_signature(destination)
+                    installed = read_cdhash(destination)
+                except InstallError:
+                    pass
+            if installed is not None and installed == fingerprint:
+                _remember(fingerprint)
+                return {"outcome": "unchanged", "bundle": destination, "cdhash": fingerprint}
+            if destination.exists() and not force:
+                raise InstallError(
+                    "the installed Aparté.app is not the one this version would build "
+                    f"({installed or 'unreadable'} → {fingerprint}). Replacing it makes macOS "
+                    "forget the microphone and Accessibility permissions — and the checkboxes "
+                    "in System Settings stay ticked, so nothing will look wrong. "
+                    "Re-run with --force to replace it and grant them again."
+                )
+
+            outcome = "replaced" if destination.exists() else "installed"
+            if destination.exists():
+                destination.rename(backup)
+            try:
+                fresh.rename(destination)
+                _verify_signature(destination)
+                if read_cdhash(destination) != fingerprint:
+                    raise InstallError("Installed application fingerprint differs from the verified build")
+            except (OSError, InstallError) as failure:
+                try:
+                    if destination.exists():
+                        destination.rename(staging / "failed.app")
+                    if backup.exists():
+                        backup.rename(destination)
+                except OSError as restore_error:
+                    # Never let temporary-directory cleanup delete the only
+                    # surviving old application when rollback itself fails.
+                    raise InstallError(
+                        f"Installation failed and could not restore the previous application. "
+                        f"Its backup is kept at {backup}: {restore_error}"
+                    ) from failure
+                raise InstallError(f"Installation failed; previous application preserved: {failure}") from failure
+
             _remember(fingerprint)
-            return {"outcome": "unchanged", "bundle": destination, "cdhash": fingerprint}
-        if destination.exists() and not force:
-            raise InstallError(
-                "the installed Aparté.app is not the one this version would build "
-                f"({installed or 'unreadable'} → {fingerprint}). Replacing it makes macOS "
-                "forget the microphone and Accessibility permissions — and the checkboxes "
-                "in System Settings stay ticked, so nothing will look wrong. "
-                "Re-run with --force to replace it and grant them again."
-            )
-
-        outcome = "replaced" if destination.exists() else "installed"
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        if destination.exists():
-            shutil.rmtree(destination)
-        shutil.move(str(fresh), str(destination))
-
-    _remember(fingerprint)
-    return {"outcome": outcome, "bundle": destination, "cdhash": fingerprint}
+            if backup.exists():
+                # Publication and verification succeeded. Failure to retire the
+                # backup must not invalidate a usable installed application.
+                try:
+                    shutil.rmtree(backup)
+                except OSError:
+                    pass
+            return {"outcome": outcome, "bundle": destination, "cdhash": fingerprint}
+        finally:
+            if not backup.exists():
+                shutil.rmtree(staging, ignore_errors=True)
 
 
 def _remember(fingerprint: str) -> None:
@@ -170,13 +252,15 @@ def uninstall_app() -> bool:
     it behind.
     """
     destination = macos_desktop.bundle_path()
-    existed = destination.exists()
-    if existed:
-        shutil.rmtree(destination)
-    reference = cdhash_reference_path()
-    if reference.exists():
-        reference.unlink()
-    return existed
+    with _installation_lock(destination):
+        if destination.is_symlink():
+            raise InstallError("The installed application is a symbolic link; refusing to remove it")
+        existed = destination.exists()
+        if existed:
+            shutil.rmtree(destination)
+        reference = cdhash_reference_path()
+        reference.unlink(missing_ok=True)
+        return existed
 
 
 def open_app() -> None:
